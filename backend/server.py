@@ -1636,6 +1636,7 @@ def _build_robots_txt() -> str:
         "Disallow: /admin\n"
         "Disallow: /auth/\n\n"
         f"Sitemap: {SITE_URL}/sitemap.xml\n"
+        f"Sitemap: {SITE_URL}/api/seo/sitemap.xml\n"
     )
 
 

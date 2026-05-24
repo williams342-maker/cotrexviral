@@ -59,6 +59,8 @@ const CVFaq = ({ faqs = DEFAULT_FAQS, title, kicker = 'Frequently asked', id = '
                 onClick={() => setOpen(open === i ? -1 : i)}
                 className="w-full flex items-center justify-between text-left px-5 py-4"
                 data-testid={`cv-faq-q-${i}`}
+                aria-expanded={open === i}
+                aria-controls={`cv-faq-a-${i}`}
               >
                 <span className="cv-display text-[16px] font-semibold text-white pr-4">{f.q}</span>
                 <ChevronDown
@@ -70,6 +72,8 @@ const CVFaq = ({ faqs = DEFAULT_FAQS, title, kicker = 'Frequently asked', id = '
                 {open === i && (
                   <motion.div
                     key="content"
+                    id={`cv-faq-a-${i}`}
+                    role="region"
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
