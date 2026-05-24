@@ -110,7 +110,22 @@ async def publish(payload: PublishRequest, request: Request):
         "created_at": datetime.now(timezone.utc),
     }
     await db.posts.insert_one(post)
-    return {"ok": True, "id": post["id"], "platforms": payload.platforms, "status": post["status"]}
+
+    # Immediate dispatch to live APIs (currently: LinkedIn only).
+    # Scheduled posts are picked up by the background scheduler instead.
+    dispatch = {}
+    if not is_scheduled and "linkedin" in (payload.platforms or []):
+        from routes.oauth_linkedin import publish_to_linkedin  # lazy import (circular safe)
+        dispatch["linkedin"] = await publish_to_linkedin(user.user_id, payload.content)
+        await db.posts.update_one({"id": post["id"]}, {"$set": {"dispatch": dispatch}})
+
+    return {
+        "ok": True,
+        "id": post["id"],
+        "platforms": payload.platforms,
+        "status": post["status"],
+        "dispatch": dispatch,
+    }
 
 
 @api.get("/posts/scheduled")

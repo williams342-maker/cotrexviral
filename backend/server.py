@@ -27,6 +27,7 @@ from routes import (  # noqa: F401
     scheduler,   # registers @app.on_event startup/shutdown
     health,      # depends on routes.scheduler internals; import after it
     seo,         # registers @app.get on root paths (/sitemap.xml etc.)
+    oauth_linkedin,  # LinkedIn OAuth + live posting
 )
 
 

@@ -51,7 +51,25 @@ async def _publish_due_posts_now() -> dict:
         {"id": {"$in": ids}, "status": "scheduled"},
         {"$set": {"status": "published", "published_at": now, "publish_mode": "scheduler"}},
     )
-    # TODO once OAuth lands: dispatch to live platform APIs for each post in `due`.
+
+    # Dispatch to live platform APIs (currently: LinkedIn only).
+    # Lazy import to avoid a circular dependency with routes.oauth_linkedin.
+    try:
+        from routes.oauth_linkedin import publish_to_linkedin
+    except Exception:  # pragma: no cover
+        publish_to_linkedin = None
+
+    for post in due:
+        platforms = post.get("platforms") or []
+        if "linkedin" in platforms and publish_to_linkedin:
+            res = await publish_to_linkedin(post["user_id"], post["content"])
+            await db.posts.update_one(
+                {"id": post["id"]},
+                {"$set": {"dispatch.linkedin": res}},
+            )
+            if not res.get("ok"):
+                logger.warning("scheduler: linkedin dispatch failed for %s: %s", post["id"], res.get("reason"))
+
     return {"due": len(due), "published": result.modified_count, "ids": ids}
 
 

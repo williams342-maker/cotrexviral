@@ -79,36 +79,69 @@ const Channels = () => {
   const [statusMap, setStatusMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null);
+  const [linkedInOAuth, setLinkedInOAuth] = useState({ configured: false, connected: false });
   const { toast } = useToast();
 
   const load = async () => {
     setLoading(true);
     try {
-      const [cat, list] = await Promise.all([
+      const [cat, list, li] = await Promise.all([
         axios.get(`${API}/channels/catalog`, { withCredentials: true }),
         axios.get(`${API}/channels`, { withCredentials: true }),
+        axios.get(`${API}/oauth/linkedin/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
       ]);
       setCatalog(cat.data);
       const map = {};
       list.data.forEach((c) => { map[c.platform] = c; });
       setStatusMap(map);
+      setLinkedInOAuth(li.data);
     } catch (e) {}
     setLoading(false);
   };
 
   useEffect(() => { load(); }, []);
 
+  // Show a toast based on the ?linkedin=connected|denied query the OAuth callback redirects with.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const v = params.get('linkedin');
+    if (v === 'connected') toast({ title: 'LinkedIn connected!', description: 'Future posts to LinkedIn will publish live.' });
+    if (v === 'denied') toast({ title: 'LinkedIn connection cancelled' });
+    if (v) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('linkedin');
+      window.history.replaceState({}, '', url.toString());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const toggle = async (platform) => {
     const meta = PLATFORM_META[platform];
     const ch = statusMap[platform];
     setBusy(platform);
     try {
-      if (ch?.connected) {
+      // Real OAuth path for LinkedIn (when credentials are configured server-side)
+      if (platform === 'linkedin' && linkedInOAuth.configured) {
+        if (linkedInOAuth.connected) {
+          await axios.delete(`${API}/oauth/linkedin`, { withCredentials: true });
+          toast({ title: 'Disconnected LinkedIn' });
+          await load();
+        } else {
+          const r = await axios.get(`${API}/oauth/linkedin/start`, { withCredentials: true });
+          window.location.href = r.data.authorize_url;
+          return; // navigation in progress — don't reset busy
+        }
+      } else if (ch?.connected) {
         await axios.post(`${API}/channels/disconnect`, { platform }, { withCredentials: true });
         toast({ title: `Disconnected from ${meta?.label || platform}` });
       } else {
         await axios.post(`${API}/channels/connect`, { platform }, { withCredentials: true });
-        toast({ title: `Connected to ${meta?.label || platform}`, description: 'MOCKED — no real OAuth in this demo.' });
+        toast({
+          title: `Connected to ${meta?.label || platform}`,
+          description: platform === 'linkedin'
+            ? 'MOCKED — admin: set LINKEDIN_CLIENT_ID + LINKEDIN_CLIENT_SECRET in .env to enable real OAuth.'
+            : 'MOCKED — no real OAuth in this demo.',
+        });
       }
       await load();
     } catch (e) {
@@ -123,15 +156,20 @@ const Channels = () => {
   return (
     <DashboardLayout
       title="Integrations"
-      subtitle={`Connect ${Object.keys(PLATFORM_META).length}+ platforms to publish, analyze, and grow. Currently MOCKED — toggles work but no real OAuth yet.`}
+      subtitle={`Connect ${Object.keys(PLATFORM_META).length}+ platforms to publish, analyze, and grow.${linkedInOAuth.configured ? ' LinkedIn is live OAuth — other platforms are still mocked.' : ' All platforms are currently mocked.'}`}
     >
-      <div className="flex items-center gap-3 mb-7">
+      <div className="flex items-center gap-3 mb-7 flex-wrap">
         <div className="px-4 py-2 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700 text-[13px] font-medium">
           {connectedCount} connected
         </div>
         <div className="px-4 py-2 rounded-full bg-neutral-50 border border-neutral-200 text-neutral-700 text-[13px] font-medium">
           {Object.keys(PLATFORM_META).length - connectedCount} available
         </div>
+        {linkedInOAuth.configured && (
+          <div className="px-4 py-2 rounded-full bg-sky-50 border border-sky-200 text-sky-700 text-[13px] font-medium inline-flex items-center gap-1.5" data-testid="linkedin-live-oauth-badge">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-500 cv-pulse" /> LinkedIn live OAuth
+          </div>
+        )}
       </div>
 
       {loading ? (
