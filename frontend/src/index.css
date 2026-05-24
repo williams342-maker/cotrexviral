@@ -113,7 +113,94 @@ code {
 }
 .cv-pulse { animation: cv-pulse-glow 3s ease-in-out infinite; }
 
-/* Drifting particles backdrop */
+/* === CortexViral Dashboard dark theme (scoped overrides) === */
+/* Wrap dashboard content in <div class="cv-dash-scope"> to convert legacy light pages */
+.cv-dash-scope {
+  color: #E4E4E7;
+}
+.cv-dash-scope h1,
+.cv-dash-scope h2,
+.cv-dash-scope h3,
+.cv-dash-scope h4 {
+  color: #F4F4F5;
+}
+/* Re-skin the legacy "bg-white border-neutral-200/70" cards as glass panels */
+.cv-dash-scope .bg-white {
+  background-color: rgba(18, 20, 43, 0.55) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #E4E4E7;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.cv-dash-scope .border-neutral-200\/70,
+.cv-dash-scope .border-neutral-200 {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.cv-dash-scope .bg-neutral-100,
+.cv-dash-scope .bg-neutral-50 {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+.cv-dash-scope .hover\:bg-neutral-50:hover,
+.cv-dash-scope .hover\:bg-neutral-100:hover {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+/* Text colour remap */
+.cv-dash-scope .text-neutral-900 { color: #F4F4F5 !important; }
+.cv-dash-scope .text-neutral-800 { color: #E4E4E7 !important; }
+.cv-dash-scope .text-neutral-700 { color: #D4D4D8 !important; }
+.cv-dash-scope .text-neutral-600 { color: #A1A1AA !important; }
+.cv-dash-scope .text-neutral-500 { color: #71717A !important; }
+.cv-dash-scope .text-neutral-400 { color: #52525B !important; }
+/* Primary brand blue → keep but slightly brighter on dark */
+.cv-dash-scope .text-\[\#1B7BFF\] { color: #60A5FA !important; }
+.cv-dash-scope .bg-\[\#1B7BFF\] { background-color: #2563EB !important; }
+.cv-dash-scope .bg-\[\#1B7BFF\]\/10 { background-color: rgba(37, 99, 235, 0.18) !important; }
+.cv-dash-scope .bg-\[\#1B7BFF\]\/15 { background-color: rgba(37, 99, 235, 0.22) !important; }
+.cv-dash-scope .bg-\[\#1B7BFF\]\/20 { background-color: rgba(37, 99, 235, 0.28) !important; }
+.cv-dash-scope .border-\[\#1B7BFF\]\/20 { border-color: rgba(37, 99, 235, 0.35) !important; }
+
+/* Quick-action gradient tiles — tone the pastel washes down for dark */
+.cv-dash-scope .from-rose-100 { --tw-gradient-from: rgba(244, 63, 94, 0.18) !important; }
+.cv-dash-scope .from-blue-100 { --tw-gradient-from: rgba(37, 99, 235, 0.18) !important; }
+.cv-dash-scope .from-emerald-100 { --tw-gradient-from: rgba(16, 185, 129, 0.18) !important; }
+.cv-dash-scope .from-violet-100 { --tw-gradient-from: rgba(124, 58, 237, 0.22) !important; }
+.cv-dash-scope .from-amber-100 { --tw-gradient-from: rgba(245, 158, 11, 0.18) !important; }
+.cv-dash-scope .to-rose-50,
+.cv-dash-scope .to-blue-50,
+.cv-dash-scope .to-emerald-50,
+.cv-dash-scope .to-violet-50,
+.cv-dash-scope .to-amber-50 { --tw-gradient-to: rgba(18, 20, 43, 0.55) !important; }
+
+/* Pastel KPI icon backgrounds → keep colours but lower alpha */
+.cv-dash-scope .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.12) !important; }
+.cv-dash-scope .bg-violet-50 { background-color: rgba(124, 58, 237, 0.16) !important; }
+.cv-dash-scope .bg-amber-50 { background-color: rgba(245, 158, 11, 0.14) !important; }
+.cv-dash-scope .bg-rose-50 { background-color: rgba(244, 63, 94, 0.14) !important; }
+.cv-dash-scope .bg-sky-50 { background-color: rgba(14, 165, 233, 0.14) !important; }
+.cv-dash-scope .bg-pink-50 { background-color: rgba(236, 72, 153, 0.14) !important; }
+.cv-dash-scope .bg-blue-50 { background-color: rgba(37, 99, 235, 0.16) !important; }
+.cv-dash-scope .bg-red-50 { background-color: rgba(239, 68, 68, 0.14) !important; }
+
+/* Inputs, textareas, selects from shadcn — give them glass treatment */
+.cv-dash-scope input:not([type='checkbox']):not([type='radio']),
+.cv-dash-scope textarea,
+.cv-dash-scope [role='combobox'],
+.cv-dash-scope .border-neutral-300 {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #F4F4F5 !important;
+}
+.cv-dash-scope input::placeholder,
+.cv-dash-scope textarea::placeholder { color: #71717A !important; }
+
+/* Active sidebar item already styled inline; ensure inactive/hover state is dark */
+.cv-dash-scope nav a:not(.bg-\[\#1B7BFF\]):not(.bg-violet-600) { color: #A1A1AA; }
+.cv-dash-scope nav a:not(.bg-\[\#1B7BFF\]):not(.bg-violet-600):hover { color: #F4F4F5; }
+
+/* Soft glow under active sidebar item */
+.cv-dash-scope nav a.bg-\[\#1B7BFF\] { box-shadow: 0 8px 24px -8px rgba(37, 99, 235, 0.5); }
+.cv-dash-scope nav a.bg-violet-600 { box-shadow: 0 8px 24px -8px rgba(124, 58, 237, 0.5); }
+
 @keyframes cv-drift {
   from { transform: translate3d(0, 0, 0); }
   to   { transform: translate3d(-1200px, 0, 0); }
