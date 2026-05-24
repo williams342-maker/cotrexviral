@@ -30,7 +30,7 @@ const CVLogo = ({ size = 'md', withWordmark = false, className = '', wordmarkCla
           draggable={false}
           decoding="async"
           loading={priority ? 'eager' : 'lazy'}
-          fetchpriority={priority ? 'high' : 'auto'}
+          fetchPriority={priority ? 'high' : 'auto'}
         />
       </span>
       {withWordmark && (
