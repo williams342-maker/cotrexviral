@@ -174,6 +174,19 @@ class PublishRequest(BaseModel):
     scheduled_at: Optional[datetime] = None  # if set, post is scheduled
 
 
+class ScheduledUpdate(BaseModel):
+    scheduled_at: Optional[datetime] = None
+    platforms: Optional[List[str]] = None
+    content: Optional[str] = None
+
+
+class OptimalTimesRequest(BaseModel):
+    platforms: List[str]
+    niche: Optional[str] = None
+    audience: Optional[str] = None
+    timezone: Optional[str] = "UTC"
+
+
 # ==================== AUTH HELPERS ====================
 async def get_current_user(request: Request) -> User:
     """Returns the current authenticated user or raises 401."""
@@ -789,6 +802,86 @@ async def cancel_scheduled(post_id: str, request: Request):
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Scheduled post not found")
     return {"ok": True}
+
+
+@api.patch("/posts/scheduled/{post_id}")
+async def update_scheduled(post_id: str, payload: ScheduledUpdate, request: Request):
+    user = await get_current_user(request)
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        return {"ok": True}
+    res = await db.posts.update_one(
+        {"id": post_id, "user_id": user.user_id, "status": "scheduled"},
+        {"$set": updates},
+    )
+    if not res.matched_count:
+        raise HTTPException(status_code=404, detail="Scheduled post not found")
+    return {"ok": True}
+
+
+# Industry-standard optimal posting times (heuristic baseline)
+OPTIMAL_BASE = {
+    "instagram":  [{"day": d, "hour": h} for d in ["Mon", "Tue", "Wed"] for h in [11, 14, 19]] + [{"day": "Fri", "hour": 11}],
+    "tiktok":     [{"day": d, "hour": h} for d in ["Tue", "Thu", "Fri"] for h in [9, 19, 21]],
+    "x":          [{"day": d, "hour": h} for d in ["Mon", "Tue", "Wed", "Thu"] for h in [8, 12, 17]],
+    "facebook":   [{"day": d, "hour": h} for d in ["Tue", "Wed", "Thu"] for h in [9, 13, 15]],
+    "linkedin":   [{"day": d, "hour": h} for d in ["Tue", "Wed", "Thu"] for h in [8, 10, 12]],
+    "youtube":    [{"day": d, "hour": h} for d in ["Thu", "Fri", "Sat"] for h in [15, 17, 20]],
+    "pinterest":  [{"day": d, "hour": h} for d in ["Fri", "Sat", "Sun"] for h in [20, 21, 22]],
+    "threads":    [{"day": d, "hour": h} for d in ["Mon", "Wed", "Fri"] for h in [10, 13, 18]],
+    "reddit":     [{"day": d, "hour": h} for d in ["Tue", "Wed", "Sun"] for h in [9, 17, 20]],
+    "substack":   [{"day": "Tue", "hour": 9}, {"day": "Thu", "hour": 9}, {"day": "Sun", "hour": 8}],
+    "blogger":    [{"day": "Tue", "hour": 10}, {"day": "Thu", "hour": 14}],
+}
+
+
+@api.post("/ai/optimal-times")
+async def ai_optimal_times(payload: OptimalTimesRequest, request: Request):
+    """Returns the next best posting slots for each requested platform.
+    Combines a static heuristic baseline with optional AI refinement based on the user's niche/audience.
+    """
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc)
+    day_index = {"Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3, "Fri": 4, "Sat": 5, "Sun": 6}
+
+    results = {}
+    for p in payload.platforms:
+        slots = OPTIMAL_BASE.get(p, [{"day": "Tue", "hour": 10}, {"day": "Thu", "hour": 15}])
+        upcoming = []
+        for slot in slots:
+            target_dow = day_index[slot["day"]]
+            today_dow = now.weekday()
+            delta = (target_dow - today_dow) % 7
+            if delta == 0 and now.hour >= slot["hour"]:
+                delta = 7
+            d = now + timedelta(days=delta)
+            d = d.replace(hour=slot["hour"], minute=0, second=0, microsecond=0)
+            upcoming.append({
+                "platform": p,
+                "datetime": d.isoformat(),
+                "day": slot["day"],
+                "hour": slot["hour"],
+                "score": 100 - len(upcoming) * 7,
+            })
+        upcoming.sort(key=lambda s: s["datetime"])
+        results[p] = upcoming[:6]
+
+    # Optional AI rationale (kept short to avoid heavy LLM cost on every call)
+    rationale = None
+    if payload.niche or payload.audience:
+        try:
+            system = (
+                "You are Kai, social timing strategist. In ONE short paragraph (<60 words) "
+                "explain why these timing recommendations fit the user's niche & audience. "
+                "Be specific and confident."
+            )
+            chat = _llm(f"times-{user.user_id}", system)
+            ask = f"Niche: {payload.niche}\nAudience: {payload.audience}\nPlatforms: {', '.join(payload.platforms)}"
+            rationale = await chat.send_message(UserMessage(text=ask))
+        except Exception:
+            rationale = None
+
+    return {"slots": results, "rationale": rationale}
 
 
 # ==================== PERFORMANCE (mocked analytics) ====================

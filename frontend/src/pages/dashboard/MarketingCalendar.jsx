@@ -5,6 +5,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import {
   Loader2, Calendar as CalIcon, ChevronLeft, ChevronRight,
   Instagram, Twitter, Facebook, Linkedin, Youtube, Plus, X as XIcon,
+  Sparkles, GripVertical, Zap,
 } from 'lucide-react';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
@@ -28,17 +29,23 @@ const MarketingCalendar = () => {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [composing, setComposing] = useState(null);
+  const [optimalSlots, setOptimalSlots] = useState({}); // {platform: [{datetime, hour}]}
+  const [showOptimal, setShowOptimal] = useState(false);
+  const [loadingOptimal, setLoadingOptimal] = useState(false);
+  const [rationale, setRationale] = useState('');
+  const [niche, setNiche] = useState('');
+  const [dropTarget, setDropTarget] = useState(null);
+  const [dragging, setDragging] = useState(null);
 
   const range = useMemo(() => {
     const start = new Date(cursor);
     if (view === 'week') {
-      start.setDate(start.getDate() - start.getDay()); // Sunday
+      start.setDate(start.getDate() - start.getDay());
       start.setHours(0, 0, 0, 0);
       const end = new Date(start);
       end.setDate(end.getDate() + 7);
       return { start, end, days: 7 };
     }
-    // month
     start.setDate(1);
     start.setHours(0, 0, 0, 0);
     const end = new Date(start);
@@ -57,7 +64,25 @@ const MarketingCalendar = () => {
     } catch (e) {}
     setLoading(false);
   };
-  useEffect(() => { load(); }, [cursor, view]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [cursor, view]);
+
+  const fetchOptimal = async () => {
+    setLoadingOptimal(true);
+    try {
+      const r = await axios.post(
+        `${API}/ai/optimal-times`,
+        { platforms: PLATFORM_ROWS.map((p) => p.id), niche: niche || undefined },
+        { withCredentials: true }
+      );
+      setOptimalSlots(r.data.slots || {});
+      setRationale(r.data.rationale || '');
+      setShowOptimal(true);
+    } catch (e) {
+      toast({ title: 'Could not load AI times' });
+    } finally {
+      setLoadingOptimal(false);
+    }
+  };
 
   const days = useMemo(() => {
     const arr = [];
@@ -87,6 +112,20 @@ const MarketingCalendar = () => {
     return map;
   }, [posts]);
 
+  // optimal slots indexed by platform-yyyy-mm-dd
+  const optimalByCell = useMemo(() => {
+    const map = {};
+    Object.entries(optimalSlots).forEach(([platform, slots]) => {
+      slots.forEach((s) => {
+        const d = new Date(s.datetime);
+        const k = `${platform}-${d.toISOString().slice(0, 10)}`;
+        if (!map[k]) map[k] = [];
+        map[k].push({ hour: s.hour, score: s.score, datetime: s.datetime });
+      });
+    });
+    return map;
+  }, [optimalSlots]);
+
   const navigate = (dir) => {
     const d = new Date(cursor);
     if (view === 'week') d.setDate(d.getDate() + dir * 7);
@@ -102,9 +141,53 @@ const MarketingCalendar = () => {
     } catch (e) {}
   };
 
+  const onDragStart = (post, fromPlatform) => (e) => {
+    setDragging({ post, fromPlatform });
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', post.id);
+  };
+
+  const onDragOver = (platform, date) => (e) => {
+    if (date < today) return;
+    e.preventDefault();
+    setDropTarget(`${platform}-${date.toISOString().slice(0, 10)}`);
+  };
+
+  const onDragLeave = () => setDropTarget(null);
+
+  const onDrop = (platform, date) => async (e) => {
+    e.preventDefault();
+    setDropTarget(null);
+    if (!dragging) return;
+    const { post, fromPlatform } = dragging;
+    setDragging(null);
+    if (date < today) {
+      toast({ title: "Can't reschedule into the past" });
+      return;
+    }
+
+    const newAt = new Date(post.scheduled_at);
+    newAt.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+
+    // swap platforms: replace fromPlatform with platform; keep any others intact
+    const newPlatforms = post.platforms.map((p) => (p === fromPlatform ? platform : p));
+
+    try {
+      await axios.patch(
+        `${API}/posts/scheduled/${post.id}`,
+        { scheduled_at: newAt.toISOString(), platforms: newPlatforms },
+        { withCredentials: true }
+      );
+      toast({ title: 'Rescheduled', description: `Moved to ${platform} on ${date.toLocaleDateString()}` });
+      load();
+    } catch (e) {
+      toast({ title: 'Could not move post' });
+    }
+  };
+
   return (
-    <DashboardLayout title="Marketing Calendar" subtitle="Schedule and visualize your posts across every channel.">
-      <div className="flex items-center justify-between mb-5">
+    <DashboardLayout title="Marketing Calendar" subtitle="Drag posts to reschedule, or let AI suggest the best slots.">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-lg bg-white border border-neutral-200 hover:bg-neutral-50 flex items-center justify-center"><ChevronLeft size={16} /></button>
           <button onClick={() => setCursor(new Date())} className="px-4 h-9 rounded-lg bg-white border border-neutral-200 hover:bg-neutral-50 text-[13px] font-medium inline-flex items-center gap-1.5">
@@ -118,18 +201,38 @@ const MarketingCalendar = () => {
             }
           </div>
         </div>
-        <div className="inline-flex bg-white border border-neutral-200 rounded-lg p-1">
-          <button onClick={() => setView('month')} className={`px-3 h-8 rounded-md text-[13px] font-medium transition-colors ${view === 'month' ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-50'}`}>Month</button>
-          <button onClick={() => setView('week')} className={`px-3 h-8 rounded-md text-[13px] font-medium transition-colors ${view === 'week' ? 'bg-[#1B7BFF] text-white' : 'text-neutral-600 hover:bg-neutral-50'}`}>Week</button>
+        <div className="flex items-center gap-2">
+          <Input value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="Your niche (optional, helps AI)" className="h-9 w-56 rounded-lg border-neutral-300 text-[13px]" />
+          <button
+            onClick={showOptimal ? () => setShowOptimal(false) : fetchOptimal}
+            disabled={loadingOptimal}
+            className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-[13px] font-medium border transition-colors ${
+              showOptimal ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-violet-700 border-violet-200 hover:bg-violet-50'
+            }`}
+          >
+            {loadingOptimal ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+            {showOptimal ? 'Hide AI times' : 'AI optimal times'}
+          </button>
+          <div className="inline-flex bg-white border border-neutral-200 rounded-lg p-1">
+            <button onClick={() => setView('month')} className={`px-3 h-7 rounded-md text-[13px] font-medium transition-colors ${view === 'month' ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-50'}`}>Month</button>
+            <button onClick={() => setView('week')} className={`px-3 h-7 rounded-md text-[13px] font-medium transition-colors ${view === 'week' ? 'bg-[#1B7BFF] text-white' : 'text-neutral-600 hover:bg-neutral-50'}`}>Week</button>
+          </div>
         </div>
       </div>
+
+      {showOptimal && rationale && (
+        <div className="mb-4 p-3 rounded-2xl bg-violet-50 border border-violet-100 text-[13px] text-violet-900 flex items-start gap-2">
+          <Zap size={14} className="text-violet-600 mt-0.5 shrink-0" />
+          <p className="leading-relaxed">{rationale}</p>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-12"><Loader2 className="animate-spin text-[#1B7BFF] mx-auto" /></div>
       ) : (
         <div className="bg-white rounded-3xl border border-neutral-200/70 overflow-x-auto">
           <div className="min-w-[900px]">
-            {/* Header row with dates */}
+            {/* Header row */}
             <div className="grid border-b border-neutral-200/70" style={{ gridTemplateColumns: `120px repeat(${days.length}, minmax(0, 1fr))` }}>
               <div className="p-3 text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Channel</div>
               {days.map((d) => {
@@ -158,19 +261,57 @@ const MarketingCalendar = () => {
                   {days.map((d) => {
                     const isToday = d.getTime() === today.getTime();
                     const cellPosts = postsByCell[cellKey(p.id, d)] || [];
+                    const optimalsHere = showOptimal ? (optimalByCell[cellKey(p.id, d)] || []) : [];
                     const isPast = d < today;
+                    const k = cellKey(p.id, d);
+                    const isDropTarget = dropTarget === k;
                     return (
-                      <div key={d.toISOString()} className={`p-2 border-r border-neutral-100 last:border-0 min-h-[80px] group relative ${isToday ? 'bg-emerald-50/30' : isPast ? 'bg-neutral-50/40' : ''}`}>
+                      <div
+                        key={d.toISOString()}
+                        onDragOver={onDragOver(p.id, d)}
+                        onDragLeave={onDragLeave}
+                        onDrop={onDrop(p.id, d)}
+                        className={`p-2 border-r border-neutral-100 last:border-0 min-h-[90px] group relative transition-colors ${
+                          isToday ? 'bg-emerald-50/30' : isPast ? 'bg-neutral-50/40' : ''
+                        } ${isDropTarget ? 'bg-blue-100/60 ring-2 ring-inset ring-[#1B7BFF]' : ''}`}
+                      >
+                        {/* AI optimal marker */}
+                        {optimalsHere.length > 0 && cellPosts.length === 0 && (
+                          <button
+                            onClick={() => {
+                              const slot = optimalsHere[0];
+                              const d2 = new Date(d);
+                              d2.setHours(slot.hour, 0, 0, 0);
+                              setComposing({ platform: p.id, date: d2, suggestedTime: `${String(slot.hour).padStart(2, '0')}:00` });
+                            }}
+                            className="absolute top-1.5 right-1.5 inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200 hover:bg-violet-200 transition-colors"
+                            title={`AI suggests ${optimalsHere.map((s) => s.hour + ':00').join(', ')}`}
+                          >
+                            <Sparkles size={9} /> {optimalsHere[0].hour}h
+                          </button>
+                        )}
+
                         {cellPosts.map((post) => (
-                          <div key={post.id} className="mb-1 px-2 py-1.5 rounded-md bg-[#1B7BFF]/10 border border-[#1B7BFF]/20 text-[11px] cursor-pointer group/post">
+                          <div
+                            key={post.id}
+                            draggable
+                            onDragStart={onDragStart(post, p.id)}
+                            onDragEnd={() => { setDragging(null); setDropTarget(null); }}
+                            className="mb-1 px-2 py-1.5 rounded-md bg-[#1B7BFF]/10 border border-[#1B7BFF]/20 text-[11px] cursor-move group/post hover:bg-[#1B7BFF]/15 transition-colors"
+                            title="Drag to reschedule"
+                          >
                             <div className="flex items-start gap-1">
+                              <GripVertical size={10} className="text-[#1B7BFF]/50 mt-0.5 shrink-0" />
                               <span className="line-clamp-2 flex-1 text-[#1B7BFF] font-medium">{post.content.slice(0, 40)}</span>
                               <button onClick={(e) => { e.stopPropagation(); cancelPost(post.id); }} className="opacity-0 group-hover/post:opacity-100 text-rose-500"><XIcon size={10} /></button>
                             </div>
-                            <span className="inline-block mt-0.5 text-[9px] uppercase tracking-wider font-semibold text-[#1B7BFF]/70">Scheduled</span>
+                            <span className="inline-block mt-0.5 text-[9px] uppercase tracking-wider font-semibold text-[#1B7BFF]/70">
+                              {new Date(post.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
                           </div>
                         ))}
-                        {!isPast && (
+
+                        {!isPast && cellPosts.length === 0 && (
                           <button
                             onClick={() => setComposing({ platform: p.id, date: d })}
                             className="opacity-0 group-hover:opacity-100 absolute inset-0 m-1 rounded-md border-2 border-dashed border-[#1B7BFF]/40 text-[#1B7BFF] flex items-center justify-center transition-opacity"
@@ -189,10 +330,16 @@ const MarketingCalendar = () => {
         </div>
       )}
 
+      <div className="mt-4 flex flex-wrap items-center gap-4 text-[12px] text-neutral-500">
+        <div className="flex items-center gap-1.5"><GripVertical size={12} /> Drag a post to a new day or channel to reschedule</div>
+        {showOptimal && <div className="flex items-center gap-1.5"><Sparkles size={12} className="text-violet-600" /> Violet badges show AI-recommended posting hours</div>}
+      </div>
+
       {composing && (
         <ScheduleModal
           platform={composing.platform}
           date={composing.date}
+          suggestedTime={composing.suggestedTime}
           onClose={() => setComposing(null)}
           onCreated={() => { setComposing(null); load(); }}
         />
@@ -201,10 +348,10 @@ const MarketingCalendar = () => {
   );
 };
 
-const ScheduleModal = ({ platform, date, onClose, onCreated }) => {
+const ScheduleModal = ({ platform, date, suggestedTime, onClose, onCreated }) => {
   const { toast } = useToast();
   const [content, setContent] = useState('');
-  const [time, setTime] = useState('10:00');
+  const [time, setTime] = useState(suggestedTime || '10:00');
   const [busy, setBusy] = useState(false);
 
   const submit = async (e) => {
@@ -236,7 +383,9 @@ const ScheduleModal = ({ platform, date, onClose, onCreated }) => {
         <form onSubmit={submit} className="space-y-3">
           <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={5} placeholder="Write your post…" required className="rounded-xl border-neutral-300" />
           <div>
-            <label className="text-[12px] font-medium text-neutral-600 mb-1.5 block">Time</label>
+            <label className="text-[12px] font-medium text-neutral-600 mb-1.5 block">
+              Time {suggestedTime && <span className="ml-1 text-violet-600 text-[11px]">✨ AI suggests {suggestedTime}</span>}
+            </label>
             <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-11 rounded-xl border-neutral-300 w-40" required />
           </div>
           <div className="flex gap-2 justify-end pt-1">
