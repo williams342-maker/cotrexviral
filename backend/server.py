@@ -31,6 +31,7 @@ from routes import (  # noqa: F401
     oauth_tiktok,    # TikTok OAuth + Content Posting API
     billing,         # Stripe subscriptions + webhook
     trends,          # Live TikTok trending hashtag feed
+    ab_lab,          # A/B Hook Lab — variant generation + scoring
 )
 
 

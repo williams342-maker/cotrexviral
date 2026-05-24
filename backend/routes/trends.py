@@ -130,15 +130,80 @@ async def _generate_sample_hooks(hashtags: list[str]) -> dict[str, str]:
         return {}
 
 
+async def _llm_synthesise_trends(limit: int = 6) -> list[dict]:
+    """When the scrape fails, ask GPT to synthesise the day's top viral-velocity
+    hooks. This keeps the feed feeling fresh + on-platform even when TikTok's
+    Creative Center is blocking us."""
+    if not EMERGENT_LLM_KEY:
+        return []
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        import json
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"trend_synth_{datetime.now(timezone.utc).strftime('%Y%m%d')}",
+            system_message=(
+                "You are CortexViral's trend analyst. Produce currently-resonant viral "
+                "hooks for short-form video. Mix TikTok / Instagram Reels / YouTube Shorts. "
+                "Hooks must be specific, scroll-stopping opening lines a creator could "
+                "paste verbatim — NOT topic descriptions. Avoid year-specific references.\n\n"
+                "Respond ONLY in JSON: "
+                '{"trends":[{"hashtag":"#WithHash","velocity":<int 60-95>,'
+                '"platform":"TikTok|Reels|Shorts|LinkedIn","sample":"<the actual hook, <=200 chars>"}]}'
+            ),
+        ).with_model("openai", "gpt-4o-mini")
+        prompt = (
+            f"Give me {limit} viral-velocity hook archetypes trending right now across "
+            "short-form video. Mix curiosity-gap, pattern-interrupt, contrarian, and POV. "
+            f"Velocities should range 60-95; assign only ONE item velocity >= 90."
+        )
+        raw = await chat.send_message(UserMessage(text=prompt))
+        m = re.search(r"\{[\s\S]*\}", raw or "")
+        if not m:
+            return []
+        data = json.loads(m.group(0))
+        out = []
+        for t in (data.get("trends") or [])[:limit]:
+            if not isinstance(t, dict):
+                continue
+            tag = str(t.get("hashtag", "")).strip()
+            if tag and not tag.startswith("#"):
+                tag = "#" + tag.lstrip("#")
+            sample = str(t.get("sample", "")).strip()
+            if not tag or not sample:
+                continue
+            try:
+                vel = int(t.get("velocity", 75))
+            except (TypeError, ValueError):
+                vel = 75
+            out.append({
+                "hashtag": tag[:40],
+                "velocity": max(50, min(98, vel)),
+                "platform": str(t.get("platform", "TikTok"))[:16],
+                "sample": sample[:220],
+                "source": "ai_synthesised",
+            })
+        # Sort by velocity desc
+        out.sort(key=lambda x: x["velocity"], reverse=True)
+        return out
+    except Exception:
+        logger.exception("Trend synthesis via LLM failed")
+        return []
+
+
 async def _build_trend_payload(limit: int = 6) -> dict:
     """Refresh the cache: scrape + hook-generate + persist."""
     scraped = await _scrape_tiktok_creative_center(limit=limit * 2)
     if not scraped:
-        # Pure fallback path
-        trends = [
-            {**t, "velocity": 92 - i * 4, "source": "fallback"}
-            for i, t in enumerate(FALLBACK_TRENDS[:limit])
-        ]
+        # Try LLM-synthesised trends BEFORE the static seed pool.
+        ai_trends = await _llm_synthesise_trends(limit=limit)
+        if ai_trends:
+            trends = ai_trends
+        else:
+            trends = [
+                {**t, "velocity": 92 - i * 4, "source": "fallback"}
+                for i, t in enumerate(FALLBACK_TRENDS[:limit])
+            ]
     else:
         # Generate fresh hook samples for the top N
         tags = [t["hashtag"] for t in scraped[:limit]]

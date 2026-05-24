@@ -804,21 +804,14 @@ const ABLabTab = ({ onGenerated }) => {
     setLoading(true);
     try {
       const r = await axios.post(
-        `${API}/ai/generate-post`,
-        { platform: 'tiktok', tone: 'energetic', topic: `5 different scroll-stopping hooks for: ${seed}` },
+        `${API}/ai/ab-variations`,
+        { seed: seed.trim(), platform: 'tiktok', count: 5 },
         { withCredentials: true },
       );
-      // Synthesize 5 scored variants from the AI output for the demo.
-      const base = r.data?.content || seed;
-      const lines = String(base).split('\n').filter((l) => l.trim()).slice(0, 5);
-      const scored = lines.map((l, i) => ({
-        text: l.replace(/^[\d.\-•)\s]+/, '').trim() || `Variant ${i + 1} based on: ${seed}`,
-        score: Math.round(95 - i * 7 + Math.random() * 6),
-      })).sort((a, b) => b.score - a.score);
-      setVariants(scored);
+      setVariants(r.data?.variants || []);
       onGenerated?.();
     } catch (e) {
-      if (!paywall(e)) toast({ title: 'Generation failed' });
+      if (!paywall(e)) toast({ title: 'Generation failed', description: e?.response?.data?.detail || e.message });
     } finally {
       setLoading(false);
     }
@@ -851,14 +844,29 @@ const ABLabTab = ({ onGenerated }) => {
       {variants.length > 0 && (
         <div className="space-y-2.5">
           {variants.map((v, i) => (
-            <div key={i} className="bg-white rounded-2xl p-4 border border-neutral-200/70 flex items-center gap-4">
-              <div className={`text-3xl font-semibold tabular-nums w-14 text-center ${v.score >= 85 ? 'text-emerald-600' : v.score >= 70 ? 'text-amber-600' : 'text-neutral-500'}`}>
+            <div key={i} className="bg-white rounded-2xl p-4 border border-neutral-200/70 flex items-start gap-4">
+              <div className={`text-3xl font-semibold tabular-nums w-14 text-center pt-1 ${v.score >= 85 ? 'text-emerald-600' : v.score >= 70 ? 'text-amber-600' : 'text-neutral-500'}`}>
                 {v.score}
               </div>
-              <p className="flex-1 text-[14px] text-neutral-800 leading-snug">{v.text}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] text-neutral-800 leading-snug font-medium">{v.text}</p>
+                {v.breakdown && (
+                  <div className="mt-2 flex flex-wrap gap-1.5" data-testid={`ab-lab-breakdown-${i}`}>
+                    {Object.entries(v.breakdown).map(([k, val]) => (
+                      <span key={k} className="inline-flex items-center gap-1 text-[10.5px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
+                        <span className="font-semibold text-neutral-900">{val}</span>
+                        <span>{k.replace(/_/g, ' ')}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {v.why && (
+                  <p className="text-[12px] text-neutral-500 italic mt-2 leading-snug">{v.why}</p>
+                )}
+              </div>
               <button
                 onClick={() => { navigator.clipboard?.writeText(v.text); toast({ title: 'Hook copied' }); }}
-                className="text-neutral-500 hover:text-neutral-800"
+                className="text-neutral-500 hover:text-neutral-800 pt-1"
                 data-testid={`ab-lab-copy-${i}`}
               >
                 <Copy size={14} />

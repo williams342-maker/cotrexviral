@@ -225,3 +225,20 @@ async def assert_can_connect_channel(user_id: str):
                 "limit": cap,
             },
         )
+
+
+async def assert_has_feature(user_id: str, feature: str):
+    """Raise 402 when the user's plan doesn't include the named feature flag."""
+    plan = await _get_plan(user_id)
+    ent = ENTITLEMENTS.get(plan, ENTITLEMENTS["free"])
+    if ent.get("features", {}).get(feature):
+        return
+    raise HTTPException(
+        status_code=402,
+        detail={
+            "code": "feature_not_in_plan",
+            "message": f"'{feature}' is not included in the {ent['label']} plan. Upgrade to Growth to unlock it.",
+            "plan": plan,
+            "feature": feature,
+        },
+    )
