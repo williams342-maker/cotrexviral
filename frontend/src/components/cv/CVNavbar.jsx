@@ -77,13 +77,23 @@ const CVNavbar = ({ onGetStarted }) => {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="hidden sm:inline-flex text-[13px] font-medium text-zinc-300 hover:text-white px-3 h-9 rounded-lg transition-colors"
-              data-testid="cv-nav-login"
-            >
-              Login
-            </button>
+            {user ? (
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="hidden sm:inline-flex items-center gap-1.5 text-[13px] font-medium text-zinc-300 hover:text-white px-3 h-9 rounded-lg transition-colors"
+                data-testid="cv-nav-dashboard"
+              >
+                <LayoutDashboard size={13} /> Dashboard
+              </button>
+            ) : (
+              <button
+                onClick={login}
+                className="hidden sm:inline-flex text-[13px] font-medium text-zinc-300 hover:text-white px-3 h-9 rounded-lg transition-colors"
+                data-testid="cv-nav-login"
+              >
+                Login
+              </button>
+            )}
             <button
               onClick={onGetStarted}
               className="cv-btn-primary inline-flex items-center gap-1.5 text-[13px] font-semibold px-4 h-9 rounded-full"
