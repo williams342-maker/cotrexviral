@@ -171,6 +171,7 @@ class PublishRequest(BaseModel):
     content: str
     platforms: List[str]
     media_url: Optional[str] = None
+    scheduled_at: Optional[datetime] = None  # if set, post is scheduled
 
 
 # ==================== AUTH HELPERS ====================
@@ -751,17 +752,148 @@ async def disconnect_channel(payload: ChannelConnectRequest, request: Request):
 @api.post("/channels/publish")
 async def publish(payload: PublishRequest, request: Request):
     user = await get_current_user(request)
+    is_scheduled = payload.scheduled_at and payload.scheduled_at > datetime.now(timezone.utc)
     post = {
         "id": str(uuid.uuid4()),
         "user_id": user.user_id,
         "content": payload.content,
         "platforms": payload.platforms,
         "media_url": payload.media_url,
-        "status": "published",
+        "status": "scheduled" if is_scheduled else "published",
+        "scheduled_at": payload.scheduled_at if is_scheduled else None,
         "created_at": datetime.now(timezone.utc),
     }
     await db.posts.insert_one(post)
-    return {"ok": True, "id": post["id"], "platforms": payload.platforms, "status": "published"}
+    return {"ok": True, "id": post["id"], "platforms": payload.platforms, "status": post["status"]}
+
+
+@api.get("/posts/scheduled")
+async def list_scheduled(request: Request, start: Optional[str] = None, end: Optional[str] = None):
+    user = await get_current_user(request)
+    query = {"user_id": user.user_id, "status": "scheduled"}
+    if start or end:
+        sched = {}
+        if start:
+            sched["$gte"] = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        if end:
+            sched["$lte"] = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        query["scheduled_at"] = sched
+    cursor = db.posts.find(query, {"_id": 0}).sort("scheduled_at", 1)
+    return await cursor.to_list(500)
+
+
+@api.delete("/posts/scheduled/{post_id}")
+async def cancel_scheduled(post_id: str, request: Request):
+    user = await get_current_user(request)
+    res = await db.posts.delete_one({"id": post_id, "user_id": user.user_id, "status": "scheduled"})
+    if not res.deleted_count:
+        raise HTTPException(status_code=404, detail="Scheduled post not found")
+    return {"ok": True}
+
+
+# ==================== PERFORMANCE (mocked analytics) ====================
+import random as _rand
+
+
+def _mock_series(days: int, base: int = 50, volatility: int = 30):
+    _rand.seed(days)
+    return [max(0, base + _rand.randint(-volatility, volatility)) for _ in range(days)]
+
+
+PERFORMANCE_RANGES = {"24h": 24, "48h": 48, "7d": 7, "30d": 30, "60d": 60, "90d": 90, "year": 365, "lastyear": 365}
+
+
+@api.get("/performance/overview")
+async def performance_overview(request: Request, range: str = "24h"):
+    await get_current_user(request)
+    points = PERFORMANCE_RANGES.get(range, 24)
+    sessions = _mock_series(points, 80, 50)
+    revenue = _mock_series(points + 1, 25, 30)
+    total_sessions = sum(sessions)
+    total_revenue = sum(revenue)
+    prev_sessions = max(1, int(total_sessions * _rand.uniform(0.85, 1.35)))
+    prev_revenue = max(1, int(total_revenue * _rand.uniform(0.85, 1.30)))
+
+    def pct(now, prev):
+        return round((now - prev) / prev * 100, 1) if prev else 0
+
+    is_hourly = range in ("24h", "48h")
+    labels = []
+    now = datetime.now(timezone.utc)
+    for i in range(points):
+        labels.append(
+            (now - timedelta(hours=points - 1 - i)).strftime("%I%p").lstrip("0").lower()
+            if is_hourly
+            else (now - timedelta(days=points - 1 - i)).strftime("%b %d")
+        )
+
+    return {
+        "range": range,
+        "metrics": [
+            {"key": "sessions", "label": "Sessions", "value": total_sessions, "change_pct": pct(total_sessions, prev_sessions), "color": "sky"},
+            {"key": "revenue", "label": "Stripe Revenue", "value": f"${total_revenue:,}", "change_pct": pct(total_revenue, prev_revenue), "color": "violet"},
+        ],
+        "series": [
+            {"key": "sessions", "label": "Sessions", "color": "#1B7BFF", "data": sessions},
+            {"key": "revenue", "label": "Stripe Revenue", "color": "#7C3AED", "data": revenue[:points]},
+        ],
+        "labels": labels,
+    }
+
+
+@api.get("/performance/sources")
+async def performance_sources(request: Request, range: str = "24h"):
+    await get_current_user(request)
+    _rand.seed(hash(range))
+    sources = [
+        ("fb / paid", "facebook"),
+        ("(direct) / (none)", "direct"),
+        ("(not set) / (not set)", None),
+        ("google / organic", "google"),
+        ("instagram / referral", "instagram"),
+        ("linkedin / referral", "linkedin"),
+        ("tiktok / paid", "tiktok"),
+    ]
+    rows = []
+    for name, kind in sources:
+        n = _rand.randint(1, 35)
+        prev = max(1, n + _rand.randint(-15, 15))
+        rows.append({"source": name, "kind": kind, "now": n, "prev": prev, "change_pct": round((n - prev) / prev * 100, 1)})
+    rows.sort(key=lambda r: r["now"], reverse=True)
+    return rows
+
+
+@api.get("/performance/pages")
+async def performance_pages(request: Request, range: str = "24h"):
+    await get_current_user(request)
+    _rand.seed(hash(range) + 1)
+    pages = ["/", "/shop", "/dashboard", "/login", "/admin", "/admin/users", "/community", "/listings/new", "/blog", "/pricing", "/contact", "/about"]
+    rows = []
+    for p in pages:
+        n = _rand.randint(0, 55)
+        prev = max(0, n + _rand.randint(-20, 20))
+        change = round((n - prev) / prev * 100, 1) if prev else (100.0 if n else 0.0)
+        rows.append({"page": p, "now": n, "prev": prev, "change_pct": change})
+    rows.sort(key=lambda r: r["now"], reverse=True)
+    return rows[:10]
+
+
+# ==================== ACTIVITY FEED ====================
+@api.get("/activity")
+async def activity_feed(request: Request, limit: int = 30):
+    user = await get_current_user(request)
+    posts = await db.posts.find({"user_id": user.user_id}, {"_id": 0}).sort("created_at", -1).limit(10).to_list(10)
+    leads = await db.leads.find({"user_id": user.user_id}, {"_id": 0}).sort("created_at", -1).limit(10).to_list(10)
+    reports = await db.reports.find({"user_id": user.user_id}, {"_id": 0}).sort("created_at", -1).limit(10).to_list(10)
+    items = []
+    for p in posts:
+        items.append({"type": "post", "id": p["id"], "title": (p.get("content") or "")[:120], "platforms": p.get("platforms", []), "status": p.get("status"), "at": p["created_at"]})
+    for l in leads:
+        items.append({"type": "lead", "id": l["id"], "title": f"New lead from {l.get('agent_id', 'agent')}", "subtitle": l.get("email"), "at": l["created_at"]})
+    for r in reports:
+        items.append({"type": "report", "id": r["id"], "title": f"{r.get('type', 'report').replace('_', ' ').title()}: {r.get('title') or r.get('url') or 'untitled'}", "at": r["created_at"]})
+    items.sort(key=lambda x: x["at"], reverse=True)
+    return items[:limit]
 
 
 @api.get("/posts")

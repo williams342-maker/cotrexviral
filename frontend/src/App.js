@@ -14,6 +14,9 @@ import Posts from './pages/dashboard/Posts';
 import Leads from './pages/dashboard/Leads';
 import Studio from './pages/dashboard/Studio';
 import Help from './pages/dashboard/Help';
+import Main from './pages/dashboard/Main';
+import Performance from './pages/dashboard/Performance';
+import MarketingCalendar from './pages/dashboard/MarketingCalendar';
 import AdminOverview from './pages/admin/AdminOverview';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminTickets from './pages/admin/AdminTickets';
@@ -33,6 +36,9 @@ function AppRouter() {
       <Route path="/" element={<Marketing />} />
       <Route path="/marketing" element={<Marketing />} />
       <Route path="/dashboard" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
+      <Route path="/dashboard/main" element={<ProtectedRoute><Main /></ProtectedRoute>} />
+      <Route path="/dashboard/performance" element={<ProtectedRoute><Performance /></ProtectedRoute>} />
+      <Route path="/dashboard/calendar" element={<ProtectedRoute><MarketingCalendar /></ProtectedRoute>} />
       <Route path="/dashboard/insights" element={<ProtectedRoute><Insights /></ProtectedRoute>} />
       <Route path="/dashboard/seo" element={<ProtectedRoute><SeoReview /></ProtectedRoute>} />
       <Route path="/dashboard/scan" element={<ProtectedRoute><SiteScan /></ProtectedRoute>} />

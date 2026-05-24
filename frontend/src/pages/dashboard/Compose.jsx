@@ -27,6 +27,7 @@ const Compose = () => {
   const [publishing, setPublishing] = useState(false);
   const [channels, setChannels] = useState([]);
   const [hashtags, setHashtags] = useState([]);
+  const [scheduleAt, setScheduleAt] = useState('');
 
   useEffect(() => {
     axios.get(`${API}/channels`, { withCredentials: true })
@@ -70,11 +71,22 @@ const Compose = () => {
       const fullContent = hashtags.length
         ? `${content}\n\n${hashtags.map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' ')}`
         : content;
-      await axios.post(`${API}/channels/publish`, { content: fullContent, platforms }, { withCredentials: true });
-      toast({ title: `Published to ${platforms.length} channel${platforms.length > 1 ? 's' : ''}!`, description: 'MOCKED — stored in your posts feed.' });
+      const payload = { content: fullContent, platforms };
+      if (scheduleAt) {
+        payload.scheduled_at = new Date(scheduleAt).toISOString();
+      }
+      const r = await axios.post(`${API}/channels/publish`, payload, { withCredentials: true });
+      const isScheduled = r.data.status === 'scheduled';
+      toast({
+        title: isScheduled
+          ? `Scheduled for ${new Date(scheduleAt).toLocaleString()}`
+          : `Published to ${platforms.length} channel${platforms.length > 1 ? 's' : ''}!`,
+        description: 'MOCKED — stored in your feed/calendar.',
+      });
       setContent('');
       setTopic('');
       setHashtags([]);
+      setScheduleAt('');
     } catch (e) {
       toast({ title: 'Publishing failed' });
     } finally {
@@ -168,9 +180,13 @@ const Compose = () => {
           </div>
           <button onClick={publish} disabled={publishing} className="mt-5 w-full inline-flex items-center justify-center gap-2 bg-[#1B7BFF] hover:bg-[#1668e0] text-white text-[14px] font-medium h-11 rounded-xl disabled:opacity-60">
             {publishing ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-            {publishing ? 'Publishing…' : 'Publish now'}
+            {publishing ? (scheduleAt ? 'Scheduling…' : 'Publishing…') : (scheduleAt ? 'Schedule' : 'Publish now')}
           </button>
-          <p className="mt-3 text-[11.5px] text-neutral-500 text-center">MOCKED: posts are stored in your feed, not pushed to live platforms.</p>
+          <div className="mt-3">
+            <label className="text-[11.5px] font-medium text-neutral-600 mb-1 block">Schedule for later (optional)</label>
+            <Input type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} className="h-10 rounded-xl border-neutral-300 text-[13px]" />
+          </div>
+          <p className="mt-3 text-[11.5px] text-neutral-500 text-center">MOCKED: posts are stored in your feed/calendar, not pushed to live platforms.</p>
         </div>
       </div>
     </DashboardLayout>
