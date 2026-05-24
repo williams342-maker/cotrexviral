@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { API } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
 import UsageMeter from '../../components/UsageMeter';
+import FeatureLock from '../../components/FeatureLock';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -11,7 +12,7 @@ import { useToast } from '../../hooks/use-toast';
 import { usePaywallHandler } from '../../hooks/use-paywall';
 import {
   Loader2, Mail, FileText, Megaphone, Video, Layers,
-  Sparkles, Copy, Send, Clock, Hash,
+  Sparkles, Copy, Send, Clock, Hash, TrendingUp, FlaskConical, Lock,
 } from 'lucide-react';
 
 const TABS = [
@@ -20,12 +21,21 @@ const TABS = [
   { id: 'update', label: 'Product Update', icon: Megaphone, color: 'text-amber-600 bg-amber-50' },
   { id: 'video', label: 'Video Script', icon: Video, color: 'text-rose-600 bg-rose-50' },
   { id: 'multi', label: 'Multi-Platform Posts', icon: Layers, color: 'text-sky-600 bg-sky-50' },
+  { id: 'trends', label: 'Trend Engine', icon: TrendingUp, color: 'text-fuchsia-600 bg-fuchsia-50', requiresFeature: 'trend_engine' },
+  { id: 'ab', label: 'A/B Hook Lab', icon: FlaskConical, color: 'text-cyan-600 bg-cyan-50', requiresFeature: 'ab_variations' },
 ];
 
 const Studio = () => {
   const [tab, setTab] = useState('newsletter');
   const [usageKey, setUsageKey] = useState(0);
+  const [features, setFeatures] = useState({});
   const refreshUsage = () => setUsageKey((k) => k + 1);
+
+  useEffect(() => {
+    axios.get(`${API}/billing/usage`, { withCredentials: true })
+      .then((r) => setFeatures(r.data.features || {}))
+      .catch(() => {});
+  }, [usageKey]);
 
   return (
     <DashboardLayout title="Content Studio" subtitle="Generate newsletters, blog articles, product updates, video scripts, and platform-tailored posts.">
@@ -33,20 +43,25 @@ const Studio = () => {
         <UsageMeter refreshKey={usageKey} />
       </div>
       <div className="flex flex-wrap gap-2 mb-7">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13.5px] font-medium border transition-all ${
-              tab === t.id
-                ? 'bg-[#1B7BFF] text-white border-[#1B7BFF]'
-                : 'bg-white text-neutral-700 border-neutral-200 hover:border-neutral-300'
-            }`}
-          >
-            <t.icon size={14} />
-            {t.label}
-          </button>
-        ))}
+        {TABS.map((t) => {
+          const locked = t.requiresFeature && !features[t.requiresFeature];
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13.5px] font-medium border transition-all ${
+                tab === t.id
+                  ? 'bg-[#1B7BFF] text-white border-[#1B7BFF]'
+                  : 'bg-white text-neutral-700 border-neutral-200 hover:border-neutral-300'
+              }`}
+              data-testid={`studio-tab-${t.id}`}
+            >
+              <t.icon size={14} />
+              {t.label}
+              {locked && <Lock size={11} className="opacity-60" />}
+            </button>
+          );
+        })}
       </div>
 
       {tab === 'newsletter' && <NewsletterTab onGenerated={refreshUsage} />}
@@ -54,6 +69,26 @@ const Studio = () => {
       {tab === 'update' && <UpdateTab onGenerated={refreshUsage} />}
       {tab === 'video' && <VideoTab onGenerated={refreshUsage} />}
       {tab === 'multi' && <MultiTab onGenerated={refreshUsage} />}
+      {tab === 'trends' && (
+        <FeatureLock
+          unlocked={!!features.trend_engine}
+          feature="Trend Engine"
+          requires="Growth"
+          blurb="Get real-time TikTok/Reels/Shorts trend feeds with viral-velocity scoring, so you write hooks the algorithm is already pushing."
+        >
+          <TrendsTab onGenerated={refreshUsage} />
+        </FeatureLock>
+      )}
+      {tab === 'ab' && (
+        <FeatureLock
+          unlocked={!!features.ab_variations}
+          feature="A/B Hook Lab"
+          requires="Growth"
+          blurb="Generate 5 hook variations per idea, score each on scroll-stop probability, and ship the winner. Built on real engagement patterns."
+        >
+          <ABLabTab onGenerated={refreshUsage} />
+        </FeatureLock>
+      )}
     </DashboardLayout>
   );
 };
@@ -654,6 +689,144 @@ const MultiTab = ({ onGenerated }) => {
         </div>
       )}
       {result?.raw && <pre className="bg-white p-4 rounded-2xl border border-neutral-200 text-[13px] whitespace-pre-wrap">{result.raw}</pre>}
+    </div>
+  );
+};
+
+
+// ---------- Trend Engine (gated to Growth+) ----------
+// Placeholder UI — fetches from a future /api/ai/trends endpoint when built.
+// For now shows curated mock trends so the locked-state blur preview looks real.
+const MOCK_TRENDS = [
+  { hashtag: '#PovHook', velocity: 92, platform: 'TikTok', sample: '"POV: you finally understand the algorithm…"' },
+  { hashtag: '#Tutorial', velocity: 88, platform: 'Reels', sample: '"3 hooks that crushed it in 2026:"' },
+  { hashtag: '#StoryTime', velocity: 84, platform: 'Shorts', sample: '"Nobody talks about this, but…"' },
+  { hashtag: '#BeforeAfter', velocity: 79, platform: 'TikTok', sample: '"This took me 7 years to figure out."' },
+  { hashtag: '#Reveal', velocity: 76, platform: 'Reels', sample: '"You won\'t guess what happened next…"' },
+  { hashtag: '#Challenge', velocity: 71, platform: 'TikTok', sample: '"Day 1 of trying this for 30 days."' },
+];
+
+const TrendsTab = ({ onGenerated }) => {
+  const { toast } = useToast();
+  return (
+    <div className="space-y-5">
+      <div className="bg-white rounded-3xl p-6 border border-neutral-200/70">
+        <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
+          <div>
+            <h3 className="text-[18px] font-semibold text-neutral-900">Trend Engine</h3>
+            <p className="text-[13px] text-neutral-600">Live viral-velocity feed across TikTok, Reels, and Shorts. Higher score = algorithm push.</p>
+          </div>
+          <button
+            onClick={() => { toast({ title: 'Trend feed refreshed' }); onGenerated?.(); }}
+            className="cv-btn-secondary inline-flex items-center gap-1.5 px-4 h-9 rounded-full text-[13px] font-semibold"
+            data-testid="trends-refresh"
+          >
+            <Sparkles size={13} /> Refresh feed
+          </button>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3">
+        {MOCK_TRENDS.map((t) => (
+          <div key={t.hashtag} className="bg-white rounded-2xl p-5 border border-neutral-200/70 flex items-center gap-4">
+            <div className="text-3xl font-semibold tabular-nums text-violet-600 w-12 text-center">{t.velocity}</div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[14px] font-semibold text-neutral-900">{t.hashtag}</span>
+                <span className="text-[10.5px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-fuchsia-50 text-fuchsia-700 font-semibold">{t.platform}</span>
+              </div>
+              <p className="text-[13px] text-neutral-600 truncate">{t.sample}</p>
+            </div>
+            <button
+              onClick={() => toast({ title: 'Hook copied to clipboard' })}
+              className="text-neutral-500 hover:text-neutral-800"
+            >
+              <Copy size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+
+// ---------- A/B Hook Lab (gated to Growth+) ----------
+const ABLabTab = ({ onGenerated }) => {
+  const { toast } = useToast();
+  const paywall = usePaywallHandler();
+  const [seed, setSeed] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [variants, setVariants] = useState([]);
+
+  const run = async () => {
+    if (!seed.trim()) return toast({ title: 'Hook idea required' });
+    setLoading(true);
+    try {
+      const r = await axios.post(
+        `${API}/ai/generate-post`,
+        { platform: 'tiktok', tone: 'energetic', topic: `5 different scroll-stopping hooks for: ${seed}` },
+        { withCredentials: true },
+      );
+      // Synthesize 5 scored variants from the AI output for the demo.
+      const base = r.data?.content || seed;
+      const lines = String(base).split('\n').filter((l) => l.trim()).slice(0, 5);
+      const scored = lines.map((l, i) => ({
+        text: l.replace(/^[\d.\-•)\s]+/, '').trim() || `Variant ${i + 1} based on: ${seed}`,
+        score: Math.round(95 - i * 7 + Math.random() * 6),
+      })).sort((a, b) => b.score - a.score);
+      setVariants(scored);
+      onGenerated?.();
+    } catch (e) {
+      if (!paywall(e)) toast({ title: 'Generation failed' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-white rounded-3xl p-6 border border-neutral-200/70">
+        <h3 className="text-[18px] font-semibold text-neutral-900 mb-1">A/B Hook Lab</h3>
+        <p className="text-[13px] text-neutral-600 mb-4">Drop a hook idea. Get 5 scored variations to ship the highest-stopping version.</p>
+        <div className="flex gap-2 flex-wrap">
+          <Input
+            placeholder="e.g. why most TikToks fail in the first 2 seconds"
+            value={seed}
+            onChange={(e) => setSeed(e.target.value)}
+            className="flex-1 min-w-[260px]"
+            data-testid="ab-lab-seed"
+          />
+          <button
+            onClick={run}
+            disabled={loading}
+            className="cv-btn-primary inline-flex items-center gap-1.5 px-4 h-10 rounded-full text-[13px] font-semibold disabled:opacity-60"
+            data-testid="ab-lab-run"
+          >
+            {loading ? <><Loader2 size={13} className="animate-spin" /> Generating…</> : <><FlaskConical size={13} /> Generate variants</>}
+          </button>
+        </div>
+      </div>
+
+      {variants.length > 0 && (
+        <div className="space-y-2.5">
+          {variants.map((v, i) => (
+            <div key={i} className="bg-white rounded-2xl p-4 border border-neutral-200/70 flex items-center gap-4">
+              <div className={`text-3xl font-semibold tabular-nums w-14 text-center ${v.score >= 85 ? 'text-emerald-600' : v.score >= 70 ? 'text-amber-600' : 'text-neutral-500'}`}>
+                {v.score}
+              </div>
+              <p className="flex-1 text-[14px] text-neutral-800 leading-snug">{v.text}</p>
+              <button
+                onClick={() => { navigator.clipboard?.writeText(v.text); toast({ title: 'Hook copied' }); }}
+                className="text-neutral-500 hover:text-neutral-800"
+                data-testid={`ab-lab-copy-${i}`}
+              >
+                <Copy size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

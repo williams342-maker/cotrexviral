@@ -62,11 +62,14 @@ const TIERS = [
     plan: 'growth',
     icon: TrendingUp,
     monthly: 39,
+    monthlyAnchor: 59,   // strike-through anchor price (early-creator framing)
     annual: 390,
+    annualAnchor: 590,
     blurb: 'For serious creators growing audiences fast',
     cta: 'Go Viral Faster',
     micro: 'Best for creators posting daily and scaling reach',
     badge: '🔥 Most Popular',
+    earlyBadge: 'Early creator price',
     features: [
       'Everything in Starter, plus:',
       'Unlimited viral hook generation',
@@ -144,12 +147,13 @@ const Pricing = () => {
   const [loadingPlan, setLoadingPlan] = useState(null);
 
   const priceFor = (t) => {
-    if (t.monthly === 0) return { value: '$0', period: 'forever' };
+    if (t.monthly === 0) return { value: '$0', period: 'forever', anchor: null };
     if (annual) {
       const perMonth = Math.round(t.annual / 12);
-      return { value: `$${perMonth}`, period: '/mo billed annually' };
+      const anchorPerMonth = t.annualAnchor ? Math.round(t.annualAnchor / 12) : null;
+      return { value: `$${perMonth}`, period: '/mo billed annually', anchor: anchorPerMonth ? `$${anchorPerMonth}` : null };
     }
-    return { value: `$${t.monthly}`, period: '/month' };
+    return { value: `$${t.monthly}`, period: '/month', anchor: t.monthlyAnchor ? `$${t.monthlyAnchor}` : null };
   };
 
   const onCta = async (t) => {
@@ -307,10 +311,22 @@ const Pricing = () => {
                 </div>
                 <p className="text-[13px] text-zinc-400 mt-1.5 min-h-[40px]">{t.blurb}</p>
 
-                <div className="mt-5 flex items-baseline gap-1.5">
+                <div className="mt-5 flex items-baseline gap-1.5 flex-wrap">
+                  {price.anchor && (
+                    <span className="cv-display text-2xl font-medium text-zinc-500 line-through decoration-rose-400/60 decoration-2" data-testid={`pricing-anchor-${t.name.toLowerCase()}`}>
+                      {price.anchor}
+                    </span>
+                  )}
                   <span className="cv-display text-5xl font-semibold text-white">{price.value}</span>
                   <span className="text-[13px] text-zinc-500">{price.period}</span>
                 </div>
+                {t.earlyBadge && (
+                  <div className="mt-2">
+                    <span className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/20" data-testid={`pricing-early-badge-${t.name.toLowerCase()}`}>
+                      <Sparkles size={10} /> {t.earlyBadge}
+                    </span>
+                  </div>
+                )}
 
                 <button
                   onClick={() => onCta(t)}
