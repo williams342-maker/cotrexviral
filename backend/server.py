@@ -1,5 +1,5 @@
 """Automatex backend — auth + AI marketing endpoints"""
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Cookie, Header
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Cookie, Header, Query
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -936,9 +936,9 @@ async def performance_overview(request: Request, range: str = "24h"):
 
 
 @api.get("/performance/sources")
-async def performance_sources(request: Request, range: str = "24h"):
+async def performance_sources(request: Request, period: str = Query("24h", alias="range")):
     await get_current_user(request)
-    _rand.seed(hash(range))
+    _rand.seed(hash(period))
     sources = [
         ("fb / paid", "facebook"),
         ("(direct) / (none)", "direct"),
@@ -958,9 +958,9 @@ async def performance_sources(request: Request, range: str = "24h"):
 
 
 @api.get("/performance/pages")
-async def performance_pages(request: Request, range: str = "24h"):
+async def performance_pages(request: Request, period: str = Query("24h", alias="range")):
     await get_current_user(request)
-    _rand.seed(hash(range) + 1)
+    _rand.seed(hash(period) + 1)
     pages = ["/", "/shop", "/dashboard", "/login", "/admin", "/admin/users", "/community", "/listings/new", "/blog", "/pricing", "/contact", "/about"]
     rows = []
     for p in pages:
