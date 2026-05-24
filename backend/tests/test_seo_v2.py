@@ -1,4 +1,4 @@
-"""Backend SEO v2 tests: expanded sitemap (44 URLs), production domain, image:image, robots."""
+"""Backend SEO v2 tests: expanded sitemap (56+ URLs), production domain, image:image, robots."""
 import os
 import re
 import requests
@@ -37,14 +37,12 @@ def _robots():
 
 # --- sitemap shape ---
 class TestSitemapV2:
-    def test_total_44_loc_entries(self):
+    def test_total_loc_entries(self):
         text = _sitemap()
         loc_count = len(re.findall(r"<loc>https?://[^<]+</loc>", text))
-        # 44 page <loc> + 44 image <image:loc> = 88. Count only page <loc>s by exclusion
-        page_locs = re.findall(r"  <url>\s*\n\s*<loc>([^<]+)</loc>", text)
-        # Fallback: parse <loc> immediately under <url>
         page_loc_count = len(re.findall(r"<url>\s*\n\s*<loc>", text))
-        assert page_loc_count == 44, f"expected 44 page <loc> entries, got {page_loc_count}; total loc={loc_count}"
+        # 12 core + 32 programmatic + 12 blog posts = 56 (lower-bound; grows over time)
+        assert page_loc_count >= 56, f"expected at least 56 page <loc> entries, got {page_loc_count}; total loc={loc_count}"
 
     def test_uses_production_domain(self):
         text = _sitemap()
@@ -59,8 +57,8 @@ class TestSitemapV2:
         assert 'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"' in text
         assert "<image:image>" in text
         assert "<image:loc>" in text
-        # at least one image:image per url (44+)
-        assert len(re.findall(r"<image:image>", text)) >= 44
+        # at least one image:image per url (56+)
+        assert len(re.findall(r"<image:image>", text)) >= 56
 
     def test_pricing_present(self):
         text = _sitemap()

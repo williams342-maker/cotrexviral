@@ -25,7 +25,11 @@ const BlogShell = ({ children, seo }) => {
   );
 };
 
-export const BlogIndex = () => (
+export const BlogIndex = () => {
+  const [cluster, setCluster] = React.useState('all');
+  const clusters = ['all', ...Array.from(new Set(POSTS.map((p) => p.cluster)))];
+  const filtered = cluster === 'all' ? POSTS : POSTS.filter((p) => p.cluster === cluster);
+  return (
   <BlogShell
     seo={
       <CVSeo
@@ -44,18 +48,37 @@ export const BlogIndex = () => (
           Guides on <span className="cv-gradient-text">viral content</span> and AI marketing.
         </h1>
         <p className="mt-6 max-w-2xl mx-auto text-zinc-400 text-[16px]">Practical, no-fluff playbooks for creators, founders, and brands building compounding growth.</p>
+
+        {/* Cluster filter */}
+        <div className="mt-8 inline-flex flex-wrap items-center justify-center gap-2 cv-glass rounded-full p-1.5" data-testid="cv-blog-cluster-filter">
+          {clusters.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCluster(c)}
+              className={`px-3.5 h-9 rounded-full text-[12.5px] font-semibold transition-all capitalize ${
+                cluster === c ? 'bg-white text-zinc-900' : 'text-zinc-400 hover:text-white'
+              }`}
+              data-testid={`cv-blog-cluster-${c.replace(/\s+/g, '-')}`}
+            >
+              {c === 'all' ? 'All' : c}
+              <span className="ml-1.5 text-[10px] opacity-60">
+                ({c === 'all' ? POSTS.length : POSTS.filter((p) => p.cluster === c).length})
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
     </section>
 
     <section className="relative cv-dark pb-24">
       <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 grid md:grid-cols-2 gap-5">
-        {POSTS.map((p, i) => (
+        {filtered.map((p, i) => (
           <motion.div
             key={p.slug}
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.5, delay: i * 0.08 }}
+            transition={{ duration: 0.5, delay: i * 0.04 }}
           >
             <Link to={`/blog/${p.slug}`} className="block cv-glass-strong rounded-3xl p-6 hover:border-violet-400/30 transition-colors group h-full">
               <span className="inline-block text-[10.5px] uppercase tracking-[0.2em] font-semibold px-2.5 py-1 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/25">{p.cluster}</span>
@@ -73,13 +96,18 @@ export const BlogIndex = () => (
     </section>
   </BlogShell>
 );
+};
 
 export const BlogPost = () => {
   const { slug } = useParams();
   const post = getPost(slug);
   if (!post) return <Navigate to="/blog" replace />;
 
-  const otherPosts = POSTS.filter((p) => p.slug !== post.slug).slice(0, 2);
+  // Prefer posts from same cluster ("topical authority"). Fall back to others.
+  const sameCluster = POSTS.filter((p) => p.slug !== post.slug && p.cluster === post.cluster).slice(0, 2);
+  const otherPosts = sameCluster.length >= 2
+    ? sameCluster
+    : [...sameCluster, ...POSTS.filter((p) => p.slug !== post.slug && p.cluster !== post.cluster)].slice(0, 2);
 
   return (
     <BlogShell
