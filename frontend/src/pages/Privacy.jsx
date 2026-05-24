@@ -113,7 +113,7 @@ const Privacy = () => (
         { label: 'Privacy Policy', path: '/privacy' },
       ])}
     />
-    <CVNavbar onGetStarted={() => {}} />
+    <CVNavbar />
 
     <section className="relative pt-32 pb-12 overflow-hidden">
       <CVBackdrop variant="hero" />

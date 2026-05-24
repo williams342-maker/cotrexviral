@@ -19,6 +19,17 @@ const CVNavbar = ({ onGetStarted }) => {
   const navigate = useNavigate();
   const { user, login } = useAuth();
 
+  // If parent didn't wire a real handler, fall back to auth-aware default:
+  // logged-in users → /dashboard, logged-out → Emergent Google Auth.
+  const handleCTA = () => {
+    if (typeof onGetStarted === 'function') {
+      onGetStarted();
+      return;
+    }
+    if (user) navigate('/dashboard');
+    else login();
+  };
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 14);
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -95,7 +106,7 @@ const CVNavbar = ({ onGetStarted }) => {
               </button>
             )}
             <button
-              onClick={onGetStarted}
+              onClick={handleCTA}
               className="cv-btn-primary inline-flex items-center gap-1.5 text-[13px] font-semibold px-4 h-9 rounded-full"
               data-testid="cv-nav-cta"
             >

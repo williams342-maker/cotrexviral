@@ -73,7 +73,7 @@ const SitemapPage = () => {
           { label: 'Sitemap', path: '/sitemap' },
         ])}
       />
-      <CVNavbar onGetStarted={() => {}} />
+      <CVNavbar />
 
       <section className="relative pt-32 pb-12 overflow-hidden">
         <CVBackdrop variant="hero" />

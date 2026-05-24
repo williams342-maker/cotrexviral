@@ -119,7 +119,7 @@ const Terms = () => (
         { label: 'Terms of Service', path: '/terms' },
       ])}
     />
-    <CVNavbar onGetStarted={() => {}} />
+    <CVNavbar />
 
     <section className="relative pt-32 pb-12 overflow-hidden">
       <CVBackdrop variant="hero" />
