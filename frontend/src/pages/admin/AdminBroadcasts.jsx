@@ -116,7 +116,7 @@ const NewBroadcastModal = ({ onClose, onCreated }) => {
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-3xl max-w-lg w-full p-6" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-xl font-semibold tracking-tight mb-1">New broadcast</h3>
+        <h3 className="text-xl font-semibold tracking-tight mb-1">Create broadcast announcement</h3>
         <p className="text-[13px] text-neutral-500 mb-4">Visible as a banner to every logged-in user.</p>
         <form onSubmit={submit} className="space-y-3">
           <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Title" required className="h-11 rounded-xl border-neutral-300" />
