@@ -35,11 +35,17 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
-- 2026-02 (this session)
-  - **AI optimal time button on Compose** — visible only when exactly one channel checkbox is selected; auto-fills datetime-local and shows violet meta line, cleared on manual edit
-  - **Bulk lasso multi-select on Marketing Calendar** — toggle "Bulk select" → drag rectangle (Shift adds), floating bottom action bar with **−1w / −1d / +1d / +1w / Cancel / Clear**, runs PATCH/DELETE in parallel
-  - Backend cleanup: `performance/*` endpoints now use `period: str = Query("24h", alias="range")` (no more builtin shadowing) — public URL signature unchanged
-  - Backend regression suite added: `/app/backend/tests/test_scheduling_and_optimal.py` (9 tests, all pass)
+- 2026-02-25 (this session — part 2)
+  - **Background scheduler (APScheduler in-process)** — flips `scheduled → published` every 60s with a Mongo-backed TTL lock (`scheduler_locks` collection) so multiple uvicorn workers don't double-publish.
+  - New admin endpoint `POST /api/admin/scheduler/run-once` — manually triggers the job (bypasses lock) for debugging.
+  - Post documents now also carry `publish_mode: "scheduler"` and `published_at` when promoted by the worker.
+  - Disabled via `DISABLE_SCHEDULER=true` env (for tests/local).
+  - Backend pytest: 4 new scheduler tests in `/app/backend/tests/test_scheduler.py` (total now 13/13 pass).
+- 2026-02-24 (this session — part 1)
+  - **AI optimal time button on Compose** — visible only when exactly one channel checkbox is selected; auto-fills datetime-local and shows violet meta line, cleared on manual edit.
+  - **Bulk lasso multi-select on Marketing Calendar** — toggle "Bulk select" → drag rectangle (Shift adds), floating bottom action bar with **−1w / −1d / +1d / +1w / Cancel / Clear**, runs PATCH/DELETE in parallel.
+  - Backend cleanup: `performance/*` endpoints now use `period: str = Query("24h", alias="range")` (no more builtin shadowing) — public URL signature unchanged.
+  - Backend regression suite added: `/app/backend/tests/test_scheduling_and_optimal.py` (9 tests, all pass).
 - Prior sessions
   - Pixel-perfect landing-page clone, rebranded Automatex → CortexViral
   - Emergent Google Auth
@@ -60,17 +66,24 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 
 ### P0 — none open
 
-### P1
-- **Real OAuth + publishing** for Instagram / X / LinkedIn / TikTok / Facebook / YouTube / Threads / Pinterest (blocked: needs user-supplied developer credentials)
-- Background scheduler/cron to flip `status: scheduled → published` and (post-OAuth) push to live APIs at `scheduled_at`
-- Per-post analytics (views, likes, CTR) once real OAuth is connected
+### P1 — **Real OAuth + live publishing** (blocked: needs user-supplied developer credentials)
+Pipeline: when a post is promoted to `published` by the scheduler (or by the immediate publish path), iterate its `platforms[]` and dispatch to each platform's OAuth-authenticated API. Per-platform handler files should live in `/app/backend/integrations/{linkedin,x,instagram,facebook,tiktok}.py`. Token storage collection `{platform}_connections` keyed by `user_id`.
+- **LinkedIn FIRST** — playbook obtained 2026-02-25; needs `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, redirect URIs registered. Uses `w_member_social` + OIDC scopes. UGC Post API + Images API.
+- X / Twitter — basic tier ~$100/mo, OAuth 2.0 PKCE.
+- Meta (Facebook + Instagram) — slowest review.
+- TikTok — manual approval.
+- Threads — via Meta Graph.
+
+### P1 — Per-post analytics
+Strictly depends on OAuth per platform. Each platform has its own metrics endpoint (LinkedIn UGC, X v2 tweet metrics, Meta Insights, TikTok Insights). Implement per platform as OAuth lands.
 
 ### P2
-- Refactor `server.py` into `/app/backend/routes/` and `/app/backend/models/`
+- Refactor `server.py` (~1500 lines) into `/app/backend/routes/` and `/app/backend/models/`
 - Drag from one post to multiple cells (multi-day duplicate)
 - Calendar month view: collapse all platforms into a single row-per-day with stacked dots
 - Email digest for admin broadcasts (Resend integration)
 - Stripe billing (Pro tier unlocks live posting + higher AI quotas)
+- "Repeat weekly" toggle when scheduling
 
 ## Key API endpoints
 - `GET /api/auth/me` · `POST /api/auth/logout`
