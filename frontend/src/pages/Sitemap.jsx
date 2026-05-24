@@ -5,7 +5,8 @@ import { ArrowRight, FileText, Tag, Layers, Hash } from 'lucide-react';
 import CVNavbar from '../components/cv/CVNavbar';
 import CVBackdrop from '../components/cv/CVBackdrop';
 import CVFooter from '../components/cv/CVFooter';
-import CVSeo from '../components/cv/CVSeo';
+import CVSeo, { buildBreadcrumbSchema } from '../components/cv/CVSeo';
+import CVBreadcrumbs from '../components/cv/CVBreadcrumbs';
 import { POSTS } from './blog/posts';
 import { ALL_COMBOS, TOOLS, NICHES } from './programmatic/data';
 
@@ -67,12 +68,17 @@ const SitemapPage = () => {
         title="Sitemap — All CortexViral Pages"
         description="Browse every page on CortexViral: AI tools, niche generators, blog articles, and legal pages — organised in one human-readable index."
         path="/sitemap"
+        schema={buildBreadcrumbSchema([
+          { label: 'Home', path: '/' },
+          { label: 'Sitemap', path: '/sitemap' },
+        ])}
       />
       <CVNavbar onGetStarted={() => {}} />
 
       <section className="relative pt-32 pb-12 overflow-hidden">
         <CVBackdrop variant="hero" />
         <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <CVBreadcrumbs items={[{ label: 'Sitemap' }]} className="justify-center mb-5" />
           <span className="text-[11px] uppercase tracking-[0.22em] text-violet-400 font-semibold">Site map</span>
           <motion.h1
             initial={{ opacity: 0, y: 16 }}

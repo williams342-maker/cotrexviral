@@ -5,7 +5,8 @@ import { ArrowRight, ArrowLeft, Calendar, Clock } from 'lucide-react';
 import CVNavbar from '../../components/cv/CVNavbar';
 import CVBackdrop from '../../components/cv/CVBackdrop';
 import CVFooter from '../../components/cv/CVFooter';
-import CVSeo, { ORG_SCHEMA, buildArticleSchema } from '../../components/cv/CVSeo';
+import CVSeo, { ORG_SCHEMA, buildArticleSchema, buildBreadcrumbSchema } from '../../components/cv/CVSeo';
+import CVBreadcrumbs from '../../components/cv/CVBreadcrumbs';
 import { SelectAgentModal, AgentChatModal } from '../../components/Modals';
 import { POSTS, getPost } from './posts';
 
@@ -116,13 +117,24 @@ export const BlogPost = () => {
           title={`${post.title}`}
           description={post.description}
           path={`/blog/${post.slug}`}
-          schema={buildArticleSchema({ title: post.title, description: post.description, slug: post.slug, date: post.date })}
+          schema={[
+            buildArticleSchema({ title: post.title, description: post.description, slug: post.slug, date: post.date }),
+            buildBreadcrumbSchema([
+              { label: 'Home', path: '/' },
+              { label: 'Blog', path: '/blog' },
+              { label: post.title, path: `/blog/${post.slug}` },
+            ]),
+          ]}
         />
       }
     >
       <article className="relative pt-32 pb-12">
         <CVBackdrop variant="hero" />
         <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+          <CVBreadcrumbs
+            items={[{ label: 'Blog', to: '/blog' }, { label: post.title }]}
+            className="mb-5"
+          />
           <Link to="/blog" className="inline-flex items-center gap-1.5 text-[13px] text-zinc-400 hover:text-white mb-6">
             <ArrowLeft size={13} /> All articles
           </Link>
@@ -142,6 +154,28 @@ export const BlogPost = () => {
             className="cv-prose text-[16px] text-zinc-300 leading-[1.75]"
             dangerouslySetInnerHTML={{ __html: post.body }}
           />
+          {post.videos?.length > 0 && (
+            <div className="mt-10 space-y-6" data-testid="cv-blog-videos">
+              {post.videos.map((v) => (
+                <figure key={v.player_loc || v.content_loc} className="cv-glass-strong rounded-2xl overflow-hidden">
+                  <div className="aspect-video w-full">
+                    <iframe
+                      src={v.player_loc}
+                      title={v.title}
+                      loading="lazy"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="w-full h-full"
+                    />
+                  </div>
+                  <figcaption className="p-4 text-[13px] text-zinc-400">
+                    <strong className="text-zinc-200">{v.title}</strong>
+                    {v.description ? ` — ${v.description}` : null}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

@@ -44,11 +44,31 @@ const CVSeo = ({
       <meta name="twitter:image" content={ogImage} />
 
       {schema && (
-        <script type="application/ld+json">{JSON.stringify(schema)}</script>
+        Array.isArray(schema)
+          ? schema.map((s, i) => (
+              <script key={i} type="application/ld+json">{JSON.stringify(s)}</script>
+            ))
+          : <script type="application/ld+json">{JSON.stringify(schema)}</script>
       )}
     </Helmet>
   );
 };
+
+/**
+ * Builds a Schema.org BreadcrumbList. Pass items in order; first is Home,
+ * last is current page. Each item must have { label, path } (path is the
+ * absolute route, e.g. "/blog").
+ */
+export const buildBreadcrumbSchema = (items) => ({
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: items.map((item, idx) => ({
+    '@type': 'ListItem',
+    position: idx + 1,
+    name: item.label,
+    item: `${SITE}${item.path}`,
+  })),
+});
 
 export const ORG_SCHEMA = {
   '@context': 'https://schema.org',

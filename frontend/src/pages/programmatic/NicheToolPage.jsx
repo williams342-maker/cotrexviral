@@ -6,9 +6,19 @@ import CVNavbar from '../../components/cv/CVNavbar';
 import CVBackdrop from '../../components/cv/CVBackdrop';
 import CVFaq from '../../components/cv/CVFaq';
 import CVFooter from '../../components/cv/CVFooter';
-import CVSeo, { SOFTWARE_SCHEMA, buildFaqSchema } from '../../components/cv/CVSeo';
+import CVSeo, { SOFTWARE_SCHEMA, buildFaqSchema, buildBreadcrumbSchema } from '../../components/cv/CVSeo';
+import CVBreadcrumbs from '../../components/cv/CVBreadcrumbs';
 import { SelectAgentModal, AgentChatModal } from '../../components/Modals';
 import { getCombo, ALL_COMBOS } from './data';
+import { POSTS } from '../blog/posts';
+
+// Map programmatic-tool intents → blog cluster names used in posts.js
+const TOOL_TO_CLUSTER = {
+  'instagram-caption-generator': 'viral content',
+  'tiktok-script-generator': 'viral content',
+  'viral-content-ideas': 'AI marketing tools',
+  'linkedin-post-generator': 'social media growth',
+};
 
 const buildFaqs = (tool, niche) => [
   {
@@ -51,6 +61,9 @@ const NicheToolPage = () => {
   const crossSell = ALL_COMBOS
     .filter((c) => c.niche.slug === niche.slug && c.tool.slug !== tool.slug)
     .slice(0, 3);
+  // Cluster-aligned blog posts for topical-authority internal linking
+  const relatedCluster = TOOL_TO_CLUSTER[tool.slug] || 'viral content';
+  const relatedPosts = POSTS.filter((p) => p.cluster === relatedCluster).slice(0, 3);
 
   return (
     <div className="min-h-screen cv-dark antialiased">
@@ -58,7 +71,15 @@ const NicheToolPage = () => {
         title={title}
         description={description}
         path={`/tools/${slug}`}
-        schema={[SOFTWARE_SCHEMA, buildFaqSchema(faqs.map((f) => ({ question: f.q, answer: f.a })))]}
+        schema={[
+          SOFTWARE_SCHEMA,
+          buildFaqSchema(faqs.map((f) => ({ question: f.q, answer: f.a }))),
+          buildBreadcrumbSchema([
+            { label: 'Home', path: '/' },
+            { label: 'AI Tools', path: '/sitemap' },
+            { label: `${tool.label} for ${niche.label}`, path: `/tools/${slug}` },
+          ]),
+        ]}
       />
       <CVNavbar onGetStarted={() => setSelectOpen(true)} />
 
@@ -66,6 +87,14 @@ const NicheToolPage = () => {
       <section className="relative pt-32 pb-16 overflow-hidden">
         <CVBackdrop variant="hero" />
         <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <CVBreadcrumbs
+            items={[
+              { label: 'AI Tools', to: '/sitemap' },
+              { label: tool.label, to: `/sitemap` },
+              { label: `For ${niche.label}` },
+            ]}
+            className="justify-center mb-6"
+          />
           <span className="inline-flex items-center gap-2 px-3 h-7 rounded-full cv-glass text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-300 mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 cv-pulse" />
             {tool.label} for {niche.label}
@@ -164,7 +193,7 @@ const NicheToolPage = () => {
       <CVFaq faqs={faqs} title={<>Common questions from <span className="cv-gradient-text">{niche.label.toLowerCase()}</span></>} />
 
       {/* INTERNAL LINKS */}
-      <section className="relative cv-dark pb-20">
+      <section className="relative cv-dark pb-12">
         <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 grid md:grid-cols-2 gap-10">
           <div>
             <h2 className="cv-display text-xl font-semibold text-white mb-4">More {tool.label.toLowerCase()} guides</h2>
@@ -188,6 +217,30 @@ const NicheToolPage = () => {
           </div>
         </div>
       </section>
+
+      {/* RELATED BLOG POSTS — topical authority cross-link */}
+      {relatedPosts.length > 0 && (
+        <section className="relative cv-dark pb-20" data-testid="cv-niche-related-posts">
+          <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 className="cv-display text-xl font-semibold text-white mb-5">
+              Deep dives on <span className="cv-gradient-text">{relatedCluster}</span>
+            </h2>
+            <div className="grid md:grid-cols-3 gap-4">
+              {relatedPosts.map((p) => (
+                <Link
+                  key={p.slug}
+                  to={`/blog/${p.slug}`}
+                  className="cv-glass rounded-2xl p-5 hover:border-cyan-400/30 transition-colors block"
+                >
+                  <span className="inline-block text-[10px] uppercase tracking-[0.2em] font-semibold px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300">{p.cluster}</span>
+                  <h3 className="cv-display text-[15.5px] font-semibold text-white mt-3 leading-snug">{p.title}</h3>
+                  <p className="text-[12.5px] text-zinc-400 mt-2 line-clamp-2">{p.excerpt}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       <CVFooter />
 

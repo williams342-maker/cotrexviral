@@ -1,0 +1,57 @@
+{
+  "summary": "SEO Phase 2 verification — backend sitemap.xml video namespace and 49/49 pytest pass. Frontend Playwright validated breadcrumbs + TOC + cross-links on all listed routes. Found 1 CRITICAL bug: Pricing.jsx had TWO missing imports (buildBreadcrumbSchema + CVBreadcrumbs) causing an Uncaught ReferenceError that completely crashed the /pricing route with a runtime error overlay (zero pricing-tier-* testids rendered, no JSON-LD, blank page under overlay). Applied trivial 2-line import fix and re-verified — /pricing now renders breadcrumbs, BreadcrumbList JSON-LD, and all pricing-tier-{free|pro|scale} testids. Also found that BlogIndex (/blog) does NOT render <CVBreadcrumbs> and emits NO BreadcrumbList JSON-LD despite Phase 2 spec requiring it — reported as action item for main agent (not fixed because it requires layout decisions beyond a 1-line import).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Pricing.jsx (lines 9, 95, 107)",
+        "issue": "CRITICAL — missing imports buildBreadcrumbSchema and CVBreadcrumbs caused Uncaught ReferenceError on /pricing. Page would not render at all — only a red 'Uncaught runtime errors' overlay was visible. Verified by visiting /pricing in browser. FIXED by adding both to the import statements at top of file. Re-verified: /pricing now loads, breadcrumbs visible, BreadcrumbList JSON-LD present, pricing tiers render.",
+        "selector": "[data-testid='cv-breadcrumbs'] / [data-testid='pricing-tier-free']",
+        "priority": "CRITICAL (FIXED)"
+      },
+      {
+        "component": "pages/blog/Blog.jsx :: BlogIndex (lines 29-99)",
+        "issue": "Phase 2 spec says 'Breadcrumbs render on Blog index' but BlogIndex component does NOT import or render <CVBreadcrumbs>, and its <CVSeo schema={ORG_SCHEMA}> does not include a buildBreadcrumbSchema. Verified at /blog — data-testid='cv-breadcrumbs' absent, no <script type='application/ld+json'> with @type BreadcrumbList. BlogPost detail page does render breadcrumbs correctly — only the index is missing them.",
+        "selector": "[data-testid='cv-breadcrumbs'] on /blog",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_seo_v3.py",
+    "/app/test_reports/pytest/seo_v3_final.xml"
+  ],
+  "action_items": [
+    "INFO: Pricing.jsx missing-import bug already FIXED in this iteration (2-line import addition). Main agent please verify the fix is acceptable. Diff: import line 9 now imports buildBreadcrumbSchema; new import line 10 adds CVBreadcrumbs.",
+    "HIGH: Add <CVBreadcrumbs items={[{label:'Blog'}]} /> to BlogIndex (Blog.jsx around line 47) and add buildBreadcrumbSchema([{label:'Home',path:'/'},{label:'Blog',path:'/blog'}]) into the <CVSeo schema> array (currently just ORG_SCHEMA — would need to become an array). Phase 2 spec explicitly lists Blog index as needing breadcrumbs.",
+    "INFO: How did the Pricing crash get past local testing? The previous iteration_5 report claimed Pricing was fully tested, but it was tested BEFORE Phase 2 added the buildBreadcrumbSchema call. Suggest adding a pre-commit smoke test that loads each public route through Playwright and asserts no React error overlay is visible (e.g., absence of body text 'Uncaught runtime errors')."
+  ],
+  "critical_code_review_comments": [
+    "Pricing.jsx had latent ReferenceErrors because the JSX referenced two symbols (buildBreadcrumbSchema, CVBreadcrumbs) without importing them. Such errors should be caught by ESLint's no-undef rule — the project linter either is not running on this file or is configured to ignore JSX scope. Recommend adding/enabling 'react/jsx-no-undef' in .eslintrc.",
+    "BlogIndex schema prop is `schema={ORG_SCHEMA}` (single object) while other Phase 2 pages use array form `schema={[ORG_SCHEMA, buildBreadcrumbSchema(...)]}`. CVSeo.jsx supports both shapes — leveraging that here would be a 3-line fix.",
+    "Phase 2 breadcrumb component is solid: data-testid='cv-breadcrumbs' on wrapper, data-testid='cv-breadcrumb-home' for home icon link, data-testid='cv-breadcrumb-link-{i}' for intermediate links, data-testid='cv-breadcrumb-current' for last segment. Anchor jump on Privacy TOC verified (window.scrollY went from 0 to 359 after clicking the first TOC link, URL updated to /privacy#collect).",
+    "All 10 Privacy TOC links and 12 Terms TOC links exist with correct data-testid='cv-legal-toc-link-*' pattern; sticky sidebar container has data-testid='cv-legal-toc'.",
+    "Niche tool page /tools/instagram-caption-generator-for-fitness-coaches: data-testid='cv-niche-related-posts' renders exactly 3 blog cards linking to valid /blog/* slugs (what-makes-content-go-viral-2026, viral-tiktok-hooks-that-work, how-to-write-instagram-captions-that-convert).",
+    "Landing /ai-tiktok-post-generator: data-testid='cv-landing-by-niche' renders all 8 niche cross-links to /tools/tiktok-script-generator-for-<niche> — fitness-coaches, real-estate, saas-founders, e-commerce-brands, restaurants, beauty-creators, consultants, agencies. PATH_TO_PROG_TOOL map working correctly.",
+    "Sitemap.xml: xmlns:video='http://www.google.com/schemas/sitemap-video/1.1' present on <urlset>. BLOG_VIDEOS registry is intentionally empty, so no <video:video> blocks are emitted yet — confirmed via test_no_video_blocks_when_registry_empty.",
+    "Dashboard auth gate: /dashboard redirects to / when unauthenticated (confirmed via Playwright — final URL was https://...preview.../). Behaviour unchanged by Phase 2 changes."
+  ],
+  "updated_files": [
+    "/app/frontend/src/pages/Pricing.jsx (added buildBreadcrumbSchema to existing CVSeo import; added new CVBreadcrumbs import line)"
+  ],
+  "success_rate": {
+    "backend": "100% (49/49 pytest: 13 scheduler + 15 seo + 8 seo_v2 + 5 seo_v3 + 8 misc all green)",
+    "frontend": "92% (12/13 spec items pass; 1 spec violation: Blog index missing breadcrumbs)"
+  },
+  "test_credentials": "Not required — only public marketing/SEO routes tested per request.",
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 2 added CVBreadcrumbs (data-testid='cv-breadcrumbs') and CVLegalLayout (data-testid='cv-legal-toc' + 'cv-legal-toc-link-{slug}'). The previous testing agent missed that /pricing was crashing entirely because the previous frontend test fired before the file added buildBreadcrumbSchema. ALWAYS check page.evaluate for runtime overlay presence before asserting data-testid absence. Backend SEO regression: /app/backend/tests/test_seo*.py (49 cases, all passing). Sitemap xmlns:video namespace verified live. Key remaining defect after this run: BlogIndex (/blog) does not render CVBreadcrumbs — main agent must add it. Pricing.jsx missing-import bug was fixed during this iteration (verified by re-loading /pricing).",
+  "rca of the issue": "Pricing.jsx RCA: When Phase 2 was added, the developer added <CVBreadcrumbs ... /> at line 107 and called buildBreadcrumbSchema(...) at line 95 but did not update the import on line 9 (still only imported SOFTWARE_SCHEMA and buildFaqSchema) and did not add a CVBreadcrumbs import at all. Webpack/CRA does not statically catch JSX-scope references (lint not enforcing react/jsx-no-undef), so the bundle compiled cleanly. At runtime, React calls the component function, hits the bare identifier `buildBreadcrumbSchema`, throws ReferenceError, and the dev-server error-overlay swallows the entire page. Reproduction: open /pricing → red overlay 'buildBreadcrumbSchema is not defined' visible. Mitigation applied: added `buildBreadcrumbSchema` to the existing destructured import from ../components/cv/CVSeo and added a separate `import CVBreadcrumbs from '../components/cv/CVBreadcrumbs'`. Verified fix: /pricing now loads, all 3 pricing tiers visible, breadcrumb text 'HomePricing' rendered (Home icon + 'Pricing' label), 3 JSON-LD scripts in head including BreadcrumbList."
+}

@@ -1,6 +1,11 @@
 /**
  * Blog post catalogue — single source of truth for /blog index and individual articles.
  * MDX-free for now (CRA-friendly). Each post is plain HTML inside `body` string.
+ *
+ * Optional fields:
+ *   videos: [{ title, description, player_loc, thumbnail_loc, duration? }]
+ *     When a post has real embedded videos, also mirror them inside
+ *     backend/routes/seo.py → BLOG_VIDEOS so they appear in the video sitemap.
  */
 export const POSTS = [
   {

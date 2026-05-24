@@ -6,8 +6,19 @@ import CVNavbar from './CVNavbar';
 import CVBackdrop from './CVBackdrop';
 import CVFaq from './CVFaq';
 import CVFooter from './CVFooter';
-import CVSeo, { SOFTWARE_SCHEMA, buildFaqSchema } from './CVSeo';
+import CVSeo, { SOFTWARE_SCHEMA, buildFaqSchema, buildBreadcrumbSchema } from './CVSeo';
+import CVBreadcrumbs from './CVBreadcrumbs';
 import { SelectAgentModal, AgentChatModal } from '../Modals';
+import { NICHES } from '../../pages/programmatic/data';
+
+// Map landing-page paths → matching programmatic tool slug for niche cross-linking
+const PATH_TO_PROG_TOOL = {
+  '/ai-tiktok-post-generator': 'tiktok-script-generator',
+  '/viral-content-ideas-generator': 'viral-content-ideas',
+  '/instagram-caption-ai-generator': 'instagram-caption-generator',
+  '/short-form-video-ideas-ai': 'tiktok-script-generator',
+  '/content-automation-tool': 'viral-content-ideas',
+};
 
 /**
  * Reusable SEO landing page template — used by /ai-tiktok-post-generator,
@@ -41,7 +52,14 @@ const CVLandingPage = ({ seo, hero, benefits, how, useCases, faqs, related }) =>
         title={seo.title}
         description={seo.description}
         path={seo.path}
-        schema={[SOFTWARE_SCHEMA, buildFaqSchema(faqs.map((f) => ({ question: f.q, answer: f.a })))]}
+        schema={[
+          SOFTWARE_SCHEMA,
+          buildFaqSchema(faqs.map((f) => ({ question: f.q, answer: f.a }))),
+          buildBreadcrumbSchema([
+            { label: 'Home', path: '/' },
+            { label: hero.kicker, path: seo.path },
+          ]),
+        ]}
       />
       <CVNavbar onGetStarted={() => setSelectOpen(true)} />
 
@@ -49,6 +67,10 @@ const CVLandingPage = ({ seo, hero, benefits, how, useCases, faqs, related }) =>
       <section className="relative pt-32 pb-20 overflow-hidden" data-testid="cv-landing-hero">
         <CVBackdrop variant="hero" />
         <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <CVBreadcrumbs
+            items={[{ label: hero.kicker }]}
+            className="justify-center mb-6"
+          />
           <motion.span
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -171,13 +193,38 @@ const CVLandingPage = ({ seo, hero, benefits, how, useCases, faqs, related }) =>
 
       {/* RELATED — internal links for SEO */}
       {related?.length > 0 && (
-        <section className="relative cv-dark pb-20">
+        <section className="relative cv-dark pb-12">
           <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
             <h2 className="cv-display text-2xl font-semibold text-white mb-6 text-center">Related guides &amp; tools</h2>
             <div className="flex flex-wrap justify-center gap-2.5" data-testid="cv-landing-related">
               {related.map((r) => (
                 <Link key={r.href} to={r.href} className="cv-glass rounded-full px-4 py-2 text-[13px] text-zinc-300 hover:text-white hover:border-cyan-400/40 transition-colors">
                   {r.label} <ArrowRight size={12} className="inline ml-0.5" />
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* BY NICHE — programmatic cross-links for long-tail SEO */}
+      {PATH_TO_PROG_TOOL[seo.path] && (
+        <section className="relative cv-dark pb-20" data-testid="cv-landing-by-niche">
+          <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 className="cv-display text-2xl font-semibold text-white mb-2 text-center">
+              Try it for your <span className="cv-gradient-text">niche</span>
+            </h2>
+            <p className="text-center text-[13px] text-zinc-500 mb-6 max-w-xl mx-auto">
+              Pre-tuned variants of this tool, optimised for the voice and pain points of specific industries.
+            </p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5 max-w-4xl mx-auto">
+              {NICHES.map((n) => (
+                <Link
+                  key={n.slug}
+                  to={`/tools/${PATH_TO_PROG_TOOL[seo.path]}-for-${n.slug}`}
+                  className="cv-glass rounded-xl px-3.5 py-2.5 text-[12.5px] text-zinc-300 hover:text-white hover:border-cyan-400/30 transition-colors text-left"
+                >
+                  For {n.label} <ArrowRight size={11} className="inline ml-0.5 opacity-60" />
                 </Link>
               ))}
             </div>

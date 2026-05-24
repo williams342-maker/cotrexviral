@@ -6,7 +6,8 @@ import CVNavbar from '../components/cv/CVNavbar';
 import CVBackdrop from '../components/cv/CVBackdrop';
 import CVFaq from '../components/cv/CVFaq';
 import CVFooter from '../components/cv/CVFooter';
-import CVSeo, { SOFTWARE_SCHEMA, buildFaqSchema } from '../components/cv/CVSeo';
+import CVSeo, { SOFTWARE_SCHEMA, buildFaqSchema, buildBreadcrumbSchema } from '../components/cv/CVSeo';
+import CVBreadcrumbs from '../components/cv/CVBreadcrumbs';
 import { SelectAgentModal, AgentChatModal } from '../components/Modals';
 
 const tiers = [
@@ -89,7 +90,14 @@ const Pricing = () => {
         title="Pricing — Plans for Creators, Teams, and Agencies"
         description="Simple, transparent pricing for CortexViral. Start free with 20 AI generations/month. Upgrade to Pro ($29/mo) for unlimited generations and live auto-publishing across 38+ channels."
         path="/pricing"
-        schema={[SOFTWARE_SCHEMA, buildFaqSchema(PRICING_FAQS.map((f) => ({ question: f.q, answer: f.a })))]}
+        schema={[
+          SOFTWARE_SCHEMA,
+          buildFaqSchema(PRICING_FAQS.map((f) => ({ question: f.q, answer: f.a }))),
+          buildBreadcrumbSchema([
+            { label: 'Home', path: '/' },
+            { label: 'Pricing', path: '/pricing' },
+          ]),
+        ]}
       />
       <CVNavbar onGetStarted={() => setSelectOpen(true)} />
 
@@ -97,6 +105,7 @@ const Pricing = () => {
       <section className="relative pt-32 pb-12 overflow-hidden">
         <CVBackdrop variant="hero" />
         <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <CVBreadcrumbs items={[{ label: 'Pricing' }]} className="justify-center mb-5" />
           <span className="text-[11px] uppercase tracking-[0.22em] text-violet-400 font-semibold">Pricing</span>
           <motion.h1
             initial={{ opacity: 0, y: 16 }}
