@@ -631,7 +631,46 @@ def _safe_json(raw: str):
 
 
 # ==================== CHANNELS (mocked connections) ====================
-SUPPORTED_PLATFORMS = ["instagram", "tiktok", "x", "facebook", "linkedin", "reddit"]
+SUPPORTED_PLATFORMS = [
+    # Social
+    "instagram", "tiktok", "x", "facebook", "linkedin", "youtube",
+    "pinterest", "threads", "reddit",
+    # Publishing / CMS
+    "wordpress", "wordpress_selfhosted", "substack", "webflow", "ghost",
+    "framer", "blogger", "shopify",
+    # Analytics
+    "google_analytics", "google_search_console", "omni_analytics",
+    "posthog", "semrush",
+    # Ads
+    "google_ads", "meta_ads", "tiktok_ads",
+    # Email / marketing
+    "klaviyo", "mailchimp", "instantly", "brevo", "beehiiv",
+    # Productivity
+    "google_docs", "notion", "airtable", "github",
+    # Payments
+    "stripe", "revenuecat",
+    # CRM
+    "hubspot", "zoho_crm",
+]
+
+
+PLATFORM_CATEGORIES = {
+    "Social": ["instagram", "tiktok", "x", "facebook", "linkedin", "youtube", "pinterest", "threads", "reddit"],
+    "Publishing & CMS": ["wordpress", "wordpress_selfhosted", "substack", "webflow", "ghost", "framer", "blogger", "shopify"],
+    "Analytics": ["google_analytics", "google_search_console", "omni_analytics", "posthog", "semrush"],
+    "Ads": ["google_ads", "meta_ads", "tiktok_ads"],
+    "Email & Marketing": ["klaviyo", "mailchimp", "instantly", "brevo", "beehiiv"],
+    "Productivity": ["google_docs", "notion", "airtable", "github"],
+    "Payments": ["stripe", "revenuecat"],
+    "CRM": ["hubspot", "zoho_crm"],
+}
+
+
+@api.get("/channels/catalog")
+async def channels_catalog(request: Request):
+    """Returns the full catalog of supported platforms grouped by category."""
+    await get_current_user(request)
+    return PLATFORM_CATEGORIES
 
 
 @api.get("/channels")
