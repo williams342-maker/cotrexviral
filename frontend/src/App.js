@@ -17,6 +17,8 @@ import Help from './pages/dashboard/Help';
 import AdminOverview from './pages/admin/AdminOverview';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminTickets from './pages/admin/AdminTickets';
+import AdminAudit from './pages/admin/AdminAudit';
+import AdminBroadcasts from './pages/admin/AdminBroadcasts';
 import { Toaster } from './components/ui/toaster';
 import { AuthProvider } from './context/AuthContext';
 
@@ -43,6 +45,8 @@ function AppRouter() {
       <Route path="/admin" element={<ProtectedRoute admin><AdminOverview /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute admin><AdminUsers /></ProtectedRoute>} />
       <Route path="/admin/tickets" element={<ProtectedRoute admin><AdminTickets /></ProtectedRoute>} />
+      <Route path="/admin/audit-log" element={<ProtectedRoute admin><AdminAudit /></ProtectedRoute>} />
+      <Route path="/admin/broadcasts" element={<ProtectedRoute admin><AdminBroadcasts /></ProtectedRoute>} />
     </Routes>
   );
 }

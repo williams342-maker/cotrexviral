@@ -224,6 +224,20 @@ backend:
         - working: true
           agent: "testing"
           comment: "✅ TESTED 7 SUPPORT ENDPOINTS (7/7 tests passed, 100% success). All endpoints working: GET /api/support/faq (public, returns 8 FAQ articles with id/category/title/body ✓). POST /api/support/chat (first message: returns reply mentioning Content Studio + session_id, LLM response time ~10s ✓). POST /api/support/chat (follow-up: maintains conversation context with session_id, mentions video scripts ✓). POST /api/support/tickets (creates ticket with status='open', returns id ✓). GET /api/support/tickets (lists user's tickets ✓). GET /api/support/tickets/{id} (returns ticket + messages array, first message present ✓). POST /api/support/tickets/{id}/message (user reply: adds message, status stays 'open' ✓). POST /api/support/tickets/{id}/message (admin reply: adds message, status changes to 'answered' ✓). POST /api/support/tickets/{id}/close (sets status='closed' ✓). Support chat uses LLM with Automatex-specific system prompt (AutomaIA assistant). Ticket ownership verified (owner or admin only). All auth requirements working correctly."
+  - task: "Audit Log + Broadcast endpoints — /api/admin/audit-log, /api/admin/broadcasts/*, /api/broadcasts/active"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "NEW endpoints added. Broadcasts: POST /api/admin/broadcasts (create with title/body/severity/active), GET /api/admin/broadcasts (admin list all), PATCH /api/admin/broadcasts/{id} (update fields), DELETE /api/admin/broadcasts/{id}, GET /api/broadcasts/active (user-facing, returns only active=true broadcasts). Audit Log: GET /api/admin/audit-log (admin only, returns sorted array with admin_id/admin_email/admin_name/action/target_user_id/target_email/details/created_at). All admin actions (suspend/unsuspend/promote/demote/impersonate/delete/broadcast CRUD) now write to audit_log via log_admin_action() helper. Suspended users get 403 'Account suspended' from get_current_user()."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED NEW AUDIT LOG + BROADCAST ENDPOINTS (19/19 tests passed, 100% success). BROADCASTS: POST /api/admin/broadcasts creates broadcast with id/title/body/severity/active ✓. GET /api/admin/broadcasts returns all broadcasts sorted by created_at desc ✓. PATCH /api/admin/broadcasts/{id} updates fields (active, title) ✓. DELETE /api/admin/broadcasts/{id} removes broadcast ✓. GET /api/broadcasts/active (user) returns only active=true broadcasts ✓. Non-admin POST returns 403 'Admin access required' ✓. Unauthenticated GET returns 401 ✓. AUDIT LOG: All admin actions write to audit_log (create_broadcast, update_broadcast, delete_broadcast, suspend_user, unsuspend_user, promote_admin, demote_admin, impersonate_user) ✓. GET /api/admin/audit-log returns array with required fields (id, admin_id, admin_email, admin_name, action, target_user_id, target_email, details, created_at) sorted by created_at desc ✓. Non-admin access returns 403 ✓. SUSPENDED USER: User with status='suspended' gets 403 'Account suspended' (not 401) when calling /api/auth/me ✓. All test data cleaned up. ALL NEW ENDPOINTS WORKING CORRECTLY."
 
 frontend:
   - task: "Landing page (Marketing) with rebrand to Automatex, Nova"
@@ -269,13 +283,12 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 5
+  test_sequence: 6
   run_ui: true
 
 test_plan:
   current_focus:
-    - "Admin endpoints — /api/admin/*"
-    - "Support endpoints — /api/support/*"
+    - "Audit Log + Broadcast endpoints — /api/admin/audit-log, /api/admin/broadcasts/*, /api/broadcasts/active"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -291,3 +304,5 @@ agent_communication:
       message: "✅ COMPREHENSIVE FRONTEND TESTING COMPLETE (19/19 tests passed). PART A - Landing Page: Navbar (Automatex brand, ax logo, pill nav, Login button) ✓. Hero (Meet Nova headline, Get Started button, 4 agent cards) ✓. Get Started → Agent selection modal ✓. Nova card → Contact form modal (Name/Email/Website/Pain Points) ✓. Form submission → POST /api/leads + toast ✓. Login → redirects to auth.emergentagent.com ✓. PART B - Dashboard (authenticated with session cookie): Overview (sidebar, user info, stats, quick actions) ✓. AI Insights (generated insights/trends/action plan) ✓. Content Studio (5 tabs, newsletter generation working) ✓. SEO Review (score 31/100, strengths, issues, recommendations) ✓. Site Scan (summary, notable items, 3 post ideas with 'Use this draft' buttons) ✓. Channels (6 platforms, connect/disconnect working - MOCKED) ✓. Compose & Publish (AI generation + publishing) ✓. Posts (published posts display) ✓. Leads (empty state for test user) ✓. Logout (redirects to landing) ✓. ALL FEATURES WORKING. Test user cleaned up. APPLICATION IS PRODUCTION-READY."
     - agent: "testing"
       message: "✅ ADMIN + SUPPORT ENDPOINTS TESTED (26/27 tests passed, 96.3% success). CRITICAL FIX: Added missing require_admin() helper function to server.py (was undefined, causing all admin endpoints to fail). ADMIN ENDPOINTS (19 tests): All working including /admin/me, /admin/stats (11 count fields), /admin/users (list + search + detail with stats), suspend/unsuspend (deletes sessions), promote/demote (is_admin flag), impersonate (creates session with impersonated_by + original_token), DELETE user (cascades to all related data), self-action protection (suspend/demote/delete self returns 400), tickets list + filter, non-admin access returns 403. SUPPORT ENDPOINTS (7 tests): All working including /support/faq (8 articles), /support/chat (LLM with context, ~10s response), /support/tickets (create/list/detail/message/close), ticket status transitions (open → answered when admin replies, open → closed). MINOR ISSUE: POST /admin/stop-impersonating only supports cookie-based auth (not Bearer tokens), which is correct for browser usage but limits API testing. All test data cleaned up. ALL BACKEND ENDPOINTS NOW FULLY TESTED AND WORKING."
+    - agent: "testing"
+      message: "✅ NEW AUDIT LOG + BROADCAST ENDPOINTS TESTED (19/19 tests passed, 100% success). Created test admin + regular user via mongosh. BROADCASTS (11 tests): POST /api/admin/broadcasts creates with title/body/severity/active ✓. GET /api/admin/broadcasts lists all ✓. PATCH /api/admin/broadcasts/{id} updates fields (active, title) ✓. DELETE /api/admin/broadcasts/{id} removes ✓. GET /api/broadcasts/active (user) returns only active=true ✓. Non-admin POST returns 403 ✓. Unauthenticated GET returns 401 ✓. AUDIT LOG (8 tests): All admin actions write to audit_log (create_broadcast, update_broadcast, delete_broadcast, suspend_user, unsuspend_user, promote_admin, demote_admin, impersonate_user) ✓. GET /api/admin/audit-log returns array with all required fields (id, admin_id, admin_email, admin_name, action, target_user_id, target_email, details, created_at) sorted by created_at desc ✓. Non-admin access returns 403 ✓. SUSPENDED USER: User with status='suspended' gets 403 'Account suspended' (not 401) when calling /api/auth/me ✓. Test data cleaned up. ALL NEW ENDPOINTS WORKING CORRECTLY. NO ISSUES FOUND."

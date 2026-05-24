@@ -21,9 +21,9 @@ const Navbar = ({ onGetStarted }) => {
         {/* Logo */}
         <a href="#" className="flex items-center gap-2 group">
           <div className="w-9 h-9 rounded-lg bg-[#0B2F66] text-white flex items-center justify-center font-bold text-sm tracking-tight">
-            ax
+            cv
           </div>
-          <span className="font-semibold text-[15px] text-neutral-900 tracking-tight">Automatex</span>
+          <span className="font-semibold text-[15px] text-neutral-900 tracking-tight">CortexViral</span>
         </a>
 
         {/* Centered pill nav */}

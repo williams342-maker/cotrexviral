@@ -1,8 +1,9 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Sparkles, Search, Radar, Share2, Send, Inbox, FileText, LogOut, ChevronRight, Wand2, LifeBuoy, ShieldCheck, Users as UsersIcon, Ticket as TicketIcon } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Search, Radar, Share2, Send, Inbox, FileText, LogOut, ChevronRight, Wand2, LifeBuoy, ShieldCheck, Users as UsersIcon, Ticket as TicketIcon, History, Megaphone } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ImpersonateBanner from './ImpersonateBanner';
+import BroadcastBanner from './BroadcastBanner';
 
 const items = [
   { to: '/dashboard', label: 'Overview', icon: LayoutDashboard, exact: true },
@@ -21,6 +22,8 @@ const adminItems = [
   { to: '/admin', label: 'Admin Overview', icon: ShieldCheck, exact: true },
   { to: '/admin/users', label: 'Users', icon: UsersIcon },
   { to: '/admin/tickets', label: 'Support Inbox', icon: TicketIcon },
+  { to: '/admin/broadcasts', label: 'Broadcasts', icon: Megaphone },
+  { to: '/admin/audit-log', label: 'Audit Log', icon: History },
 ];
 
 const DashboardLayout = ({ children, title, subtitle }) => {
@@ -35,8 +38,8 @@ const DashboardLayout = ({ children, title, subtitle }) => {
         <aside className="w-64 shrink-0 border-r border-neutral-200/70 bg-white/60 backdrop-blur-sm min-h-screen sticky top-0 pb-24">
           <div className="p-5 border-b border-neutral-200/70">
             <button onClick={() => navigate('/')} className="flex items-center gap-2 group">
-              <div className="w-9 h-9 rounded-lg bg-[#0B2F66] text-white flex items-center justify-center font-bold text-sm">ax</div>
-              <span className="font-semibold text-[15px]">Automatex</span>
+              <div className="w-9 h-9 rounded-lg bg-[#0B2F66] text-white flex items-center justify-center font-bold text-sm">cv</div>
+              <span className="font-semibold text-[15px]">CortexViral</span>
               {user?.is_admin && <span className="ml-1 text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-violet-100 text-violet-700">admin</span>}
             </button>
           </div>
@@ -107,6 +110,7 @@ const DashboardLayout = ({ children, title, subtitle }) => {
         {/* Main */}
         <main className="flex-1 min-w-0">
           <div className="max-w-6xl mx-auto px-8 py-10">
+            <BroadcastBanner />
             {title && (
               <div className="mb-8 flex items-center gap-2 text-[12px] text-neutral-500">
                 <span>Dashboard</span>

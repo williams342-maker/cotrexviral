@@ -47,7 +47,7 @@ const ChatTab = ({ onEscalate }) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [messages, setMessages] = useState([
-    { role: 'assistant', text: `Hi ${user?.name?.split(' ')[0] || 'there'} 👋 I'm AutomaIA, your support assistant. Ask me anything about Automatex — features, navigation, or troubleshooting.` },
+    { role: 'assistant', text: `Hi ${user?.name?.split(' ')[0] || 'there'} 👋 I'm CortexBot, your support assistant. Ask me anything about CortexViral — features, navigation, or troubleshooting.` },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -127,7 +127,7 @@ const ChatTab = ({ onEscalate }) => {
       )}
 
       <form onSubmit={send} className="p-4 border-t border-neutral-200/70 bg-neutral-50/40 flex items-center gap-2">
-        <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask AutomaIA anything…" className="h-11 rounded-xl border-neutral-300 bg-white" />
+        <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask CortexBot anything…" className="h-11 rounded-xl border-neutral-300 bg-white" />
         <button type="submit" disabled={loading || !input.trim()} className="shrink-0 inline-flex items-center justify-center w-11 h-11 rounded-xl bg-[#1B7BFF] hover:bg-[#1668e0] disabled:opacity-50 text-white">
           {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
         </button>

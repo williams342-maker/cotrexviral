@@ -151,7 +151,7 @@ const AdminTicketDetail = ({ id, onBack }) => {
         </div>
         {ticket.status !== 'closed' && (
           <form onSubmit={send} className="p-4 border-t border-neutral-200/70 bg-neutral-50/40 flex items-center gap-2">
-            <Input value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Reply as Automatex team…" className="h-11 rounded-xl border-neutral-300 bg-white" />
+            <Input value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Reply as CortexViral team…" className="h-11 rounded-xl border-neutral-300 bg-white" />
             <button type="submit" disabled={busy || !reply.trim()} className="shrink-0 inline-flex items-center justify-center w-11 h-11 rounded-xl bg-[#1B7BFF] hover:bg-[#1668e0] disabled:opacity-50 text-white">
               {busy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
             </button>

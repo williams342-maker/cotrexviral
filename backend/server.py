@@ -76,6 +76,20 @@ class AdminUserAction(BaseModel):
     reason: Optional[str] = None
 
 
+class BroadcastCreate(BaseModel):
+    title: str
+    body: str
+    severity: Optional[Literal["info", "success", "warning", "critical"]] = "info"
+    active: bool = True
+
+
+class BroadcastUpdate(BaseModel):
+    title: Optional[str] = None
+    body: Optional[str] = None
+    severity: Optional[Literal["info", "success", "warning", "critical"]] = None
+    active: Optional[bool] = None
+
+
 class Lead(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: Optional[str] = None
@@ -185,17 +199,38 @@ async def get_current_user(request: Request) -> User:
     user_doc = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
     if not user_doc:
         raise HTTPException(status_code=401, detail="User not found")
+
+    # Backfill defaults
+    user_doc.setdefault("is_admin", user_doc.get("email", "").lower() in ADMIN_EMAILS)
+    user_doc.setdefault("status", "active")
+
+    if user_doc.get("status") == "suspended":
+        raise HTTPException(status_code=403, detail="Account suspended")
+
     return User(**user_doc)
 
 
 async def require_admin(request: Request) -> User:
     """Returns the current user if they are an admin, otherwise raises 403."""
     user = await get_current_user(request)
-    if user.status == "suspended":
-        raise HTTPException(status_code=403, detail="Account suspended")
     if not user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
+
+
+async def log_admin_action(admin: User, action: str, target_user_id: Optional[str] = None, target_email: Optional[str] = None, details: Optional[dict] = None):
+    """Append an entry to the admin audit log."""
+    await db.audit_log.insert_one({
+        "id": str(uuid.uuid4()),
+        "admin_id": admin.user_id,
+        "admin_email": admin.email,
+        "admin_name": admin.name,
+        "action": action,
+        "target_user_id": target_user_id,
+        "target_email": target_email,
+        "details": details or {},
+        "created_at": datetime.now(timezone.utc),
+    })
 
 
 # ==================== AUTH ROUTES ====================
@@ -692,7 +727,7 @@ FAQ_ARTICLES = [
     {
         "id": "getting-started",
         "category": "Getting Started",
-        "title": "How do I get started with Automatex?",
+        "title": "How do I get started with CortexViral?",
         "body": "After signing in with Google, you'll land on the Overview page. From there you can: 1) Connect your social channels (mocked for now), 2) Run an SEO Review on your site, 3) Use Content Studio to generate newsletters, blog posts, or video scripts, and 4) Use Compose & Publish to push posts to your channels.",
     },
     {
@@ -729,7 +764,7 @@ FAQ_ARTICLES = [
         "id": "billing",
         "category": "Account",
         "title": "How does billing work?",
-        "body": "Automatex is currently in demo mode — no billing is active. Plans start from $39/mo once we launch.",
+        "body": "CortexViral is currently in demo mode — no billing is active. Plans start from $39/mo once we launch.",
     },
     {
         "id": "data-privacy",
@@ -746,9 +781,9 @@ async def support_faq():
 
 
 SUPPORT_SYSTEM_PROMPT = (
-    "You are AutomaIA, the friendly support assistant for Automatex — an AI marketing platform. "
+    "You are CortexBot, the friendly support assistant for CortexViral (cortexviral.com) — an AI marketing platform. "
     "Help users with questions about features, navigation, and troubleshooting. "
-    "Automatex includes: a Dashboard (Overview), AI Insights, Content Studio (Newsletter/Blog/Update/Video Script/Multi-Platform Posts), "
+    "CortexViral includes: a Dashboard (Overview), AI Insights, Content Studio (Newsletter/Blog/Update/Video Script/Multi-Platform Posts), "
     "SEO Review, Site Scan, Channels (Instagram/TikTok/X/Facebook/LinkedIn/Reddit — currently MOCKED, no real OAuth yet), "
     "Compose & Publish, Posts feed, and Leads inbox. The AI agents are Nova (digital marketing), "
     "Sam (SEO/GEO content), Kai (social listening), and Angela (email marketing). "
@@ -936,29 +971,34 @@ async def admin_suspend(user_id: str, request: Request):
     admin = await require_admin(request)
     if user_id == admin.user_id:
         raise HTTPException(status_code=400, detail="Cannot suspend yourself")
-    res = await db.users.update_one({"user_id": user_id}, {"$set": {"status": "suspended"}})
-    if not res.matched_count:
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
         raise HTTPException(status_code=404, detail="User not found")
-    # invalidate sessions
+    await db.users.update_one({"user_id": user_id}, {"$set": {"status": "suspended"}})
     await db.user_sessions.delete_many({"user_id": user_id})
+    await log_admin_action(admin, "suspend_user", user_id, target.get("email"))
     return {"ok": True}
 
 
 @api.post("/admin/users/{user_id}/unsuspend")
 async def admin_unsuspend(user_id: str, request: Request):
-    await require_admin(request)
-    res = await db.users.update_one({"user_id": user_id}, {"$set": {"status": "active"}})
-    if not res.matched_count:
+    admin = await require_admin(request)
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
         raise HTTPException(status_code=404, detail="User not found")
+    await db.users.update_one({"user_id": user_id}, {"$set": {"status": "active"}})
+    await log_admin_action(admin, "unsuspend_user", user_id, target.get("email"))
     return {"ok": True}
 
 
 @api.post("/admin/users/{user_id}/promote")
 async def admin_promote(user_id: str, request: Request):
-    await require_admin(request)
-    res = await db.users.update_one({"user_id": user_id}, {"$set": {"is_admin": True}})
-    if not res.matched_count:
+    admin = await require_admin(request)
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
         raise HTTPException(status_code=404, detail="User not found")
+    await db.users.update_one({"user_id": user_id}, {"$set": {"is_admin": True}})
+    await log_admin_action(admin, "promote_admin", user_id, target.get("email"))
     return {"ok": True}
 
 
@@ -967,9 +1007,11 @@ async def admin_demote(user_id: str, request: Request):
     admin = await require_admin(request)
     if user_id == admin.user_id:
         raise HTTPException(status_code=400, detail="Cannot demote yourself")
-    res = await db.users.update_one({"user_id": user_id}, {"$set": {"is_admin": False}})
-    if not res.matched_count:
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
         raise HTTPException(status_code=404, detail="User not found")
+    await db.users.update_one({"user_id": user_id}, {"$set": {"is_admin": False}})
+    await log_admin_action(admin, "demote_admin", user_id, target.get("email"))
     return {"ok": True}
 
 
@@ -990,6 +1032,7 @@ async def admin_delete_user(user_id: str, request: Request):
     await db.channels.delete_many({"user_id": user_id})
     await db.tickets.delete_many({"user_id": user_id})
     await db.ticket_messages.delete_many({"author_id": user_id})
+    await log_admin_action(admin, "delete_user", user_id, target.get("email"), {"cascaded": True})
     return {"ok": True}
 
 
@@ -1000,10 +1043,7 @@ async def admin_impersonate(user_id: str, request: Request, response: Response):
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Save current admin session token so admin can come back
     current_token = request.cookies.get("session_token")
-
-    # Create a new impersonation session
     impersonate_token = f"imp_{uuid.uuid4().hex}"
     expires_at = datetime.now(timezone.utc) + timedelta(hours=2)
     await db.user_sessions.insert_one({
@@ -1021,6 +1061,7 @@ async def admin_impersonate(user_id: str, request: Request, response: Response):
         httponly=True, secure=True, samesite="none",
         path="/", max_age=2 * 60 * 60,
     )
+    await log_admin_action(admin, "impersonate_user", user_id, target.get("email"))
     return {
         "ok": True,
         "impersonating": {"user_id": target["user_id"], "name": target["name"], "email": target["email"]},
@@ -1056,6 +1097,71 @@ async def admin_list_tickets(request: Request, status: Optional[str] = None):
         query["status"] = status
     cursor = db.tickets.find(query, {"_id": 0}).sort("updated_at", -1)
     return await cursor.to_list(500)
+
+
+@api.get("/admin/audit-log")
+async def admin_audit_log(request: Request, limit: int = 200):
+    await require_admin(request)
+    cursor = db.audit_log.find({}, {"_id": 0}).sort("created_at", -1).limit(limit)
+    return await cursor.to_list(limit)
+
+
+# ==================== BROADCASTS ====================
+@api.post("/admin/broadcasts")
+async def create_broadcast(payload: BroadcastCreate, request: Request):
+    admin = await require_admin(request)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "title": payload.title,
+        "body": payload.body,
+        "severity": payload.severity,
+        "active": payload.active,
+        "created_by": admin.user_id,
+        "created_by_name": admin.name,
+        "created_at": datetime.now(timezone.utc),
+    }
+    await db.broadcasts.insert_one(doc)
+    await log_admin_action(admin, "create_broadcast", details={"title": payload.title, "severity": payload.severity})
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/admin/broadcasts")
+async def admin_list_broadcasts(request: Request):
+    await require_admin(request)
+    cursor = db.broadcasts.find({}, {"_id": 0}).sort("created_at", -1)
+    return await cursor.to_list(200)
+
+
+@api.patch("/admin/broadcasts/{broadcast_id}")
+async def admin_update_broadcast(broadcast_id: str, payload: BroadcastUpdate, request: Request):
+    admin = await require_admin(request)
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        return {"ok": True}
+    res = await db.broadcasts.update_one({"id": broadcast_id}, {"$set": updates})
+    if not res.matched_count:
+        raise HTTPException(status_code=404, detail="Broadcast not found")
+    await log_admin_action(admin, "update_broadcast", details={"broadcast_id": broadcast_id, "updates": updates})
+    return {"ok": True}
+
+
+@api.delete("/admin/broadcasts/{broadcast_id}")
+async def admin_delete_broadcast(broadcast_id: str, request: Request):
+    admin = await require_admin(request)
+    res = await db.broadcasts.delete_one({"id": broadcast_id})
+    if not res.deleted_count:
+        raise HTTPException(status_code=404, detail="Broadcast not found")
+    await log_admin_action(admin, "delete_broadcast", details={"broadcast_id": broadcast_id})
+    return {"ok": True}
+
+
+@api.get("/broadcasts/active")
+async def list_active_broadcasts(request: Request):
+    """Public to logged-in users — shows currently active broadcasts."""
+    await get_current_user(request)
+    cursor = db.broadcasts.find({"active": True}, {"_id": 0}).sort("created_at", -1).limit(5)
+    return await cursor.to_list(5)
 
 
 # ==================== HEALTH ====================
