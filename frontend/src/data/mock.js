@@ -9,8 +9,8 @@ export const navLinks = [
 
 export const heroAgents = [
   {
-    id: 'helena',
-    name: 'Helena',
+    id: 'nova',
+    name: 'Nova',
     role: 'AI Digital Marketer',
     bg: 'bg-emerald-100',
     img: 'https://images.unsplash.com/photo-1740252117070-7aa2955b25f8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwxfHxmbGF0JTIwdmVjdG9yJTIwYXZhdGFyfGVufDB8fHx8MTc3OTYzNTI4MXww&ixlib=rb-4.1.0&q=85',
@@ -114,8 +114,8 @@ export const comparisonRows = [
 
 export const agentsList = [
   {
-    id: 'helena',
-    name: 'Helena',
+    id: 'nova',
+    name: 'Nova',
     role: 'AI Digital Marketer',
     color: 'from-emerald-200 to-emerald-50',
     accent: 'bg-emerald-500',

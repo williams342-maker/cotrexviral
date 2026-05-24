@@ -9,9 +9,9 @@ const Footer = () => {
           <div>
             <a href="#" className="flex items-center gap-2">
               <div className="w-9 h-9 rounded-lg bg-[#0B2F66] text-white flex items-center justify-center font-bold text-sm">
-                e/
+                ax
               </div>
-              <span className="font-semibold text-[15px] text-neutral-900">enrichlabs.ai</span>
+              <span className="font-semibold text-[15px] text-neutral-900">Automatex</span>
             </a>
             <p className="mt-4 text-[14px] text-neutral-600 leading-relaxed">
               AI marketing agents that execute your entire strategy 24/7.
@@ -25,13 +25,13 @@ const Footer = () => {
             </div>
           </div>
 
-          <FooterCol title="Agents" links={['Helena', 'Sam', 'Kai', 'Angela']} />
+          <FooterCol title="Agents" links={['Nova', 'Sam', 'Kai', 'Angela']} />
           <FooterCol title="Company" links={['About', 'Customers', 'Blog', 'Careers']} />
           <FooterCol title="Resources" links={['Pricing', 'Help center', 'Terms', 'Privacy']} />
         </div>
 
         <div className="mt-12 pt-6 border-t border-neutral-200/70 flex flex-col md:flex-row justify-between items-center gap-3">
-          <p className="text-[13px] text-neutral-500">© {new Date().getFullYear()} Enrich Labs Clone. Mock UI for demo.</p>
+          <p className="text-[13px] text-neutral-500">© {new Date().getFullYear()} Automatex. All rights reserved.</p>
           <p className="text-[13px] text-neutral-500">Made with care</p>
         </div>
       </div>

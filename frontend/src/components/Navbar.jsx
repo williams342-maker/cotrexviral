@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Star, MessageCircle, PenLine, Menu, X } from 'lucide-react';
+import { Users, Star, MessageCircle, PenLine, Menu, X, LayoutDashboard } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const Navbar = ({ onGetStarted }) => {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const { user, login } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -17,9 +21,9 @@ const Navbar = ({ onGetStarted }) => {
         {/* Logo */}
         <a href="#" className="flex items-center gap-2 group">
           <div className="w-9 h-9 rounded-lg bg-[#0B2F66] text-white flex items-center justify-center font-bold text-sm tracking-tight">
-            e/
+            ax
           </div>
-          <span className="font-semibold text-[15px] text-neutral-900 tracking-tight">enrichlabs.ai</span>
+          <span className="font-semibold text-[15px] text-neutral-900 tracking-tight">Automatex</span>
         </a>
 
         {/* Centered pill nav */}
@@ -32,9 +36,15 @@ const Navbar = ({ onGetStarted }) => {
 
         {/* Right */}
         <div className="hidden lg:flex items-center gap-3">
-          <button className="text-sm font-medium text-neutral-700 hover:text-neutral-900 px-4 py-2 rounded-full transition-colors">
-            Login
-          </button>
+          {user ? (
+            <button onClick={() => navigate('/dashboard')} className="inline-flex items-center gap-2 bg-[#1B7BFF] hover:bg-[#1668e0] text-white px-5 py-2 rounded-full text-sm font-medium transition-colors">
+              <LayoutDashboard size={14} /> Dashboard
+            </button>
+          ) : (
+            <button onClick={login} className="text-sm font-medium text-neutral-700 hover:text-neutral-900 px-4 py-2 rounded-full transition-colors">
+              Login
+            </button>
+          )}
         </div>
 
         {/* Mobile */}
@@ -49,6 +59,11 @@ const Navbar = ({ onGetStarted }) => {
           <MobileLink icon={Star} label="Customers" />
           <MobileLink icon={MessageCircle} label="About us" />
           <MobileLink icon={PenLine} label="Blog" />
+          {user ? (
+            <button onClick={() => navigate('/dashboard')} className="mt-2 w-full bg-[#1B7BFF] text-white rounded-full py-2.5 text-sm font-medium">Dashboard</button>
+          ) : (
+            <button onClick={login} className="mt-2 w-full bg-neutral-100 text-neutral-900 rounded-full py-2.5 text-sm font-medium">Login</button>
+          )}
           <button onClick={onGetStarted} className="mt-2 w-full bg-[#1B7BFF] text-white rounded-full py-2.5 text-sm font-medium">Get Started</button>
         </div>
       )}

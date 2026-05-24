@@ -17,7 +17,7 @@ const Hero = ({ onGetStarted }) => {
       <div className="max-w-7xl mx-auto px-5">
         <div className="text-center max-w-4xl mx-auto">
           <h1 className="font-display text-[clamp(2.5rem,6vw,5.25rem)] leading-[1.02] tracking-[-0.035em] text-neutral-900 font-medium">
-            Meet <span className="text-[#1B7BFF] italic font-normal" style={{ fontFamily: 'Instrument Serif, serif' }}>Helena,</span>
+            Meet <span className="text-[#1B7BFF] italic font-normal" style={{ fontFamily: 'Instrument Serif, serif' }}>Nova,</span>
             <br />
             your AI digital marketer
           </h1>

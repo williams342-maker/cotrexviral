@@ -1,19 +1,51 @@
 import React from 'react';
 import './App.css';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import Marketing from './pages/Marketing';
+import AuthCallback from './pages/AuthCallback';
+import ProtectedRoute from './components/ProtectedRoute';
+import Overview from './pages/dashboard/Overview';
+import SeoReview from './pages/dashboard/SeoReview';
+import SiteScan from './pages/dashboard/SiteScan';
+import Insights from './pages/dashboard/Insights';
+import Channels from './pages/dashboard/Channels';
+import Compose from './pages/dashboard/Compose';
+import Posts from './pages/dashboard/Posts';
+import Leads from './pages/dashboard/Leads';
 import { Toaster } from './components/ui/toaster';
+import { AuthProvider } from './context/AuthContext';
+
+function AppRouter() {
+  const location = useLocation();
+  // CRITICAL: Detect session_id during render (synchronous) before ProtectedRoute checks.
+  if (location.hash?.includes('session_id=')) {
+    return <AuthCallback />;
+  }
+  return (
+    <Routes>
+      <Route path="/" element={<Marketing />} />
+      <Route path="/marketing" element={<Marketing />} />
+      <Route path="/dashboard" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
+      <Route path="/dashboard/insights" element={<ProtectedRoute><Insights /></ProtectedRoute>} />
+      <Route path="/dashboard/seo" element={<ProtectedRoute><SeoReview /></ProtectedRoute>} />
+      <Route path="/dashboard/scan" element={<ProtectedRoute><SiteScan /></ProtectedRoute>} />
+      <Route path="/dashboard/channels" element={<ProtectedRoute><Channels /></ProtectedRoute>} />
+      <Route path="/dashboard/compose" element={<ProtectedRoute><Compose /></ProtectedRoute>} />
+      <Route path="/dashboard/posts" element={<ProtectedRoute><Posts /></ProtectedRoute>} />
+      <Route path="/dashboard/leads" element={<ProtectedRoute><Leads /></ProtectedRoute>} />
+    </Routes>
+  );
+}
 
 function App() {
   return (
     <div className="App">
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Marketing />} />
-          <Route path="/marketing" element={<Marketing />} />
-        </Routes>
+        <AuthProvider>
+          <AppRouter />
+          <Toaster />
+        </AuthProvider>
       </BrowserRouter>
-      <Toaster />
     </div>
   );
 }

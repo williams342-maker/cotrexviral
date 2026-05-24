@@ -12,7 +12,7 @@ const CTAFooter = ({ onGetStarted }) => {
 
           <div className="relative">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#0B2F66] text-white font-bold text-base mb-6">
-              e/
+              ax
             </div>
             <h2 className="text-[clamp(2rem,4.5vw,3.5rem)] leading-[1.05] tracking-tight text-neutral-900 font-medium">
               Hire your marketing team.

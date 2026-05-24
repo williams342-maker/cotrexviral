@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
-import { Checkbox } from './ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useToast } from '../hooks/use-toast';
-import { ArrowLeft, Send } from 'lucide-react';
+import { ArrowLeft, Send, Loader2 } from 'lucide-react';
 import { agentsList } from '../data/mock';
+import { API } from '../context/AuthContext';
 
 const SelectAgentModal = ({ open, onClose, onSelect }) => {
   return (
@@ -46,18 +47,41 @@ const AgentChatModal = ({ open, onClose, agent, onBack }) => {
   const { toast } = useToast();
   const [form, setForm] = useState({});
   const [platforms, setPlatforms] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
 
   if (!agent) return null;
 
-  const handleSend = (e) => {
+  const handleSend = async (e) => {
     e.preventDefault();
-    toast({
-      title: `Message sent to ${agent.name}!`,
-      description: `${agent.name} will reach out within 24 hours. (Demo — frontend only.)`,
-    });
-    setForm({});
-    setPlatforms([]);
-    onClose();
+    setSubmitting(true);
+    try {
+      await axios.post(
+        `${API}/leads`,
+        {
+          agent_id: agent.id,
+          name: form.name,
+          email: form.email,
+          website: form.website,
+          platforms,
+          pain_points: form.pain,
+          competitors: form.comp,
+          keywords: form.kw,
+          email_platform: form.platform,
+        },
+        { withCredentials: true }
+      );
+      toast({
+        title: `Message sent to ${agent.name}!`,
+        description: `${agent.name} will reach out within 24 hours.`,
+      });
+      setForm({});
+      setPlatforms([]);
+      onClose();
+    } catch (err) {
+      toast({ title: 'Could not send', description: err.response?.data?.detail || 'Please try again.' });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const togglePlatform = (p) => {
@@ -65,7 +89,7 @@ const AgentChatModal = ({ open, onClose, agent, onBack }) => {
   };
 
   const intros = {
-    helena: "If you need more traffic but struggle to rank, post consistently, or make sense of your analytics, I can help build the engine that delivers it.",
+    nova: "If you need more traffic but struggle to rank, post consistently, or make sense of your analytics, I can help build the engine that delivers it.",
     sam: "I handle SEO and GEO content marketing — from keyword research to publishing articles optimized for Google and AI search engines.",
     kai: "If you're looking to accelerate your social media presence, fill in the information below. Can't wait to learn more about your business.",
     angela: "I write, design, and schedule your email campaigns while you run your business. No dashboard, no new tool — manage me from your inbox.",
@@ -96,7 +120,7 @@ const AgentChatModal = ({ open, onClose, agent, onBack }) => {
           </p>
 
           <form onSubmit={handleSend} className="space-y-4">
-            {agent.id === 'helena' && (
+            {agent.id === 'nova' && (
               <Field label="Your Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="Jane Doe" required />
             )}
             <Field label="Work Email" type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="you@company.com" required />
@@ -140,7 +164,7 @@ const AgentChatModal = ({ open, onClose, agent, onBack }) => {
               </div>
             )}
 
-            {agent.id === 'helena' && (
+            {agent.id === 'nova' && (
               <div>
                 <Label className="text-[13px] font-medium text-neutral-700 mb-2 block">What are your top 3 pain points?</Label>
                 <Textarea
@@ -153,8 +177,8 @@ const AgentChatModal = ({ open, onClose, agent, onBack }) => {
               </div>
             )}
 
-            <button type="submit" className="w-full bg-[#1B7BFF] hover:bg-[#1668e0] text-white rounded-full py-3 text-[14px] font-medium inline-flex items-center justify-center gap-2 transition-colors">
-              Send <Send size={15} />
+            <button type="submit" disabled={submitting} className="w-full bg-[#1B7BFF] hover:bg-[#1668e0] disabled:opacity-60 text-white rounded-full py-3 text-[14px] font-medium inline-flex items-center justify-center gap-2 transition-colors">
+              {submitting ? <Loader2 size={15} className="animate-spin" /> : <>Send <Send size={15} /></>}
             </button>
           </form>
         </div>
