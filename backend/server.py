@@ -30,6 +30,7 @@ from routes import (  # noqa: F401
     oauth_linkedin,  # LinkedIn OAuth + live posting
     oauth_tiktok,    # TikTok OAuth + Content Posting API
     billing,         # Stripe subscriptions + webhook
+    trends,          # Live TikTok trending hashtag feed
 )
 
 

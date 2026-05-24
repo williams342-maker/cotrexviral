@@ -695,57 +695,97 @@ const MultiTab = ({ onGenerated }) => {
 
 
 // ---------- Trend Engine (gated to Growth+) ----------
-// Placeholder UI — fetches from a future /api/ai/trends endpoint when built.
-// For now shows curated mock trends so the locked-state blur preview looks real.
-const MOCK_TRENDS = [
-  { hashtag: '#PovHook', velocity: 92, platform: 'TikTok', sample: '"POV: you finally understand the algorithm…"' },
-  { hashtag: '#Tutorial', velocity: 88, platform: 'Reels', sample: '"3 hooks that crushed it in 2026:"' },
-  { hashtag: '#StoryTime', velocity: 84, platform: 'Shorts', sample: '"Nobody talks about this, but…"' },
-  { hashtag: '#BeforeAfter', velocity: 79, platform: 'TikTok', sample: '"This took me 7 years to figure out."' },
-  { hashtag: '#Reveal', velocity: 76, platform: 'Reels', sample: '"You won\'t guess what happened next…"' },
-  { hashtag: '#Challenge', velocity: 71, platform: 'TikTok', sample: '"Day 1 of trying this for 30 days."' },
-];
-
 const TrendsTab = ({ onGenerated }) => {
   const { toast } = useToast();
+  const [trends, setTrends] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [source, setSource] = useState(null);
+  const [cachedAt, setCachedAt] = useState(null);
+
+  const load = async (force = false) => {
+    if (force) setRefreshing(true); else setLoading(true);
+    try {
+      const url = force ? `${API}/ai/trends/refresh` : `${API}/ai/trends`;
+      const r = force
+        ? await axios.post(url, {}, { withCredentials: true })
+        : await axios.get(url, { withCredentials: true });
+      setTrends(r.data.trends || []);
+      setCachedAt(r.data.cached_at);
+      setSource(r.data.trends?.[0]?.source || null);
+    } catch (e) {
+      toast({ title: 'Could not load trends', description: e?.response?.data?.detail?.message || e.message });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => { load(false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="space-y-5">
       <div className="bg-white rounded-3xl p-6 border border-neutral-200/70">
         <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
           <div>
             <h3 className="text-[18px] font-semibold text-neutral-900">Trend Engine</h3>
-            <p className="text-[13px] text-neutral-600">Live viral-velocity feed across TikTok, Reels, and Shorts. Higher score = algorithm push.</p>
+            <p className="text-[13px] text-neutral-600">
+              Live viral-velocity feed across TikTok, Reels, and Shorts. Higher score = algorithm push.
+              {source === 'fallback' && (
+                <span className="ml-2 inline-block text-[10.5px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                  Curated baseline
+                </span>
+              )}
+              {source === 'tiktok_creative_center' && (
+                <span className="ml-2 inline-block text-[10.5px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                  Live feed
+                </span>
+              )}
+              {cachedAt && (
+                <span className="ml-2 text-[11.5px] text-neutral-500">
+                  Updated {new Date(cachedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </p>
           </div>
           <button
-            onClick={() => { toast({ title: 'Trend feed refreshed' }); onGenerated?.(); }}
-            className="cv-btn-secondary inline-flex items-center gap-1.5 px-4 h-9 rounded-full text-[13px] font-semibold"
+            onClick={() => { load(true); }}
+            disabled={refreshing}
+            className="cv-btn-secondary inline-flex items-center gap-1.5 px-4 h-9 rounded-full text-[13px] font-semibold disabled:opacity-60"
             data-testid="trends-refresh"
           >
-            <Sparkles size={13} /> Refresh feed
+            {refreshing ? <><Loader2 size={13} className="animate-spin" /> Refreshing…</> : <><Sparkles size={13} /> Refresh feed</>}
           </button>
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-3">
-        {MOCK_TRENDS.map((t) => (
-          <div key={t.hashtag} className="bg-white rounded-2xl p-5 border border-neutral-200/70 flex items-center gap-4">
-            <div className="text-3xl font-semibold tabular-nums text-violet-600 w-12 text-center">{t.velocity}</div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-[14px] font-semibold text-neutral-900">{t.hashtag}</span>
-                <span className="text-[10.5px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-fuchsia-50 text-fuchsia-700 font-semibold">{t.platform}</span>
+      {loading && (
+        <div className="text-center py-10"><Loader2 size={20} className="animate-spin text-violet-600 mx-auto" /></div>
+      )}
+
+      {!loading && (
+        <div className="grid md:grid-cols-2 gap-3" data-testid="trends-grid">
+          {trends.map((t) => (
+            <div key={t.hashtag} className="bg-white rounded-2xl p-5 border border-neutral-200/70 flex items-center gap-4">
+              <div className={`text-3xl font-semibold tabular-nums w-12 text-center ${t.velocity >= 85 ? 'text-emerald-600' : t.velocity >= 70 ? 'text-violet-600' : 'text-amber-600'}`}>{t.velocity}</div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[14px] font-semibold text-neutral-900">{t.hashtag}</span>
+                  <span className="text-[10.5px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-fuchsia-50 text-fuchsia-700 font-semibold">{t.platform}</span>
+                </div>
+                <p className="text-[13px] text-neutral-600 truncate" title={t.sample}>{t.sample}</p>
               </div>
-              <p className="text-[13px] text-neutral-600 truncate">{t.sample}</p>
+              <button
+                onClick={() => { navigator.clipboard?.writeText(t.sample); toast({ title: 'Hook copied' }); onGenerated?.(); }}
+                className="text-neutral-500 hover:text-neutral-800"
+                data-testid={`trend-copy-${t.hashtag.replace('#','')}`}
+              >
+                <Copy size={14} />
+              </button>
             </div>
-            <button
-              onClick={() => toast({ title: 'Hook copied to clipboard' })}
-              className="text-neutral-500 hover:text-neutral-800"
-            >
-              <Copy size={14} />
-            </button>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
