@@ -48,6 +48,12 @@ class AdminUserAction(BaseModel):
     reason: Optional[str] = None
 
 
+class AdminSetPlanRequest(BaseModel):
+    plan: Literal["free", "starter", "growth", "agency", "pro", "scale"]
+    comped: bool = True   # default: admin overrides are immune to Stripe downgrades
+    reason: Optional[str] = None
+
+
 class BroadcastCreate(BaseModel):
     title: str
     body: str

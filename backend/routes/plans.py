@@ -101,10 +101,16 @@ def _month_key(now: datetime | None = None) -> str:
 
 
 async def _get_plan(user_id: str) -> str:
-    doc = await db.users.find_one({"user_id": user_id}, {"plan": 1, "subscription_status": 1})
+    doc = await db.users.find_one(
+        {"user_id": user_id},
+        {"plan": 1, "subscription_status": 1, "comped": 1},
+    )
     if not doc:
         return "free"
     plan = doc.get("plan") or "free"
+    # Comped users keep their plan regardless of Stripe status.
+    if doc.get("comped"):
+        return plan
     # Past-due subscribers fall back to free (Stripe will recover them or cancel)
     if doc.get("subscription_status") == "past_due":
         return "free"
@@ -119,7 +125,7 @@ async def get_usage(user_id: str) -> dict:
 
     doc = await db.users.find_one(
         {"user_id": user_id},
-        {"usage": 1, "plan": 1},
+        {"usage": 1, "plan": 1, "comped": 1},
     ) or {}
     ai_count = ((doc.get("usage") or {}).get(month) or {}).get("ai_generations", 0)
 
@@ -130,6 +136,7 @@ async def get_usage(user_id: str) -> dict:
     return {
         "plan": plan,
         "plan_label": ent["label"],
+        "comped": bool(doc.get("comped")),
         "month": month,
         "ai_generations_used": ai_count,
         "ai_generations_limit": ent["ai_generations_per_month"],

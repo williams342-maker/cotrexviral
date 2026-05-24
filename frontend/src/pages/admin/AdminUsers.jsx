@@ -7,8 +7,24 @@ import { Input } from '../../components/ui/input';
 import { useToast } from '../../hooks/use-toast';
 import {
   Search, Loader2, Shield, ShieldOff, Pause, Play, Trash2,
-  UserCog, ChevronRight, MoreVertical, AlertTriangle,
+  UserCog, AlertTriangle, Gift,
 } from 'lucide-react';
+
+const PLAN_OPTIONS = [
+  { value: 'free', label: 'Free' },
+  { value: 'starter', label: 'Starter' },
+  { value: 'growth', label: 'Growth' },
+  { value: 'agency', label: 'Agency' },
+];
+
+const PLAN_COLORS = {
+  free: 'bg-neutral-50 text-neutral-700 border-neutral-200',
+  starter: 'bg-sky-50 text-sky-700 border-sky-200',
+  growth: 'bg-violet-50 text-violet-700 border-violet-200',
+  agency: 'bg-amber-50 text-amber-700 border-amber-200',
+  pro: 'bg-violet-50 text-violet-700 border-violet-200',
+  scale: 'bg-amber-50 text-amber-700 border-amber-200',
+};
 
 const AdminUsers = () => {
   const { toast } = useToast();
@@ -57,6 +73,35 @@ const AdminUsers = () => {
     }
   };
 
+  const setPlan = async (userId, plan, comped, currentPlan) => {
+    if (plan === currentPlan) return;
+    try {
+      await axios.post(
+        `${API}/admin/users/${userId}/plan`,
+        { plan, comped, reason: 'Admin manual override' },
+        { withCredentials: true },
+      );
+      toast({ title: `Plan updated to ${plan}`, description: comped ? 'Comped — immune to Stripe downgrades' : undefined });
+      await load(q);
+    } catch (e) {
+      toast({ title: 'Plan update failed', description: e.response?.data?.detail });
+    }
+  };
+
+  const toggleComped = async (u) => {
+    try {
+      await axios.post(
+        `${API}/admin/users/${u.user_id}/plan`,
+        { plan: u.plan || 'free', comped: !u.comped, reason: 'Admin toggled comp flag' },
+        { withCredentials: true },
+      );
+      toast({ title: !u.comped ? 'Marked as comped' : 'Comped flag removed' });
+      await load(q);
+    } catch (e) {
+      toast({ title: 'Toggle failed', description: e.response?.data?.detail });
+    }
+  };
+
   return (
     <DashboardLayout title="Users" subtitle="Manage all accounts on Automatex.">
       <form
@@ -79,6 +124,7 @@ const AdminUsers = () => {
               <tr className="text-left text-[12px] uppercase tracking-wider text-neutral-500">
                 <th className="p-4">User</th>
                 <th className="p-4">Status</th>
+                <th className="p-4">Plan</th>
                 <th className="p-4 text-center">Posts</th>
                 <th className="p-4 text-center">Leads</th>
                 <th className="p-4 text-center">Reports</th>
@@ -88,7 +134,7 @@ const AdminUsers = () => {
             </thead>
             <tbody>
               {users.length === 0 && (
-                <tr><td colSpan={7} className="p-8 text-center text-neutral-500">No users found.</td></tr>
+                <tr><td colSpan={8} className="p-8 text-center text-neutral-500">No users found.</td></tr>
               )}
               {users.map((u) => {
                 const isSelf = u.user_id === currentUser?.user_id;
@@ -113,6 +159,36 @@ const AdminUsers = () => {
                       <div className="flex flex-col gap-1">
                         <StatusBadge status={u.status || 'active'} />
                         {u.is_admin && <span className="inline-flex items-center gap-1 text-[10.5px] uppercase tracking-wider font-semibold text-violet-700 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-full w-fit"><Shield size={9} /> Admin</span>}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex flex-col gap-1.5">
+                        <select
+                          value={u.plan || 'free'}
+                          onChange={(e) => setPlan(u.user_id, e.target.value, u.comped ?? true, u.plan || 'free')}
+                          data-testid={`admin-plan-select-${u.user_id}`}
+                          className={`text-[11.5px] font-semibold px-2.5 py-1 rounded-lg border outline-none cursor-pointer capitalize ${PLAN_COLORS[u.plan] || PLAN_COLORS.free}`}
+                        >
+                          {PLAN_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                          {(u.plan === 'pro' || u.plan === 'scale') && (
+                            <option value={u.plan}>{u.plan === 'pro' ? 'Pro (legacy)' : 'Scale (legacy)'}</option>
+                          )}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => toggleComped(u)}
+                          data-testid={`admin-comped-toggle-${u.user_id}`}
+                          className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full w-fit border transition-colors ${
+                            u.comped
+                              ? 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+                              : 'text-neutral-500 bg-neutral-50 border-neutral-200 hover:bg-neutral-100'
+                          }`}
+                          title={u.comped ? 'Click to remove comp (Stripe will re-sync this user)' : 'Click to mark as comped (immune to Stripe downgrades)'}
+                        >
+                          <Gift size={9} /> {u.comped ? 'Comped' : 'Not comped'}
+                        </button>
                       </div>
                     </td>
                     <td className="p-4 text-center text-neutral-700">{u.stats?.posts || 0}</td>

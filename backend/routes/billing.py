@@ -330,12 +330,18 @@ async def _apply_plan_to_user(user_id: str, plan: str, interval: str,
                               subscription_id: Optional[str] = None,
                               period_end: Optional[datetime] = None,
                               subscription_status: str = "active"):
+    # Comped users are immune to webhook-driven plan changes — admin overrides
+    # always win. We still record the subscription metadata for audit.
+    existing = await db.users.find_one(
+        {"user_id": user_id}, {"comped": 1, "plan": 1},
+    ) or {}
     update = {
-        "plan": plan,
         "billing_interval": interval,
         "subscription_status": subscription_status,
         "updated_at": datetime.now(timezone.utc),
     }
+    if not existing.get("comped"):
+        update["plan"] = plan
     if subscription_id:
         update["subscription_id"] = subscription_id
     if period_end:

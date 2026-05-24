@@ -7,7 +7,8 @@ from fastapi import HTTPException, Request, Response
 
 from core import db, api, ADMIN_EMAILS
 from deps import require_admin, log_admin_action
-from models import User
+from models import AdminSetPlanRequest, User
+from routes.plans import ENTITLEMENTS
 
 
 @api.get("/admin/me")
@@ -136,6 +137,8 @@ async def admin_list_users(request: Request, q: Optional[str] = None):
     for u in users:
         u.setdefault("is_admin", u.get("email", "").lower() in ADMIN_EMAILS)
         u.setdefault("status", "active")
+        u.setdefault("plan", "free")
+        u.setdefault("comped", False)
         uid = u["user_id"]
         u["stats"] = {
             "posts": await db.posts.count_documents({"user_id": uid}),
@@ -216,6 +219,40 @@ async def admin_demote(user_id: str, request: Request):
     await db.users.update_one({"user_id": user_id}, {"$set": {"is_admin": False}})
     await log_admin_action(admin, "demote_admin", user_id, target.get("email"))
     return {"ok": True}
+
+
+@api.post("/admin/users/{user_id}/plan")
+async def admin_set_plan(user_id: str, payload: AdminSetPlanRequest, request: Request):
+    """Manually override a user's plan tier. When `comped=True` (default), the
+    Stripe webhook will not downgrade this user — useful for influencers, beta
+    testers, support cases, or fixing billing discrepancies."""
+    admin = await require_admin(request)
+    if payload.plan not in ENTITLEMENTS:
+        raise HTTPException(status_code=400, detail=f"Unknown plan '{payload.plan}'")
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    prev_plan = target.get("plan", "free")
+    update = {
+        "plan": payload.plan,
+        "comped": payload.comped,
+        "comped_by": admin.user_id if payload.comped else None,
+        "comped_reason": payload.reason if payload.comped else None,
+        "comped_at": datetime.now(timezone.utc) if payload.comped else None,
+        "updated_at": datetime.now(timezone.utc),
+    }
+    # If switching to free without comp flag, clear comp metadata
+    if not payload.comped:
+        update["comped_by"] = None
+        update["comped_reason"] = None
+        update["comped_at"] = None
+    await db.users.update_one({"user_id": user_id}, {"$set": update})
+    await log_admin_action(
+        admin, "set_user_plan", user_id, target.get("email"),
+        {"from": prev_plan, "to": payload.plan, "comped": payload.comped, "reason": payload.reason},
+    )
+    return {"ok": True, "plan": payload.plan, "comped": payload.comped}
 
 
 @api.delete("/admin/users/{user_id}")
