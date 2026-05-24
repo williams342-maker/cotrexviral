@@ -1,27 +1,20 @@
-"""Auto-extracted from server.py — refactored to /app/backend/routes/."""
+"""AI / LLM endpoints — content generation, SEO review, optimal times."""
 import uuid
-from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Literal
+from datetime import datetime, timezone
 
-from fastapi import HTTPException, Request, Response, Query, Cookie, Header
-from fastapi.responses import JSONResponse
+from fastapi import HTTPException, Request
 
-from core import db, api, app, logger, EMERGENT_LLM_KEY, ADMIN_EMAILS
-from deps import get_current_user, require_admin, log_admin_action
+from core import db, api, logger, EMERGENT_LLM_KEY
+from deps import get_current_user
 from models import (
-    User, Ticket, TicketCreate, TicketMessage, SupportChatRequest,
-    AdminUserAction, BroadcastCreate, BroadcastUpdate,
-    Lead, LeadCreate, AIRequest, SocialPostRequest, NewsletterRequest,
-    BlogRequest, UpdateRequest, VideoScriptRequest, MultiPostRequest,
-    ChannelConnectRequest, PublishRequest, ScheduledUpdate, OptimalTimesRequest,
+    User, AIRequest, SocialPostRequest, NewsletterRequest, BlogRequest, UpdateRequest, VideoScriptRequest, MultiPostRequest,
 )
-import httpx
-import json
-import re
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+import httpx
+import re
+import json
 
 
-# AI / LLM
 def _llm(session_id: str, system: str, model: str = "gpt-5"):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="LLM key not configured")

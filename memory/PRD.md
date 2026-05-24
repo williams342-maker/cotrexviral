@@ -35,6 +35,14 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-25 (this session — part 8) **🧹 Routes cleanup**
+  - All 13 `routes/*.py` files refreshed: per-module **docstring**, **minimal imports** (each file imports only what it uses).
+  - `ai.py` PEP-8 fixed (httpx/re/json on separate lines).
+  - `activity.py` E741 fix (renamed `l` → `lead`).
+  - Cross-module imports explicit (`channels.py` ← `routes.ai._llm`, `health.py` ← `routes.scheduler._publish_due_posts_now`).
+  - Backend now **lint-clean**: `ruff` reports 0 errors across `core.py`, `models.py`, `deps.py`, `server.py`, all of `routes/*`, all of `tests/*`.
+  - Pytest still **38/38 pass**.
+
 - 2026-02-25 (this session — part 7) **🧱 Backend refactor + 📚 Blog expansion**
   - **Refactored `server.py`**: 1701 → **49 lines** (97% reduction). Logic split into:
     - `core.py` (Mongo client, env, logger, FastAPI app + router) — 33 lines

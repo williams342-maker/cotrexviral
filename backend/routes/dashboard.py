@@ -1,23 +1,11 @@
-"""Auto-extracted from server.py — refactored to /app/backend/routes/."""
-import uuid
-from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Literal
+"""Dashboard summary endpoint (stats + recent activity for /dashboard overview)."""
 
-from fastapi import HTTPException, Request, Response, Query, Cookie, Header
-from fastapi.responses import JSONResponse
+from fastapi import Request
 
-from core import db, api, app, logger, EMERGENT_LLM_KEY, ADMIN_EMAILS
-from deps import get_current_user, require_admin, log_admin_action
-from models import (
-    User, Ticket, TicketCreate, TicketMessage, SupportChatRequest,
-    AdminUserAction, BroadcastCreate, BroadcastUpdate,
-    Lead, LeadCreate, AIRequest, SocialPostRequest, NewsletterRequest,
-    BlogRequest, UpdateRequest, VideoScriptRequest, MultiPostRequest,
-    ChannelConnectRequest, PublishRequest, ScheduledUpdate, OptimalTimesRequest,
-)
+from core import db, api
+from deps import get_current_user
 
 
-# DASHBOARD
 @api.get("/dashboard/stats")
 async def dashboard_stats(request: Request):
     user = await get_current_user(request)

@@ -1,23 +1,15 @@
-"""Auto-extracted from server.py — refactored to /app/backend/routes/."""
+"""Admin panel: users, audit log, impersonation, stats."""
 import uuid
-from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Literal
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
-from fastapi import HTTPException, Request, Response, Query, Cookie, Header
-from fastapi.responses import JSONResponse
+from fastapi import HTTPException, Request, Response
 
-from core import db, api, app, logger, EMERGENT_LLM_KEY, ADMIN_EMAILS
-from deps import get_current_user, require_admin, log_admin_action
-from models import (
-    User, Ticket, TicketCreate, TicketMessage, SupportChatRequest,
-    AdminUserAction, BroadcastCreate, BroadcastUpdate,
-    Lead, LeadCreate, AIRequest, SocialPostRequest, NewsletterRequest,
-    BlogRequest, UpdateRequest, VideoScriptRequest, MultiPostRequest,
-    ChannelConnectRequest, PublishRequest, ScheduledUpdate, OptimalTimesRequest,
-)
+from core import db, api, ADMIN_EMAILS
+from deps import require_admin, log_admin_action
+from models import User
 
 
-# ADMIN
 @api.get("/admin/me")
 async def admin_me(request: Request):
     user = await require_admin(request)

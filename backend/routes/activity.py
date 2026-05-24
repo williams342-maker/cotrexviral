@@ -1,23 +1,11 @@
-"""Auto-extracted from server.py — refactored to /app/backend/routes/."""
-import uuid
-from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Literal
+"""Activity feed — chronological mixed-source events for the dashboard timeline."""
 
-from fastapi import HTTPException, Request, Response, Query, Cookie, Header
-from fastapi.responses import JSONResponse
+from fastapi import Request
 
-from core import db, api, app, logger, EMERGENT_LLM_KEY, ADMIN_EMAILS
-from deps import get_current_user, require_admin, log_admin_action
-from models import (
-    User, Ticket, TicketCreate, TicketMessage, SupportChatRequest,
-    AdminUserAction, BroadcastCreate, BroadcastUpdate,
-    Lead, LeadCreate, AIRequest, SocialPostRequest, NewsletterRequest,
-    BlogRequest, UpdateRequest, VideoScriptRequest, MultiPostRequest,
-    ChannelConnectRequest, PublishRequest, ScheduledUpdate, OptimalTimesRequest,
-)
+from core import db, api
+from deps import get_current_user
 
 
-# ACTIVITY FEED
 @api.get("/activity")
 async def activity_feed(request: Request, limit: int = 30):
     user = await get_current_user(request)
@@ -27,8 +15,8 @@ async def activity_feed(request: Request, limit: int = 30):
     items = []
     for p in posts:
         items.append({"type": "post", "id": p["id"], "title": (p.get("content") or "")[:120], "platforms": p.get("platforms", []), "status": p.get("status"), "at": p["created_at"]})
-    for l in leads:
-        items.append({"type": "lead", "id": l["id"], "title": f"New lead from {l.get('agent_id', 'agent')}", "subtitle": l.get("email"), "at": l["created_at"]})
+    for lead in leads:
+        items.append({"type": "lead", "id": lead["id"], "title": f"New lead from {lead.get('agent_id', 'agent')}", "subtitle": lead.get("email"), "at": lead["created_at"]})
     for r in reports:
         items.append({"type": "report", "id": r["id"], "title": f"{r.get('type', 'report').replace('_', ' ').title()}: {r.get('title') or r.get('url') or 'untitled'}", "at": r["created_at"]})
     items.sort(key=lambda x: x["at"], reverse=True)

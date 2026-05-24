@@ -1,23 +1,15 @@
-"""Auto-extracted from server.py — refactored to /app/backend/routes/."""
+"""User-facing support: FAQ articles, AI chat assistant, ticket inbox."""
 import uuid
-from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Literal
+from datetime import datetime, timezone
 
-from fastapi import HTTPException, Request, Response, Query, Cookie, Header
-from fastapi.responses import JSONResponse
+from fastapi import HTTPException, Request
 
-from core import db, api, app, logger, EMERGENT_LLM_KEY, ADMIN_EMAILS
-from deps import get_current_user, require_admin, log_admin_action
-from models import (
-    User, Ticket, TicketCreate, TicketMessage, SupportChatRequest,
-    AdminUserAction, BroadcastCreate, BroadcastUpdate,
-    Lead, LeadCreate, AIRequest, SocialPostRequest, NewsletterRequest,
-    BlogRequest, UpdateRequest, VideoScriptRequest, MultiPostRequest,
-    ChannelConnectRequest, PublishRequest, ScheduledUpdate, OptimalTimesRequest,
-)
+from core import db, api, EMERGENT_LLM_KEY
+from deps import get_current_user
+from models import User, Ticket, TicketCreate, TicketMessage, SupportChatRequest
+from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 
-# SUPPORT (User-facing)
 FAQ_ARTICLES = [
     {
         "id": "getting-started",
