@@ -115,12 +115,19 @@ async def tiktok_oauth_start(request: Request):
     return {"authorize_url": f"{TIKTOK_AUTH_URL}?{urlencode(params)}"}
 
 
-@api.get("/oauth/tiktok/callback")
+@api.api_route("/oauth/tiktok/callback", methods=["GET", "HEAD", "POST"])
 async def tiktok_oauth_callback(
     request: Request, code: str = "", state: str = "",
     error: str = "", error_description: str = "",
 ):
-    """TikTok redirects here after the user authorises (or denies)."""
+    """TikTok redirects here after the user authorises (or denies).
+
+    Accepts HEAD/POST as well so TikTok's "Verify Redirect URI" check
+    (which sends a HEAD without query params) returns 200 instead of 405.
+    """
+    # No code AND no error → this is TikTok's reachability probe. Reply 200.
+    if not code and not error and request.method in ("HEAD", "POST"):
+        return {"ok": True, "ready": True}
     if error:
         logger.info("TikTok callback denied: %s — %s", error, error_description)
         return RedirectResponse(
