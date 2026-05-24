@@ -37,13 +37,17 @@ export const BlogIndex = () => {
         title="CortexViral Blog — Viral Content & AI Marketing Insights"
         description="Deep guides on viral content, AI marketing tools, and social media growth. Learn what makes content go viral in 2026 — written by the CortexViral team."
         path="/blog"
-        schema={ORG_SCHEMA}
+        schema={[ORG_SCHEMA, buildBreadcrumbSchema([
+          { label: 'Home', path: '/' },
+          { label: 'Blog', path: '/blog' },
+        ])]}
       />
     }
   >
     <section className="relative pt-32 pb-12 overflow-hidden">
       <CVBackdrop variant="hero" />
       <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <CVBreadcrumbs items={[{ label: 'Blog' }]} className="justify-center mb-5" />
         <span className="text-[11px] uppercase tracking-[0.22em] text-violet-400 font-semibold">CortexViral Blog</span>
         <h1 className="cv-display text-5xl sm:text-6xl font-semibold text-white mt-3 leading-[0.95]">
           Guides on <span className="cv-gradient-text">viral content</span> and AI marketing.
