@@ -1,18 +1,23 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Check, ArrowRight, Sparkles } from 'lucide-react';
+import axios from 'axios';
+import { Check, ArrowRight, Sparkles, Loader2 } from 'lucide-react';
 import CVNavbar from '../components/cv/CVNavbar';
 import CVBackdrop from '../components/cv/CVBackdrop';
 import CVFaq from '../components/cv/CVFaq';
 import CVFooter from '../components/cv/CVFooter';
 import CVSeo, { SOFTWARE_SCHEMA, buildFaqSchema, buildBreadcrumbSchema } from '../components/cv/CVSeo';
 import CVBreadcrumbs from '../components/cv/CVBreadcrumbs';
+import { useToast } from '../hooks/use-toast';
 import { SelectAgentModal, AgentChatModal } from '../components/Modals';
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const tiers = [
   {
     name: 'Free',
+    plan: null,
     price: '$0',
     period: 'forever',
     blurb: 'For creators just getting started.',
@@ -29,6 +34,7 @@ const tiers = [
   },
   {
     name: 'Pro',
+    plan: 'pro',
     price: '$29',
     period: 'per month',
     blurb: 'For creators and small teams shipping daily content.',
@@ -49,11 +55,12 @@ const tiers = [
   },
   {
     name: 'Scale',
+    plan: 'scale',
     price: '$99',
     period: 'per month',
     blurb: 'For brands and agencies running multiple accounts.',
-    cta: 'Talk to sales',
-    href: '#contact',
+    cta: 'Start 14-day free trial',
+    href: '/dashboard',
     features: [
       'Everything in Pro',
       'Unlimited connected channels',
@@ -79,10 +86,44 @@ const PRICING_FAQS = [
 
 const Pricing = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [selectOpen, setSelectOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [activeAgent, setActiveAgent] = useState(null);
   const [annual, setAnnual] = useState(false);
+  const [loadingPlan, setLoadingPlan] = useState(null);
+
+  const onCta = async (tier) => {
+    // Free tier → go straight to dashboard (sign-up redirect happens there if logged out)
+    if (!tier.plan) {
+      navigate(tier.href);
+      return;
+    }
+    setLoadingPlan(tier.plan);
+    try {
+      const { data } = await axios.post(
+        `${API}/billing/checkout-session`,
+        {
+          plan: tier.plan,
+          interval: annual ? 'year' : 'month',
+          origin_url: window.location.origin,
+        },
+        { withCredentials: true },
+      );
+      window.location.assign(data.url);
+    } catch (e) {
+      if (e?.response?.status === 401) {
+        toast({ title: 'Please sign in first', description: 'Redirecting to login…' });
+        setTimeout(() => navigate('/dashboard'), 800);
+      } else {
+        toast({
+          title: 'Could not start checkout',
+          description: e?.response?.data?.detail || e.message || 'Try again in a moment.',
+        });
+      }
+      setLoadingPlan(null);
+    }
+  };
 
   return (
     <div className="min-h-screen cv-dark antialiased">
@@ -172,15 +213,22 @@ const Pricing = () => {
                   </span>
                 </div>
                 <button
-                  onClick={() => t.href.startsWith('/') ? navigate(t.href) : window.location.assign(t.href)}
+                  onClick={() => onCta(t)}
+                  disabled={t.plan && loadingPlan === t.plan}
                   className={`mt-6 inline-flex items-center justify-center gap-1.5 h-11 rounded-full text-[13.5px] font-semibold transition-all ${
-                    t.highlighted
-                      ? 'cv-btn-primary'
-                      : 'cv-btn-secondary'
-                  }`}
+                    t.highlighted ? 'cv-btn-primary' : 'cv-btn-secondary'
+                  } ${t.plan && loadingPlan === t.plan ? 'opacity-70 cursor-wait' : ''}`}
                   data-testid={`pricing-cta-${t.name.toLowerCase()}`}
                 >
-                  {t.cta} <ArrowRight size={14} />
+                  {t.plan && loadingPlan === t.plan ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" /> Loading…
+                    </>
+                  ) : (
+                    <>
+                      {t.cta} <ArrowRight size={14} />
+                    </>
+                  )}
                 </button>
                 <ul className="mt-7 space-y-2.5 flex-1">
                   {t.features.map((f) => (

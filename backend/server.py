@@ -29,11 +29,21 @@ from routes import (  # noqa: F401
     seo,         # registers @app.get on root paths (/sitemap.xml etc.)
     oauth_linkedin,  # LinkedIn OAuth + live posting
     oauth_tiktok,    # TikTok OAuth + Content Posting API
+    billing,         # Stripe subscriptions + webhook
 )
 
 
 # Wire the /api router after every route module has had a chance to attach.
 app.include_router(api)
+
+
+# Provision Stripe products on startup (idempotent — only creates missing ones).
+@app.on_event("startup")
+async def _provision_stripe():
+    try:
+        await billing.ensure_stripe_products()
+    except Exception:
+        logger.exception("Stripe product provisioning failed (continuing)")
 
 app.add_middleware(
     CORSMiddleware,

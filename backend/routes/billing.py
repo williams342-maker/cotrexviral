@@ -1,0 +1,447 @@
+"""Stripe subscription billing for CortexViral.
+
+Endpoints:
+  POST /api/billing/checkout-session  → returns Stripe Checkout URL
+  POST /api/billing/portal-session    → returns Customer Portal URL
+  POST /api/webhook/stripe            → Stripe webhook receiver
+  GET  /api/billing/me                → current user's plan + status
+  GET  /api/billing/checkout/status/{session_id} → poll on return
+
+Design choices:
+- Prices are AUTO-PROVISIONED on startup. We define them in PLANS (server-side
+  source of truth, never trust the frontend) and ensure_stripe_products()
+  creates/looks-up matching Products + Prices in Stripe on first boot, then
+  caches the resulting price IDs.
+- Subscriptions use Stripe Checkout in `mode="subscription"` with a 14-day
+  free trial (per pricing-page promise).
+- Customer Portal handles cancel/upgrade/update-card.
+- Webhook signature verification is enforced when STRIPE_WEBHOOK_SECRET is
+  set. In dev (no secret), the receiver parses the event but logs a warning.
+"""
+import logging
+import uuid
+from datetime import datetime, timezone
+from typing import Optional
+
+import stripe
+from fastapi import HTTPException, Request
+from pydantic import BaseModel, Field
+
+from core import (
+    db,
+    api,
+    app,
+    logger,
+    STRIPE_SECRET_KEY,
+    STRIPE_PUBLISHABLE_KEY,
+    STRIPE_WEBHOOK_SECRET,
+)
+from deps import get_current_user
+
+
+# -----------------------------------------------------------------------------
+# Plan catalogue — server-side source of truth.
+# Frontend can ONLY send a plan_id. Prices are looked up from here, never the
+# request body (otherwise users could buy Scale for $0).
+# -----------------------------------------------------------------------------
+PLANS = {
+    "pro": {
+        "name": "Pro",
+        "description": "Unlimited AI generations, 10 channels, auto-publish, full analytics.",
+        "monthly_amount": 29_00,   # cents
+        "annual_amount": 290_00,   # 2 months free
+        "trial_days": 14,
+    },
+    "scale": {
+        "name": "Scale",
+        "description": "Everything in Pro, unlimited channels, 5 workspaces, API access, priority support.",
+        "monthly_amount": 99_00,
+        "annual_amount": 990_00,
+        "trial_days": 14,
+    },
+}
+
+
+def _ready() -> bool:
+    return bool(STRIPE_SECRET_KEY)
+
+
+def _stripe_init():
+    if not _ready():
+        raise HTTPException(
+            status_code=503,
+            detail="Stripe not configured. Set STRIPE_SECRET_KEY in /app/backend/.env.",
+        )
+    stripe.api_key = STRIPE_SECRET_KEY
+
+
+# -----------------------------------------------------------------------------
+# Product / price auto-provisioning
+# -----------------------------------------------------------------------------
+PRICE_CACHE: dict[str, str] = {}  # key: f"{plan}_{interval}" → price_id
+
+
+async def ensure_stripe_products():
+    """On startup, ensure each plan has a Product + monthly/annual Price in
+    Stripe. Idempotent — looks for products tagged with metadata.cortexviral_plan."""
+    if not _ready():
+        logger.warning("Stripe not configured — skipping product provisioning.")
+        return
+    stripe.api_key = STRIPE_SECRET_KEY
+
+    # Pull existing prices we created earlier (cached in mongo)
+    saved = await db.stripe_products.find().to_list(length=20)
+    for s in saved:
+        PRICE_CACHE[s["key"]] = s["price_id"]
+
+    for plan_id, plan in PLANS.items():
+        # Find or create product
+        existing = stripe.Product.list(limit=100, active=True)
+        product = None
+        for p in existing.auto_paging_iter():
+            md = p.metadata.to_dict() if p.metadata else {}
+            if md.get("cortexviral_plan") == plan_id:
+                product = p
+                break
+        if not product:
+            product = stripe.Product.create(
+                name=f"CortexViral {plan['name']}",
+                description=plan["description"],
+                metadata={"cortexviral_plan": plan_id},
+            )
+            logger.info("Stripe: created product %s", product.id)
+
+        # Ensure prices
+        for interval, amount_key in [("month", "monthly_amount"), ("year", "annual_amount")]:
+            cache_key = f"{plan_id}_{interval}"
+            if cache_key in PRICE_CACHE:
+                continue
+
+            # Look up an existing price for this product+interval+amount
+            existing_prices = stripe.Price.list(product=product.id, active=True, limit=100)
+            match = None
+            for pr in existing_prices.auto_paging_iter():
+                recurring = pr.recurring.to_dict() if pr.recurring else {}
+                if (
+                    recurring.get("interval") == interval
+                    and pr.unit_amount == plan[amount_key]
+                    and pr.currency == "usd"
+                ):
+                    match = pr
+                    break
+            if not match:
+                match = stripe.Price.create(
+                    product=product.id,
+                    unit_amount=plan[amount_key],
+                    currency="usd",
+                    recurring={"interval": interval},
+                    metadata={"cortexviral_plan": plan_id, "interval": interval},
+                )
+                logger.info("Stripe: created price %s (%s %s)", match.id, plan_id, interval)
+
+            PRICE_CACHE[cache_key] = match.id
+            await db.stripe_products.update_one(
+                {"key": cache_key},
+                {"$set": {
+                    "key": cache_key, "plan": plan_id, "interval": interval,
+                    "price_id": match.id, "product_id": product.id,
+                    "updated_at": datetime.now(timezone.utc),
+                }},
+                upsert=True,
+            )
+
+
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+async def _get_or_create_customer(user) -> str:
+    """Return the Stripe customer ID for a user, creating one if needed."""
+    user_doc = await db.users.find_one({"user_id": user.user_id}) or {}
+    if user_doc.get("stripe_customer_id"):
+        return user_doc["stripe_customer_id"]
+
+    customer = stripe.Customer.create(
+        email=user.email,
+        name=getattr(user, "name", None) or user.email.split("@")[0],
+        metadata={"cortexviral_user_id": user.user_id},
+    )
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"stripe_customer_id": customer.id, "updated_at": datetime.now(timezone.utc)}},
+    )
+    return customer.id
+
+
+# -----------------------------------------------------------------------------
+# Routes
+# -----------------------------------------------------------------------------
+class CheckoutRequest(BaseModel):
+    plan: str = Field(..., description="'pro' or 'scale'")
+    interval: str = Field("month", description="'month' or 'year'")
+    origin_url: str = Field(..., description="window.location.origin from frontend")
+
+
+@api.post("/billing/checkout-session")
+async def create_checkout_session(payload: CheckoutRequest, request: Request):
+    user = await get_current_user(request)
+    _stripe_init()
+
+    if payload.plan not in PLANS:
+        raise HTTPException(status_code=400, detail=f"Unknown plan '{payload.plan}'")
+    if payload.interval not in ("month", "year"):
+        raise HTTPException(status_code=400, detail="interval must be 'month' or 'year'")
+
+    cache_key = f"{payload.plan}_{payload.interval}"
+    price_id = PRICE_CACHE.get(cache_key)
+    if not price_id:
+        # Try to provision on-demand if we missed it at startup
+        await ensure_stripe_products()
+        price_id = PRICE_CACHE.get(cache_key)
+        if not price_id:
+            raise HTTPException(status_code=500, detail="Price not provisioned. Restart backend.")
+
+    customer_id = await _get_or_create_customer(user)
+    origin = payload.origin_url.rstrip("/")
+
+    session = stripe.checkout.Session.create(
+        mode="subscription",
+        customer=customer_id,
+        client_reference_id=user.user_id,
+        line_items=[{"price": price_id, "quantity": 1}],
+        subscription_data={
+            "trial_period_days": PLANS[payload.plan]["trial_days"],
+            "metadata": {
+                "cortexviral_user_id": user.user_id,
+                "cortexviral_plan": payload.plan,
+                "cortexviral_interval": payload.interval,
+            },
+        },
+        success_url=f"{origin}/dashboard?billing=success&session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{origin}/pricing?billing=cancelled",
+        metadata={
+            "cortexviral_user_id": user.user_id,
+            "cortexviral_plan": payload.plan,
+            "cortexviral_interval": payload.interval,
+        },
+        allow_promotion_codes=True,
+    )
+
+    # Record the pending transaction
+    await db.payment_transactions.insert_one({
+        "id": str(uuid.uuid4()),
+        "session_id": session.id,
+        "user_id": user.user_id,
+        "stripe_customer_id": customer_id,
+        "plan": payload.plan,
+        "interval": payload.interval,
+        "amount": PLANS[payload.plan][f"{'monthly' if payload.interval == 'month' else 'annual'}_amount"],
+        "currency": "usd",
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc),
+    })
+
+    return {"url": session.url, "session_id": session.id}
+
+
+@api.post("/billing/portal-session")
+async def create_portal_session(request: Request):
+    user = await get_current_user(request)
+    _stripe_init()
+
+    user_doc = await db.users.find_one({"user_id": user.user_id}) or {}
+    customer_id = user_doc.get("stripe_customer_id")
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="No billing account yet. Subscribe first.")
+
+    body = await request.json() if request.headers.get("content-length") else {}
+    origin = (body.get("origin_url") or "").rstrip("/") or "https://cortexviral.com"
+
+    session = stripe.billing_portal.Session.create(
+        customer=customer_id,
+        return_url=f"{origin}/dashboard",
+    )
+    return {"url": session.url}
+
+
+@api.get("/billing/me")
+async def billing_me(request: Request):
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id}) or {}
+    return {
+        "plan": user_doc.get("plan", "free"),
+        "subscription_status": user_doc.get("subscription_status"),
+        "current_period_end": user_doc.get("current_period_end"),
+        "billing_interval": user_doc.get("billing_interval"),
+        "stripe_customer_id": user_doc.get("stripe_customer_id"),
+        "publishable_key": STRIPE_PUBLISHABLE_KEY,
+    }
+
+
+@api.get("/billing/checkout/status/{session_id}")
+async def checkout_status(session_id: str, request: Request):
+    """Frontend polls this after returning from Stripe to confirm payment."""
+    await get_current_user(request)  # require auth, but anyone can poll their own
+    _stripe_init()
+
+    session = stripe.checkout.Session.retrieve(session_id)
+    txn = await db.payment_transactions.find_one({"session_id": session_id})
+    if txn and txn.get("status") != "completed" and session.payment_status == "paid":
+        # Idempotently flip the user's plan even if the webhook hasn't fired yet.
+        await db.payment_transactions.update_one(
+            {"session_id": session_id},
+            {"$set": {"status": "completed", "completed_at": datetime.now(timezone.utc)}},
+        )
+        await _apply_plan_to_user(
+            user_id=txn["user_id"],
+            plan=txn["plan"],
+            interval=txn["interval"],
+            subscription_id=session.subscription,
+        )
+
+    return {
+        "session_id": session.id,
+        "payment_status": session.payment_status,
+        "status": session.status,
+        "subscription_id": session.subscription,
+    }
+
+
+async def _apply_plan_to_user(user_id: str, plan: str, interval: str,
+                              subscription_id: Optional[str] = None,
+                              period_end: Optional[datetime] = None,
+                              subscription_status: str = "active"):
+    update = {
+        "plan": plan,
+        "billing_interval": interval,
+        "subscription_status": subscription_status,
+        "updated_at": datetime.now(timezone.utc),
+    }
+    if subscription_id:
+        update["subscription_id"] = subscription_id
+    if period_end:
+        update["current_period_end"] = period_end.isoformat()
+    await db.users.update_one({"user_id": user_id}, {"$set": update})
+
+
+# -----------------------------------------------------------------------------
+# Webhook
+# -----------------------------------------------------------------------------
+@app.post("/api/webhook/stripe")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+
+    event = None
+    if STRIPE_WEBHOOK_SECRET:
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, STRIPE_WEBHOOK_SECRET,
+            )
+        except stripe.error.SignatureVerificationError:
+            raise HTTPException(status_code=400, detail="Bad signature")
+        except Exception:
+            logger.exception("Stripe webhook verification failed")
+            raise HTTPException(status_code=400, detail="Invalid payload")
+    else:
+        # Dev mode — no signing secret yet. Parse but warn loudly.
+        import json
+        try:
+            event = json.loads(payload)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON")
+        logger.warning(
+            "Stripe webhook received without STRIPE_WEBHOOK_SECRET — "
+            "do NOT use this in production. Set the secret to enable signature verification.",
+        )
+
+    etype = event["type"] if isinstance(event, dict) else event.type
+    data = event["data"]["object"] if isinstance(event, dict) else event.data.object
+
+    logger.info("Stripe webhook: %s", etype)
+
+    if etype == "checkout.session.completed":
+        session = data
+        user_id = (session.get("metadata") or {}).get("cortexviral_user_id") or session.get("client_reference_id")
+        plan = (session.get("metadata") or {}).get("cortexviral_plan")
+        interval = (session.get("metadata") or {}).get("cortexviral_interval", "month")
+        if user_id and plan:
+            await _apply_plan_to_user(
+                user_id=user_id, plan=plan, interval=interval,
+                subscription_id=session.get("subscription"),
+                subscription_status="trialing" if PLANS.get(plan, {}).get("trial_days") else "active",
+            )
+            await db.payment_transactions.update_one(
+                {"session_id": session.get("id")},
+                {"$set": {"status": "completed", "completed_at": datetime.now(timezone.utc)}},
+            )
+
+    elif etype in ("customer.subscription.created", "customer.subscription.updated"):
+        sub = data
+        user_id = (sub.get("metadata") or {}).get("cortexviral_user_id")
+        if not user_id:
+            # Fall back: look up by customer id
+            user_doc = await db.users.find_one({"stripe_customer_id": sub.get("customer")})
+            user_id = user_doc.get("user_id") if user_doc else None
+        if user_id:
+            # Figure out the plan from the price metadata
+            items = (sub.get("items") or {}).get("data") or []
+            plan = None
+            interval = "month"
+            if items:
+                price = items[0].get("price", {})
+                plan = (price.get("metadata") or {}).get("cortexviral_plan")
+                interval = (price.get("recurring") or {}).get("interval") or "month"
+            period_end_ts = sub.get("current_period_end")
+            period_end = datetime.fromtimestamp(period_end_ts, tz=timezone.utc) if period_end_ts else None
+            await _apply_plan_to_user(
+                user_id=user_id,
+                plan=plan or "pro",
+                interval=interval,
+                subscription_id=sub.get("id"),
+                subscription_status=sub.get("status"),
+                period_end=period_end,
+            )
+
+    elif etype == "customer.subscription.deleted":
+        sub = data
+        user_doc = await db.users.find_one({"stripe_customer_id": sub.get("customer")})
+        if user_doc:
+            await db.users.update_one(
+                {"user_id": user_doc["user_id"]},
+                {"$set": {
+                    "plan": "free",
+                    "subscription_status": "canceled",
+                    "subscription_id": None,
+                    "updated_at": datetime.now(timezone.utc),
+                }},
+            )
+
+    elif etype == "invoice.payment_failed":
+        invoice = data
+        user_doc = await db.users.find_one({"stripe_customer_id": invoice.get("customer")})
+        if user_doc:
+            await db.users.update_one(
+                {"user_id": user_doc["user_id"]},
+                {"$set": {"subscription_status": "past_due",
+                          "updated_at": datetime.now(timezone.utc)}},
+            )
+
+    return {"received": True}
+
+
+@api.get("/billing/config")
+async def billing_config():
+    """Public — returns the publishable key + plan price metadata for the
+    pricing UI. Safe to expose since the publishable key is meant to be public."""
+    return {
+        "publishable_key": STRIPE_PUBLISHABLE_KEY,
+        "plans": {
+            plan_id: {
+                "name": p["name"],
+                "monthly": p["monthly_amount"] / 100,
+                "annual": p["annual_amount"] / 100,
+                "trial_days": p["trial_days"],
+            }
+            for plan_id, p in PLANS.items()
+        },
+    }

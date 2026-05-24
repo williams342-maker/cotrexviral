@@ -1,19 +1,74 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API, useAuth } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
-import { Send, Search, Radar, Share2, Sparkles, ArrowRight, FileText, Inbox, BarChart3, Wand2 } from 'lucide-react';
+import { useToast } from '../../hooks/use-toast';
+import { Send, Search, Radar, Share2, Sparkles, ArrowRight, FileText, Inbox, BarChart3, Wand2, CreditCard, CheckCircle2 } from 'lucide-react';
 
 const Overview = () => {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [stats, setStats] = useState({ posts: 0, reports: 0, channels: 0, leads: 0 });
+  const [billing, setBilling] = useState(null);
+  const [portalLoading, setPortalLoading] = useState(false);
 
   useEffect(() => {
     axios.get(`${API}/dashboard/stats`, { withCredentials: true })
       .then((r) => setStats(r.data))
       .catch(() => {});
+    axios.get(`${API}/billing/me`, { withCredentials: true })
+      .then((r) => setBilling(r.data))
+      .catch(() => {});
   }, []);
+
+  // Handle post-Stripe-checkout redirect
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const status = params.get('billing');
+    const sessionId = params.get('session_id');
+    if (status === 'success' && sessionId) {
+      toast({ title: 'Payment received', description: 'Confirming with Stripe…' });
+      // Poll until paid
+      let attempts = 0;
+      const poll = async () => {
+        try {
+          const r = await axios.get(`${API}/billing/checkout/status/${sessionId}`, { withCredentials: true });
+          if (r.data.payment_status === 'paid') {
+            const me = await axios.get(`${API}/billing/me`, { withCredentials: true });
+            setBilling(me.data);
+            toast({ title: `Welcome to ${me.data.plan === 'pro' ? 'Pro' : 'Scale'}!`, description: 'Your 14-day trial has started.' });
+            navigate('/dashboard', { replace: true });
+            return;
+          }
+        } catch {}
+        if (++attempts < 8) setTimeout(poll, 1500);
+        else {
+          toast({ title: "Still confirming…", description: "We'll email you when it's done." });
+          navigate('/dashboard', { replace: true });
+        }
+      };
+      poll();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const openPortal = async () => {
+    setPortalLoading(true);
+    try {
+      const { data } = await axios.post(
+        `${API}/billing/portal-session`,
+        { origin_url: window.location.origin },
+        { withCredentials: true },
+      );
+      window.location.assign(data.url);
+    } catch (e) {
+      toast({ title: 'Could not open billing portal', description: e?.response?.data?.detail || e.message });
+      setPortalLoading(false);
+    }
+  };
 
   const tiles = [
     { label: 'Posts published', value: stats.posts, icon: FileText, color: 'bg-emerald-50 text-emerald-700' },
@@ -38,6 +93,43 @@ const Overview = () => {
           Hi {user?.name?.split(' ')[0] || 'there'} 👋
         </h1>
         <p className="text-neutral-600 mt-1">Here's what's running across your marketing today.</p>
+      </div>
+
+      {/* Billing strip */}
+      <div className="mb-7 flex items-center justify-between gap-4 flex-wrap rounded-2xl border border-neutral-200/70 bg-white px-5 py-4" data-testid="dashboard-billing-strip">
+        <div className="flex items-center gap-3">
+          <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${billing?.plan && billing.plan !== 'free' ? 'bg-violet-50 text-violet-700' : 'bg-neutral-100 text-neutral-600'}`}>
+            {billing?.plan && billing.plan !== 'free' ? <CheckCircle2 size={16} /> : <CreditCard size={16} />}
+          </div>
+          <div>
+            <div className="text-[14px] font-semibold text-neutral-900">
+              {billing?.plan === 'pro' ? 'Pro plan' : billing?.plan === 'scale' ? 'Scale plan' : 'Free plan'}
+              {billing?.subscription_status === 'trialing' && <span className="ml-2 text-[11px] uppercase tracking-wider bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">Trial</span>}
+              {billing?.subscription_status === 'past_due' && <span className="ml-2 text-[11px] uppercase tracking-wider bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full font-semibold">Past due</span>}
+            </div>
+            <div className="text-[12.5px] text-neutral-500">
+              {!billing?.plan || billing.plan === 'free'
+                ? 'Free forever — 20 AI generations / month, 2 channels.'
+                : `Billed ${billing.billing_interval === 'year' ? 'annually' : 'monthly'}.${billing.current_period_end ? ` Renews ${new Date(billing.current_period_end).toLocaleDateString()}` : ''}`}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {(!billing?.plan || billing.plan === 'free') ? (
+            <Link to="/pricing" className="cv-btn-primary inline-flex items-center gap-1.5 px-4 h-9 rounded-full text-[13px] font-semibold" data-testid="upgrade-btn">
+              Upgrade <ArrowRight size={13} />
+            </Link>
+          ) : (
+            <button
+              onClick={openPortal}
+              disabled={portalLoading}
+              className="cv-btn-secondary inline-flex items-center gap-1.5 px-4 h-9 rounded-full text-[13px] font-semibold disabled:opacity-60"
+              data-testid="manage-billing-btn"
+            >
+              {portalLoading ? 'Opening…' : 'Manage billing'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">

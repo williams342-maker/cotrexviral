@@ -36,6 +36,11 @@ TIKTOK_CLIENT_SECRET = os.environ.get("TIKTOK_CLIENT_SECRET", "")
 # TikTok app. When empty, we derive it from PUBLIC_SITE_URL.
 TIKTOK_REDIRECT_URI_OVERRIDE = os.environ.get("TIKTOK_REDIRECT_URI", "")
 
+# Stripe billing
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+
 # --- Logging ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("automatex")
