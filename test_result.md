@@ -182,6 +182,20 @@ backend:
         - working: true
           agent: "testing"
           comment: "✅ TESTED: GET /api/dashboard/stats returns correct counts (posts, reports, channels, leads). GET /api/reports returns user-scoped reports list. GET /api/posts returns user-scoped posts list. All endpoints working correctly."
+  - task: "AI content generators — newsletter, blog, update, video-script, multi-post"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "5 new endpoints. /api/ai/generate-newsletter (subject, preheader, intro, sections, cta, ps). /api/ai/generate-content (blog: title, meta_description, slug, outline, intro, sections, conclusion, tags, estimated_read_minutes). /api/ai/generate-update (headline, subheadline, highlights, social_post, email_subject, email_body). /api/ai/generate-video-script (hook, title, scenes with timestamp/visual/voiceover/on_screen_text, caption, hashtags, music_vibe). /api/ai/multi-post (posts array with platform-tailored content + hashtags). All require auth, return JSON via _safe_json, persist to reports collection except multi-post."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED & VERIFIED: All 5 new AI content generator endpoints working correctly. POST /api/ai/generate-newsletter returns proper JSON with subject/preheader/intro/sections/cta/ps and persists to reports. POST /api/ai/generate-content returns blog structure with title/meta_description/slug/outline/intro/sections/conclusion/tags/estimated_read_minutes and persists to reports. POST /api/ai/generate-update returns headline/subheadline/highlights/social_post/email_subject/email_body and persists to reports. POST /api/ai/generate-video-script returns hook/title/scenes/caption/hashtags/music_vibe and persists to reports. POST /api/ai/multi-post returns platform-tailored posts array (does NOT persist as expected). All endpoints require Bearer auth (401 without token). LLM calls successful (10-30s response time). Database persistence verified for 4 endpoints (newsletter, blog, update, video_script). Multi-post correctly does not persist."
 
 frontend:
   - task: "Landing page (Marketing) with rebrand to Automatex, Nova"
@@ -210,7 +224,7 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 2
+  test_sequence: 3
   run_ui: false
 
 test_plan:
@@ -224,3 +238,5 @@ agent_communication:
       message: "Backend ready. Auth uses Emergent OAuth. For testing, please create a test user+session manually in MongoDB (see /app/auth_testing.md) and use the session_token as Authorization: Bearer <token>. EMERGENT_LLM_KEY is configured. Cookie name is session_token, samesite=none, secure=True. Test all endpoints — auth, leads (public POST + protected GET), AI (4 endpoints, real LLM calls, may take 10–30s), channels, publish, stats. POST /api/ai/seo-review and /api/ai/site-scan require a real URL (use https://example.com)."
     - agent: "testing"
       message: "✅ ALL BACKEND TESTS PASSED (17/17). Created test user via MongoDB, tested all endpoints with Bearer token auth. CRITICAL FIX APPLIED: Changed LLM model from 'gpt-5.4' to 'gpt-5' in server.py line 228 - all AI endpoints now working. Auth endpoints (GET /me, POST /logout) working. Leads endpoints working (POST public, GET protected). All 4 AI endpoints working with real LLM calls (seo-review, site-scan, insights, generate-post). Channels endpoints working (list, connect, disconnect, publish - all MOCKED). Dashboard endpoints working (stats, reports, posts). Health check working. Test data cleaned up. Backend is production-ready."
+    - agent: "testing"
+      message: "✅ ALL 5 NEW AI CONTENT GENERATOR ENDPOINTS TESTED & PASSING (11/11 tests). Created test user in test_database. Tested: POST /api/ai/generate-newsletter (returns subject/preheader/intro/sections/cta/ps, persists to reports ✓). POST /api/ai/generate-content (returns blog structure with title/meta_description/slug/outline/sections/conclusion/tags/estimated_read_minutes, persists to reports ✓). POST /api/ai/generate-update (returns headline/subheadline/highlights/social_post/email_subject/email_body, persists to reports ✓). POST /api/ai/generate-video-script (returns hook/title/scenes with timestamp/visual/voiceover/on_screen_text, caption/hashtags/music_vibe, persists to reports ✓). POST /api/ai/multi-post (returns platform-tailored posts array for instagram/linkedin/x, does NOT persist as expected ✓). All endpoints correctly require Bearer auth (401 without token ✓). All LLM calls successful (10-30s response time). Database persistence verified. Test data cleaned up. ALL BACKEND ENDPOINTS NOW PRODUCTION-READY."

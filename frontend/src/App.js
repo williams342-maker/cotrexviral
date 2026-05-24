@@ -12,6 +12,7 @@ import Channels from './pages/dashboard/Channels';
 import Compose from './pages/dashboard/Compose';
 import Posts from './pages/dashboard/Posts';
 import Leads from './pages/dashboard/Leads';
+import Studio from './pages/dashboard/Studio';
 import { Toaster } from './components/ui/toaster';
 import { AuthProvider } from './context/AuthContext';
 
@@ -31,6 +32,7 @@ function AppRouter() {
       <Route path="/dashboard/scan" element={<ProtectedRoute><SiteScan /></ProtectedRoute>} />
       <Route path="/dashboard/channels" element={<ProtectedRoute><Channels /></ProtectedRoute>} />
       <Route path="/dashboard/compose" element={<ProtectedRoute><Compose /></ProtectedRoute>} />
+      <Route path="/dashboard/studio" element={<ProtectedRoute><Studio /></ProtectedRoute>} />
       <Route path="/dashboard/posts" element={<ProtectedRoute><Posts /></ProtectedRoute>} />
       <Route path="/dashboard/leads" element={<ProtectedRoute><Leads /></ProtectedRoute>} />
     </Routes>

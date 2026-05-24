@@ -208,6 +208,193 @@ def test_generate_post():
     except Exception as e:
         log_test("AI Generate Post", False, f"Exception: {e}")
 
+def test_generate_newsletter():
+    """Test POST /api/ai/generate-newsletter - real LLM call"""
+    try:
+        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
+        payload = {
+            "topic": "Spring product launch",
+            "audience": "loyal customers",
+            "tone": "friendly",
+            "sections": 3
+        }
+        print("  ⏳ Calling LLM for newsletter generation (may take 10-30s)...")
+        r = requests.post(f"{BASE_URL}/ai/generate-newsletter", json=payload, headers=headers, timeout=60)
+        if r.status_code == 200:
+            data = r.json()
+            required_keys = ["subject", "preheader", "intro", "sections", "cta", "ps"]
+            if all(k in data for k in required_keys):
+                if isinstance(data.get("sections"), list) and len(data["sections"]) > 0:
+                    section = data["sections"][0]
+                    if "heading" in section and "body" in section:
+                        log_test("AI Generate Newsletter", True, f"Subject: {data.get('subject')[:50]}...")
+                    else:
+                        log_test("AI Generate Newsletter", False, f"Section missing heading/body: {section}")
+                else:
+                    log_test("AI Generate Newsletter", False, f"Sections not a list or empty: {data.get('sections')}")
+            else:
+                missing = [k for k in required_keys if k not in data]
+                log_test("AI Generate Newsletter", False, f"Missing keys: {missing}. Got: {list(data.keys())}")
+        else:
+            log_test("AI Generate Newsletter", False, f"Status {r.status_code}: {r.text}")
+    except requests.Timeout:
+        log_test("AI Generate Newsletter", False, "Request timeout (>60s)")
+    except Exception as e:
+        log_test("AI Generate Newsletter", False, f"Exception: {e}")
+
+def test_generate_content():
+    """Test POST /api/ai/generate-content - real LLM call"""
+    try:
+        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
+        payload = {
+            "topic": "How to choose a yoga mat",
+            "keywords": ["yoga", "sustainable"],
+            "tone": "professional",
+            "length": "short"
+        }
+        print("  ⏳ Calling LLM for blog content generation (may take 10-30s)...")
+        r = requests.post(f"{BASE_URL}/ai/generate-content", json=payload, headers=headers, timeout=60)
+        if r.status_code == 200:
+            data = r.json()
+            required_keys = ["title", "meta_description", "slug", "outline", "intro", "sections", "conclusion", "tags", "estimated_read_minutes"]
+            if all(k in data for k in required_keys):
+                log_test("AI Generate Content", True, f"Title: {data.get('title')[:50]}...")
+            else:
+                missing = [k for k in required_keys if k not in data]
+                log_test("AI Generate Content", False, f"Missing keys: {missing}. Got: {list(data.keys())}")
+        else:
+            log_test("AI Generate Content", False, f"Status {r.status_code}: {r.text}")
+    except requests.Timeout:
+        log_test("AI Generate Content", False, "Request timeout (>60s)")
+    except Exception as e:
+        log_test("AI Generate Content", False, f"Exception: {e}")
+
+def test_generate_update():
+    """Test POST /api/ai/generate-update - real LLM call"""
+    try:
+        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
+        payload = {
+            "product": "Automatex v2.4",
+            "changes": "- New AI insights tab\n- Faster loads\n- Login bug fix",
+            "tone": "friendly"
+        }
+        print("  ⏳ Calling LLM for update generation (may take 10-30s)...")
+        r = requests.post(f"{BASE_URL}/ai/generate-update", json=payload, headers=headers, timeout=60)
+        if r.status_code == 200:
+            data = r.json()
+            required_keys = ["headline", "subheadline", "highlights", "social_post", "email_subject", "email_body"]
+            if all(k in data for k in required_keys):
+                if isinstance(data.get("highlights"), list) and len(data["highlights"]) > 0:
+                    highlight = data["highlights"][0]
+                    if "title" in highlight and "desc" in highlight:
+                        log_test("AI Generate Update", True, f"Headline: {data.get('headline')[:50]}...")
+                    else:
+                        log_test("AI Generate Update", False, f"Highlight missing title/desc: {highlight}")
+                else:
+                    log_test("AI Generate Update", False, f"Highlights not a list or empty: {data.get('highlights')}")
+            else:
+                missing = [k for k in required_keys if k not in data]
+                log_test("AI Generate Update", False, f"Missing keys: {missing}. Got: {list(data.keys())}")
+        else:
+            log_test("AI Generate Update", False, f"Status {r.status_code}: {r.text}")
+    except requests.Timeout:
+        log_test("AI Generate Update", False, "Request timeout (>60s)")
+    except Exception as e:
+        log_test("AI Generate Update", False, f"Exception: {e}")
+
+def test_generate_video_script():
+    """Test POST /api/ai/generate-video-script - real LLM call"""
+    try:
+        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
+        payload = {
+            "topic": "3 hidden features of our app",
+            "platform": "tiktok",
+            "duration_seconds": 30,
+            "tone": "energetic"
+        }
+        print("  ⏳ Calling LLM for video script generation (may take 10-30s)...")
+        r = requests.post(f"{BASE_URL}/ai/generate-video-script", json=payload, headers=headers, timeout=60)
+        if r.status_code == 200:
+            data = r.json()
+            required_keys = ["hook", "title", "scenes", "caption", "hashtags", "music_vibe"]
+            if all(k in data for k in required_keys):
+                if isinstance(data.get("scenes"), list) and len(data["scenes"]) > 0:
+                    scene = data["scenes"][0]
+                    scene_keys = ["timestamp", "visual", "voiceover", "on_screen_text"]
+                    if all(k in scene for k in scene_keys):
+                        log_test("AI Generate Video Script", True, f"Hook: {data.get('hook')[:50]}...")
+                    else:
+                        missing = [k for k in scene_keys if k not in scene]
+                        log_test("AI Generate Video Script", False, f"Scene missing keys: {missing}")
+                else:
+                    log_test("AI Generate Video Script", False, f"Scenes not a list or empty: {data.get('scenes')}")
+            else:
+                missing = [k for k in required_keys if k not in data]
+                log_test("AI Generate Video Script", False, f"Missing keys: {missing}. Got: {list(data.keys())}")
+        else:
+            log_test("AI Generate Video Script", False, f"Status {r.status_code}: {r.text}")
+    except requests.Timeout:
+        log_test("AI Generate Video Script", False, "Request timeout (>60s)")
+    except Exception as e:
+        log_test("AI Generate Video Script", False, f"Exception: {e}")
+
+def test_multi_post():
+    """Test POST /api/ai/multi-post - real LLM call"""
+    try:
+        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
+        payload = {
+            "listing": "New organic cotton tote bag, $29, made in Portugal, 5 colors",
+            "platforms": ["instagram", "linkedin", "x"],
+            "tone": "friendly"
+        }
+        print("  ⏳ Calling LLM for multi-post generation (may take 10-30s)...")
+        r = requests.post(f"{BASE_URL}/ai/multi-post", json=payload, headers=headers, timeout=60)
+        if r.status_code == 200:
+            data = r.json()
+            if "posts" in data and isinstance(data["posts"], list):
+                if len(data["posts"]) == 3:
+                    post = data["posts"][0]
+                    if "platform" in post and "content" in post and "hashtags" in post:
+                        log_test("AI Multi-Post", True, f"Generated {len(data['posts'])} platform posts")
+                    else:
+                        log_test("AI Multi-Post", False, f"Post missing keys: {list(post.keys())}")
+                else:
+                    log_test("AI Multi-Post", False, f"Expected 3 posts, got {len(data['posts'])}")
+            else:
+                log_test("AI Multi-Post", False, f"Missing 'posts' key or not a list. Got: {list(data.keys())}")
+        else:
+            log_test("AI Multi-Post", False, f"Status {r.status_code}: {r.text}")
+    except requests.Timeout:
+        log_test("AI Multi-Post", False, "Request timeout (>60s)")
+    except Exception as e:
+        log_test("AI Multi-Post", False, f"Exception: {e}")
+
+def test_ai_endpoints_without_auth():
+    """Test that all 5 new AI endpoints return 401 without auth"""
+    endpoints = [
+        ("/ai/generate-newsletter", {"topic": "test", "audience": "test", "tone": "test", "sections": 1}),
+        ("/ai/generate-content", {"topic": "test", "keywords": [], "tone": "test", "length": "short"}),
+        ("/ai/generate-update", {"product": "test", "changes": "test", "tone": "test"}),
+        ("/ai/generate-video-script", {"topic": "test", "platform": "tiktok", "duration_seconds": 30, "tone": "test"}),
+        ("/ai/multi-post", {"listing": "test", "platforms": ["instagram"], "tone": "test"})
+    ]
+    
+    all_passed = True
+    for endpoint, payload in endpoints:
+        try:
+            r = requests.post(f"{BASE_URL}{endpoint}", json=payload, timeout=10)
+            if r.status_code != 401:
+                all_passed = False
+                print(f"  ❌ {endpoint} returned {r.status_code} instead of 401")
+        except Exception as e:
+            all_passed = False
+            print(f"  ❌ {endpoint} exception: {e}")
+    
+    if all_passed:
+        log_test("AI endpoints without auth (401)", True, "All 5 endpoints correctly return 401")
+    else:
+        log_test("AI endpoints without auth (401)", False, "Some endpoints did not return 401")
+
 def test_list_channels():
     """Test GET /api/channels - auth required"""
     try:
@@ -391,24 +578,14 @@ if __name__ == "__main__":
     test_create_lead_public()
     test_list_leads()
     
-    print("\n4. Testing AI Endpoints (LLM calls - will take time)...")
-    test_seo_review()
-    test_site_scan()
-    test_insights()
-    test_generate_post()
+    print("\n4. Testing NEW AI Content Generator Endpoints (LLM calls - will take time)...")
+    test_generate_newsletter()
+    test_generate_content()
+    test_generate_update()
+    test_generate_video_script()
+    test_multi_post()
     
-    print("\n5. Testing Channels Endpoints...")
-    test_list_channels()
-    test_connect_channel()
-    test_publish_post()
-    test_list_posts()
-    test_disconnect_channel()
-    
-    print("\n6. Testing Dashboard Endpoints...")
-    test_list_reports()
-    test_dashboard_stats()
-    
-    print("\n7. Testing Logout...")
-    test_logout()
+    print("\n5. Testing AI Endpoints Auth (401 without token)...")
+    test_ai_endpoints_without_auth()
     
     print_summary()

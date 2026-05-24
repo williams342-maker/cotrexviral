@@ -84,6 +84,39 @@ class SocialPostRequest(BaseModel):
     listing_url: Optional[str] = None
 
 
+class NewsletterRequest(BaseModel):
+    topic: str
+    audience: Optional[str] = "general subscribers"
+    tone: Optional[str] = "friendly"
+    sections: Optional[int] = 3
+
+
+class BlogRequest(BaseModel):
+    topic: str
+    keywords: Optional[List[str]] = []
+    tone: Optional[str] = "professional"
+    length: Optional[Literal["short", "medium", "long"]] = "medium"
+
+
+class UpdateRequest(BaseModel):
+    product: str
+    changes: str  # bullet list / paragraph of what's new
+    tone: Optional[str] = "friendly"
+
+
+class VideoScriptRequest(BaseModel):
+    topic: str
+    platform: Optional[str] = "tiktok"  # tiktok / reels / shorts
+    duration_seconds: Optional[int] = 30
+    tone: Optional[str] = "energetic"
+
+
+class MultiPostRequest(BaseModel):
+    listing: str  # description of the item / listing / news
+    platforms: List[str]
+    tone: Optional[str] = "friendly"
+
+
 class ChannelConnectRequest(BaseModel):
     platform: str  # instagram, tiktok, x, facebook, linkedin, reddit
 
@@ -369,6 +402,134 @@ async def ai_generate_post(payload: SocialPostRequest, request: Request):
     )
     if payload.listing_url:
         prompt += f"\nListing/Source URL: {payload.listing_url}"
+    raw = await chat.send_message(UserMessage(text=prompt))
+    data = _safe_json(raw)
+    return data
+
+
+@api.post("/ai/generate-newsletter")
+async def ai_generate_newsletter(payload: NewsletterRequest, request: Request):
+    user = await get_current_user(request)
+    system = (
+        "You are Angela, an AI email marketer. Write a complete newsletter. "
+        "Respond ONLY in JSON with this shape: "
+        '{"subject": str, "preheader": str, "intro": str, '
+        '"sections": [{"heading": str, "body": str}], "cta": {"text": str, "url_suggestion": str}, "ps": str}'
+    )
+    chat = _llm(f"newsletter-{user.user_id}", system)
+    prompt = (
+        f"Topic: {payload.topic}\nAudience: {payload.audience}\n"
+        f"Tone: {payload.tone}\nSections: {payload.sections}"
+    )
+    raw = await chat.send_message(UserMessage(text=prompt))
+    data = _safe_json(raw)
+    await db.reports.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user.user_id,
+        "type": "newsletter",
+        "title": payload.topic,
+        "report": data,
+        "created_at": datetime.now(timezone.utc),
+    })
+    return data
+
+
+@api.post("/ai/generate-content")
+async def ai_generate_content(payload: BlogRequest, request: Request):
+    user = await get_current_user(request)
+    length_words = {"short": 400, "medium": 800, "long": 1500}.get(payload.length, 800)
+    system = (
+        "You are Sam, an AI SEO content writer. Write a complete blog article. "
+        "Respond ONLY in JSON with this shape: "
+        '{"title": str, "meta_description": str, "slug": str, '
+        '"outline": [str], "intro": str, '
+        '"sections": [{"heading": str, "body": str}], "conclusion": str, '
+        '"tags": [str], "estimated_read_minutes": int}'
+    )
+    chat = _llm(f"content-{user.user_id}", system)
+    prompt = (
+        f"Topic: {payload.topic}\nKeywords: {', '.join(payload.keywords or [])}\n"
+        f"Tone: {payload.tone}\nTarget length: ~{length_words} words"
+    )
+    raw = await chat.send_message(UserMessage(text=prompt))
+    data = _safe_json(raw)
+    await db.reports.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user.user_id,
+        "type": "blog",
+        "title": payload.topic,
+        "report": data,
+        "created_at": datetime.now(timezone.utc),
+    })
+    return data
+
+
+@api.post("/ai/generate-update")
+async def ai_generate_update(payload: UpdateRequest, request: Request):
+    user = await get_current_user(request)
+    system = (
+        "You are a product marketing writer. Turn raw release notes into a polished "
+        "customer-facing update announcement. Respond ONLY in JSON: "
+        '{"headline": str, "subheadline": str, "highlights": [{"title": str, "desc": str}], '
+        '"social_post": str, "email_subject": str, "email_body": str}'
+    )
+    chat = _llm(f"update-{user.user_id}", system)
+    prompt = f"Product: {payload.product}\nTone: {payload.tone}\nWhat's new:\n{payload.changes}"
+    raw = await chat.send_message(UserMessage(text=prompt))
+    data = _safe_json(raw)
+    await db.reports.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user.user_id,
+        "type": "update",
+        "title": payload.product,
+        "report": data,
+        "created_at": datetime.now(timezone.utc),
+    })
+    return data
+
+
+@api.post("/ai/generate-video-script")
+async def ai_generate_video_script(payload: VideoScriptRequest, request: Request):
+    user = await get_current_user(request)
+    system = (
+        "You are a short-form video scriptwriter (TikTok/Reels/Shorts). "
+        "Create a scene-by-scene script optimized for high retention. "
+        "Respond ONLY in JSON: "
+        '{"hook": str, "title": str, "scenes": [{"timestamp": str, "visual": str, "voiceover": str, "on_screen_text": str}], '
+        '"caption": str, "hashtags": [str], "music_vibe": str}'
+    )
+    chat = _llm(f"video-{user.user_id}", system)
+    prompt = (
+        f"Platform: {payload.platform}\nDuration: ~{payload.duration_seconds}s\n"
+        f"Tone: {payload.tone}\nTopic: {payload.topic}"
+    )
+    raw = await chat.send_message(UserMessage(text=prompt))
+    data = _safe_json(raw)
+    await db.reports.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user.user_id,
+        "type": "video_script",
+        "title": payload.topic,
+        "report": data,
+        "created_at": datetime.now(timezone.utc),
+    })
+    return data
+
+
+@api.post("/ai/multi-post")
+async def ai_multi_post(payload: MultiPostRequest, request: Request):
+    user = await get_current_user(request)
+    system = (
+        "You are a multi-platform social media manager. Given a listing or news item, "
+        "generate platform-tailored posts. Each platform has different character limits and styles. "
+        "Respond ONLY in JSON: "
+        '{"posts": [{"platform": str, "content": str, "hashtags": [str]}]}'
+    )
+    chat = _llm(f"multipost-{user.user_id}", system)
+    prompt = (
+        f"Listing/News: {payload.listing}\nTone: {payload.tone}\n"
+        f"Generate posts for these platforms: {', '.join(payload.platforms)}"
+    )
     raw = await chat.send_message(UserMessage(text=prompt))
     data = _safe_json(raw)
     return data

@@ -1,11 +1,12 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Sparkles, Search, Radar, Share2, Send, Inbox, FileText, LogOut, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Search, Radar, Share2, Send, Inbox, FileText, LogOut, ChevronRight, Wand2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const items = [
   { to: '/dashboard', label: 'Overview', icon: LayoutDashboard, exact: true },
   { to: '/dashboard/insights', label: 'AI Insights', icon: Sparkles },
+  { to: '/dashboard/studio', label: 'Content Studio', icon: Wand2 },
   { to: '/dashboard/seo', label: 'SEO Review', icon: Search },
   { to: '/dashboard/scan', label: 'Site Scan', icon: Radar },
   { to: '/dashboard/channels', label: 'Channels', icon: Share2 },
