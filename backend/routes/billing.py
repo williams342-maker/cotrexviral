@@ -42,19 +42,27 @@ from deps import get_current_user
 # -----------------------------------------------------------------------------
 # Plan catalogue — server-side source of truth.
 # Frontend can ONLY send a plan_id. Prices are looked up from here, never the
-# request body (otherwise users could buy Scale for $0).
+# request body (otherwise users could buy Agency for $0).
+# Annual prices = 12 monthly − 2 months free.
 # -----------------------------------------------------------------------------
 PLANS = {
-    "pro": {
-        "name": "Pro",
-        "description": "Unlimited AI generations, 10 channels, auto-publish, full analytics.",
-        "monthly_amount": 29_00,   # cents
-        "annual_amount": 290_00,   # 2 months free
+    "starter": {
+        "name": "Starter",
+        "description": "30+ content generations / month, TikTok + Reels support, improved hook engine.",
+        "monthly_amount": 15_00,
+        "annual_amount": 150_00,
         "trial_days": 14,
     },
-    "scale": {
-        "name": "Scale",
-        "description": "Everything in Pro, unlimited channels, 5 workspaces, API access, priority support.",
+    "growth": {
+        "name": "Growth",
+        "description": "Unlimited viral hooks, full TikTok/Reels/Shorts script engine, trend engine, A/B variations.",
+        "monthly_amount": 39_00,
+        "annual_amount": 390_00,
+        "trial_days": 14,
+    },
+    "agency": {
+        "name": "Agency",
+        "description": "Multi-brand workspaces, bulk generation, team collaboration, API access.",
         "monthly_amount": 99_00,
         "annual_amount": 990_00,
         "trial_days": 14,

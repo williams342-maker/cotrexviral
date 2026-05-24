@@ -19,19 +19,78 @@ from core import db, logger
 # -----------------------------------------------------------------------------
 ENTITLEMENTS = {
     "free": {
-        "ai_generations_per_month": 20,
-        "max_channels": 2,
+        "ai_generations_per_month": 20,   # "5 hooks per week" in marketing copy
+        "max_channels": 1,                 # TikTok only
+        "features": {
+            "trend_engine": False,
+            "ab_variations": False,
+            "batch_generation": False,
+            "api_access": False,
+            "multi_workspace": False,
+        },
         "label": "Free",
     },
+    "starter": {
+        "ai_generations_per_month": 30,
+        "max_channels": 2,                 # TikTok + Instagram Reels
+        "features": {
+            "trend_engine": False,
+            "ab_variations": False,
+            "batch_generation": False,
+            "api_access": False,
+            "multi_workspace": False,
+        },
+        "label": "Starter",
+    },
+    "growth": {
+        "ai_generations_per_month": None,  # unlimited
+        "max_channels": None,              # unlimited
+        "features": {
+            "trend_engine": True,
+            "ab_variations": True,
+            "batch_generation": False,
+            "api_access": False,
+            "multi_workspace": False,
+        },
+        "label": "Growth",
+    },
+    "agency": {
+        "ai_generations_per_month": None,
+        "max_channels": None,
+        "features": {
+            "trend_engine": True,
+            "ab_variations": True,
+            "batch_generation": True,
+            "api_access": True,
+            "multi_workspace": True,
+        },
+        "label": "Agency",
+    },
+    # Legacy mappings — anyone still on old "pro"/"scale" subs gets graceful
+    # behaviour until they swap. Pro ~= Growth, Scale ~= Agency.
     "pro": {
-        "ai_generations_per_month": None,    # unlimited
+        "ai_generations_per_month": None,
         "max_channels": 10,
-        "label": "Pro",
+        "features": {
+            "trend_engine": True,
+            "ab_variations": True,
+            "batch_generation": False,
+            "api_access": False,
+            "multi_workspace": False,
+        },
+        "label": "Pro (legacy)",
     },
     "scale": {
-        "ai_generations_per_month": None,    # unlimited
-        "max_channels": None,                # unlimited
-        "label": "Scale",
+        "ai_generations_per_month": None,
+        "max_channels": None,
+        "features": {
+            "trend_engine": True,
+            "ab_variations": True,
+            "batch_generation": True,
+            "api_access": True,
+            "multi_workspace": True,
+        },
+        "label": "Scale (legacy)",
     },
 }
 
@@ -84,6 +143,7 @@ async def get_usage(user_id: str) -> dict:
             None if ent["max_channels"] is None
             else max(0, ent["max_channels"] - channel_count)
         ),
+        "features": ent.get("features", {}),
     }
 
 

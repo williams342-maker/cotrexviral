@@ -35,7 +35,33 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
-- 2026-02-26 (this session — part 13) **🛡️ Plan-gating + Annual upsell + Login fix**
+- 2026-02-26 (this session — part 14) **🎯 4-Tier Pricing Rework + Admin Analytics + Next.js Plan**
+  - **Backend plan catalogue** completely restructured. `PLANS` now holds:
+    - **Starter** — $15/mo or $150/yr — 30 generations/month, 2 channels.
+    - **Growth** — $39/mo or $390/yr — unlimited generations, unlimited channels, trend engine + A/B variations enabled.
+    - **Agency** — $99/mo or $990/yr — everything in Growth + batch generation + multi-workspace + API access.
+    - Free tier (no Stripe product) — 20 generations/month (≈5/week), 1 channel (TikTok only).
+    - Legacy `pro`/`scale` entitlements kept for backwards-compat (any existing subscribers continue working).
+  - **Stripe**: 3 new products + 6 new prices auto-provisioned on startup (cached in `stripe_products` collection). Old `pro`/`scale` products remain in Stripe (no impact).
+  - **Entitlements** include feature-flag dict (`trend_engine`, `ab_variations`, `batch_generation`, `api_access`, `multi_workspace`) exposed via `/billing/usage` so frontend can gate features per-tier.
+  - **Full Pricing page rewrite** (`Pricing.jsx`):
+    - **Hero**: "Create Viral Content That Actually Grows Your Audience" + Start Free / View Plans dual CTA + trust micro.
+    - **Value strip**: 4 ✓ statements ("Built for virality, not generic AI writing", etc.) in a glass card.
+    - **4-tier pricing cards** with billing toggle (Monthly / Annual + "2 mo free" badge). Each card has icon, name, blurb, price, CTA (live Stripe Checkout), micro-copy, feature list, and Free tier shows exclusions in red strikethrough.
+    - **Feature comparison table** — 11 features × 4 tiers, with Growth column highlighted.
+    - **"Why Free Isn't Enough" section** — bold reality check with 4 growth requirements.
+    - **Conversion section** with Wand2 icon + Start Free Today CTA.
+    - **FAQ** — 7 SEO-friendly questions covering free tier, trial, cancellation, virality, audience.
+    - **Final CTA** — large branded closing section with dual CTAs.
+  - **Overview banner** updated: dynamic plan label (Starter/Growth/Agency/Pro/Scale), correct annual savings per tier ($30 / $78 / $198), Free description updated.
+  - **Admin AI-usage analytics** (P2):
+    - New `GET /api/admin/ai-usage?months=6&limit=20` — returns global_by_month sparkline, top_users (current month), breakdown_by_kind, totals (this month + last N months).
+    - `/admin/stats` now includes subscription distribution: `users_free`, `users_starter`, `users_growth`, `users_agency`, `users_legacy`, `trialing_subs`, `past_due_subs`.
+    - `AdminOverview.jsx` now renders: subscription distribution row (4 tiles + 3 secondary), AI-usage card with **6-month bar chart sparkline**, breakdown-by-kind list, top-users table.
+  - **Next.js migration (P3)** deferred — see Roadmap below for the concrete plan.
+  - **12 new/updated pytest cases** (`test_billing.py` updated to new tiers, `test_plans.py` updated to Free=1 channel, `test_admin_ai_usage.py` new). Suite: **79/79 pass.**
+
+- 2026-02-26 (part 13) **🛡️ Plan-gating + Annual upsell + Login fix**
   - **Plan-gating** (P1):
     - New `routes/plans.py` (130 lines) — single source of truth for entitlements (`ENTITLEMENTS` dict: Free=20 AI/mo+2 channels, Pro=unlimited+10 channels, Scale=unlimited+unlimited).
     - Usage counters stored per-month on `users.usage.YYYY-MM.ai_generations` — auto-resets on the 1st of each month with no cron needed.

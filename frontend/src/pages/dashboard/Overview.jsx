@@ -104,13 +104,13 @@ const Overview = () => {
           </div>
           <div>
             <div className="text-[14px] font-semibold text-neutral-900">
-              {billing?.plan === 'pro' ? 'Pro plan' : billing?.plan === 'scale' ? 'Scale plan' : 'Free plan'}
+              {billing?.usage?.plan_label || 'Free plan'} plan
               {billing?.subscription_status === 'trialing' && <span className="ml-2 text-[11px] uppercase tracking-wider bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">Trial</span>}
               {billing?.subscription_status === 'past_due' && <span className="ml-2 text-[11px] uppercase tracking-wider bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full font-semibold">Past due</span>}
             </div>
             <div className="text-[12.5px] text-neutral-500">
               {!billing?.plan || billing.plan === 'free'
-                ? 'Free forever — 20 AI generations / month, 2 channels.'
+                ? 'Free forever — 5 viral hooks / week, TikTok only.'
                 : `Billed ${billing.billing_interval === 'year' ? 'annually' : 'monthly'}.${billing.current_period_end ? ` Renews ${new Date(billing.current_period_end).toLocaleDateString()}` : ''}`}
             </div>
           </div>
@@ -134,34 +134,41 @@ const Overview = () => {
       </div>
 
       {/* Annual upsell — only shown to monthly subscribers (P2) */}
-      {billing?.plan && billing.plan !== 'free' && billing.billing_interval === 'month' && billing.subscription_status !== 'past_due' && (
-        <div
-          className="mb-7 rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50 via-indigo-50 to-violet-50 px-5 py-4 flex items-center justify-between gap-4 flex-wrap"
-          data-testid="annual-upsell-banner"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-white shadow-sm flex items-center justify-center text-violet-700">
-              <Sparkles size={16} />
-            </div>
-            <div>
-              <div className="text-[14px] font-semibold text-neutral-900">
-                Switch to annual billing & save {billing.plan === 'pro' ? '$58' : '$198'} per year
-              </div>
-              <div className="text-[12.5px] text-neutral-600">
-                2 months free — get the same {billing.plan === 'pro' ? 'Pro' : 'Scale'} features at {billing.plan === 'pro' ? '$24' : '$83'}/mo billed annually.
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={openPortal}
-            disabled={portalLoading}
-            className="cv-btn-primary inline-flex items-center gap-1.5 px-4 h-9 rounded-full text-[13px] font-semibold disabled:opacity-60"
-            data-testid="annual-upsell-cta"
+      {billing?.plan && billing.plan !== 'free' && billing.billing_interval === 'month' && billing.subscription_status !== 'past_due' && (() => {
+        // Annual savings = 12 × monthly − annual (2 months free).
+        const savings = { starter: 30, growth: 78, agency: 198, pro: 58, scale: 198 };
+        const perMonthAnnual = { starter: 13, growth: 33, agency: 83, pro: 24, scale: 83 };
+        const save = savings[billing.plan] || 0;
+        const annualMo = perMonthAnnual[billing.plan] || 0;
+        return (
+          <div
+            className="mb-7 rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50 via-indigo-50 to-violet-50 px-5 py-4 flex items-center justify-between gap-4 flex-wrap"
+            data-testid="annual-upsell-banner"
           >
-            {portalLoading ? 'Opening…' : 'Switch to annual'} <ArrowRight size={13} />
-          </button>
-        </div>
-      )}
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-white shadow-sm flex items-center justify-center text-violet-700">
+                <Sparkles size={16} />
+              </div>
+              <div>
+                <div className="text-[14px] font-semibold text-neutral-900">
+                  Switch to annual billing &amp; save ${save} per year
+                </div>
+                <div className="text-[12.5px] text-neutral-600">
+                  2 months free — get the same {billing.usage?.plan_label || 'paid'} features at ${annualMo}/mo billed annually.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={openPortal}
+              disabled={portalLoading}
+              className="cv-btn-primary inline-flex items-center gap-1.5 px-4 h-9 rounded-full text-[13px] font-semibold disabled:opacity-60"
+              data-testid="annual-upsell-cta"
+            >
+              {portalLoading ? 'Opening…' : 'Switch to annual'} <ArrowRight size={13} />
+            </button>
+          </div>
+        );
+      })()}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {tiles.map((t) => (

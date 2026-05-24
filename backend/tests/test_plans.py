@@ -38,7 +38,7 @@ class TestUsageEndpoint:
         u = r.json()
         assert u["plan"] == "free"
         assert u["ai_generations_limit"] == 20
-        assert u["channels_limit"] == 2
+        assert u["channels_limit"] == 1  # Free is TikTok only now
         assert u["ai_generations_used"] == 0
 
     def test_usage_endpoint_requires_auth(self):
@@ -93,42 +93,40 @@ class TestAIGenerationCap:
 
 
 class TestChannelCap:
-    def test_blocked_after_2_channels_on_free(self):
+    def test_blocked_after_1_channel_on_free(self):
         _reset_user_state()
-        # Connect 2 channels
-        for p in ("instagram", "x"):
-            r = httpx.post(
-                f"{API_URL}/api/channels/connect",
-                headers=HEADERS, json={"platform": p}, timeout=10,
-            )
-            assert r.status_code == 200, f"{p}: {r.text}"
-
-        # 3rd one — must 402
+        # Connect 1 channel (Free cap = 1)
         r = httpx.post(
             f"{API_URL}/api/channels/connect",
-            headers=HEADERS, json={"platform": "linkedin"}, timeout=10,
+            headers=HEADERS, json={"platform": "tiktok"}, timeout=10,
+        )
+        assert r.status_code == 200, r.text
+
+        # 2nd one — must 402
+        r = httpx.post(
+            f"{API_URL}/api/channels/connect",
+            headers=HEADERS, json={"platform": "instagram"}, timeout=10,
         )
         assert r.status_code == 402
         detail = r.json()["detail"]
         assert detail["code"] == "channel_limit_reached"
-        assert detail["limit"] == 2
+        assert detail["limit"] == 1
         _reset_user_state()
 
     def test_reconnect_same_channel_doesnt_count_again(self):
         """Reconnecting an already-connected channel must not 402."""
         _reset_user_state()
-        for p in ("instagram", "x"):
-            httpx.post(f"{API_URL}/api/channels/connect", headers=HEADERS,
-                       json={"platform": p}, timeout=10)
-        # Reconnect instagram — should succeed (idempotent)
+        httpx.post(f"{API_URL}/api/channels/connect", headers=HEADERS,
+                   json={"platform": "tiktok"}, timeout=10)
+        # Reconnect tiktok — should succeed (idempotent)
         r = httpx.post(f"{API_URL}/api/channels/connect", headers=HEADERS,
-                       json={"platform": "instagram"}, timeout=10)
+                       json={"platform": "tiktok"}, timeout=10)
         assert r.status_code == 200
         _reset_user_state()
 
 
 class TestProPlanUnlimited:
-    def test_pro_plan_bypasses_ai_cap(self):
+    def test_growth_plan_bypasses_ai_cap(self):
         import sys
         sys.path.insert(0, "/app/backend")
         from core import db
@@ -139,13 +137,19 @@ class TestProPlanUnlimited:
         async def go():
             await db.users.update_one(
                 {"user_id": "user_test1779636592168"},
-                {"$set": {"plan": "pro", f"usage.{month}.ai_generations": 9999}},
+                {"$set": {"plan": "growth", f"usage.{month}.ai_generations": 9999}},
                 upsert=True,
             )
         asyncio.get_event_loop().run_until_complete(go())
 
         u = httpx.get(f"{API_URL}/api/billing/usage", headers=HEADERS, timeout=10).json()
-        assert u["plan"] == "pro"
+        assert u["plan"] == "growth"
         assert u["ai_generations_limit"] is None
         assert u["ai_generations_remaining"] is None
+        # Growth features available
+        assert u["features"]["trend_engine"] is True
+        assert u["features"]["ab_variations"] is True
+        # But not agency-only features
+        assert u["features"]["batch_generation"] is False
+        assert u["features"]["api_access"] is False
         _reset_user_state()

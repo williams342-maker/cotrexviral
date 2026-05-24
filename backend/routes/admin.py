@@ -31,6 +31,93 @@ async def admin_stats(request: Request):
         "open_tickets": await db.tickets.count_documents({"status": "open"}),
         "answered_tickets": await db.tickets.count_documents({"status": "answered"}),
         "closed_tickets": await db.tickets.count_documents({"status": "closed"}),
+        # Subscription distribution
+        "users_free": await db.users.count_documents({"$or": [{"plan": "free"}, {"plan": {"$exists": False}}]}),
+        "users_starter": await db.users.count_documents({"plan": "starter"}),
+        "users_growth": await db.users.count_documents({"plan": "growth"}),
+        "users_agency": await db.users.count_documents({"plan": "agency"}),
+        "users_legacy": await db.users.count_documents({"plan": {"$in": ["pro", "scale"]}}),
+        "trialing_subs": await db.users.count_documents({"subscription_status": "trialing"}),
+        "past_due_subs": await db.users.count_documents({"subscription_status": "past_due"}),
+    }
+
+
+@api.get("/admin/ai-usage")
+async def admin_ai_usage(request: Request, months: int = 6, limit: int = 20):
+    """Per-tenant AI generation analytics. Returns:
+      - global_by_month: total AI generations per YYYY-MM bucket (last `months`)
+      - top_users: top `limit` users by current-month usage
+      - breakdown_by_kind: counts per generation type (post / blog / video_script / etc.)
+    """
+    await require_admin(request)
+    now = datetime.now(timezone.utc)
+
+    # Build the list of last N months as YYYY-MM strings
+    month_keys = []
+    y, m = now.year, now.month
+    for _ in range(months):
+        month_keys.append(f"{y:04d}-{m:02d}")
+        m -= 1
+        if m == 0:
+            m = 12
+            y -= 1
+    month_keys.reverse()  # chronological order
+
+    # Aggregate globally per month
+    global_by_month = []
+    breakdown_by_kind: dict[str, int] = {}
+    for mk in month_keys:
+        pipeline = [
+            {"$project": {"_id": 0, "bucket": f"$usage.{mk}"}},
+            {"$match": {"bucket": {"$exists": True}}},
+            {"$group": {
+                "_id": None,
+                "ai_generations": {"$sum": {"$ifNull": ["$bucket.ai_generations", 0]}},
+                "buckets": {"$push": "$bucket"},
+            }},
+        ]
+        agg = await db.users.aggregate(pipeline).to_list(length=1)
+        total = agg[0]["ai_generations"] if agg else 0
+        global_by_month.append({"month": mk, "ai_generations": total})
+
+        # Add this month's kinds to breakdown
+        if agg:
+            for bucket in agg[0]["buckets"]:
+                kinds = (bucket or {}).get("kinds") or {}
+                for kind, count in kinds.items():
+                    breakdown_by_kind[kind] = breakdown_by_kind.get(kind, 0) + count
+
+    # Top users for the current month
+    current_mk = month_keys[-1]
+    top_pipe = [
+        {"$match": {f"usage.{current_mk}.ai_generations": {"$gt": 0}}},
+        {"$project": {
+            "_id": 0,
+            "user_id": 1,
+            "email": 1,
+            "name": 1,
+            "plan": 1,
+            "subscription_status": 1,
+            "ai_generations": f"$usage.{current_mk}.ai_generations",
+            "kinds": f"$usage.{current_mk}.kinds",
+        }},
+        {"$sort": {"ai_generations": -1}},
+        {"$limit": limit},
+    ]
+    top_users = await db.users.aggregate(top_pipe).to_list(length=limit)
+
+    # Sort breakdown by count desc
+    breakdown_sorted = sorted(breakdown_by_kind.items(), key=lambda kv: kv[1], reverse=True)
+
+    return {
+        "current_month": current_mk,
+        "global_by_month": global_by_month,
+        "top_users": top_users,
+        "breakdown_by_kind": [{"kind": k, "count": c} for k, c in breakdown_sorted],
+        "totals": {
+            "this_month": global_by_month[-1]["ai_generations"] if global_by_month else 0,
+            "last_n_months": sum(m["ai_generations"] for m in global_by_month),
+        },
     }
 
 
