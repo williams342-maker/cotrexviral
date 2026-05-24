@@ -35,15 +35,16 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
-- 2026-02-25 (this session — part 3) **🎨 Brand & UI overhaul**
-  - Full landing page rebuild to neural/dark aesthetic per uploaded spec (Space Grotesk + Inter, deep-space-black + violet/blue/cyan palette, glassmorphism, animated auroras + grid + drifting particles).
-  - New CV component library in `/app/frontend/src/components/cv/` — CVNavbar, CVHero, CVNeuralEngine, CVPipeline, CVResults, CVCTAFooter, CVFooter, CVBackdrop, CVLogo.
-  - Landing sections shipped: Hero ("Turn Attention Into Digital Momentum."), Neural Engine with live growth chart + 4 capability cards, 5-step Growth Pipeline timeline, 3 case-study Result cards (GlowSkin/Liam Carter/Taskly), final CTA vortex, dark Footer.
-  - Animations: Framer Motion entrance + whileInView triggers, CSS aurora/float/pulse/drift keyframes (no Three.js — kept bundle lean).
-  - New `/agents` sub-page houses the 4 AI agents (Nova/Sam/Kai/Angela) — direct-chat on card click.
-  - New logo PNG → `/cortex-logo.png` (used as favicon, navbar logo, dashboard sidebar logo).
-  - Modals fixed: added `sr-only` DialogTitle for Radix a11y compliance.
-  - **Frontend testing agent: 100% pass** (all data-testids verified, mobile hamburger, scrolled navbar, agent direct-chat flow, ProtectedRoute redirect).
+- 2026-02-25 (this session — part 4) **🌌 Dashboard dark-theme migration**
+  - Rebuilt `DashboardLayout.jsx` with dark glass sidebar, gradient-active nav items, ambient aurora backdrop, wordmark "Cortex**Viral**" with gradient on "Viral", glow under active items, and dark user-profile footer.
+  - Added ~80 lines of scoped CSS in `index.css` under `.cv-dash-scope { … }` that re-skin existing legacy markup (`bg-white`, `border-neutral-200/70`, `text-neutral-*`, `bg-neutral-*`, pastel `from-*-100` gradients, `bg-#1B7BFF` brand classes, `input/textarea/combobox`) to dark glass — meaning ALL 14 dashboard pages + admin pages got the new look with **zero per-page edits**.
+  - Verified across Overview, Marketing Calendar, Content Studio, Compose, Posts, AI Insights, SEO, Site Scan, Help, Admin Overview, and landing untouched. **100% frontend pass.**
+
+- 2026-02-25 (this session — part 3) **🎨 Landing & /agents brand overhaul**
+  - Full neural dark landing rebuild (CVHero, CVNeuralEngine, CVPipeline, CVResults, CVCTAFooter, CVFooter, CVNavbar, CVBackdrop, CVLogo).
+  - New `/agents` sub-page with 4 AI agent cards (Nova/Sam/Kai/Angela) — direct chat.
+  - New logo asset `/cortex-logo.png` used as favicon + nav.
+  - Framer Motion + CSS keyframe animations (no Three.js).
 
 - 2026-02-25 (this session — part 2) **Background scheduler**
   - APScheduler in-process AsyncIOScheduler with Mongo TTL lock (`scheduler_locks`), promotes `scheduled → published` every 60s.
