@@ -8,6 +8,7 @@ import {
   Mail, Briefcase, CreditCard, Users as UsersIcon,
 } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
+import { usePaywallHandler } from '../../hooks/use-paywall';
 
 // Build a colored letter "logo" component for platforms without a lucide icon
 const Letter = ({ ch, className = '' }) => (
@@ -82,6 +83,7 @@ const Channels = () => {
   const [linkedInOAuth, setLinkedInOAuth] = useState({ configured: false, connected: false });
   const [tiktokOAuth, setTiktokOAuth] = useState({ configured: false, connected: false });
   const { toast } = useToast();
+  const paywall = usePaywallHandler();
 
   const load = async () => {
     setLoading(true);
@@ -164,7 +166,7 @@ const Channels = () => {
       }
       await load();
     } catch (e) {
-      toast({ title: 'Action failed' });
+      if (!paywall(e)) toast({ title: 'Action failed' });
     } finally {
       setBusy(null);
     }

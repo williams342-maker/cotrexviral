@@ -6,6 +6,7 @@ from fastapi import HTTPException, Request
 
 from core import db, api, logger, EMERGENT_LLM_KEY
 from deps import get_current_user
+from routes.plans import assert_can_generate_ai, record_ai_generation
 from models import (
     User, AIRequest, SocialPostRequest, NewsletterRequest, BlogRequest, UpdateRequest, VideoScriptRequest, MultiPostRequest,
 )
@@ -13,6 +14,14 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage
 import httpx
 import re
 import json
+
+
+async def _gated_user(request: Request):
+    """Auth + plan gate. Use for any AI endpoint that should count against
+    the user's monthly AI-generation quota."""
+    auth_user = await get_current_user(request)
+    await assert_can_generate_ai(auth_user.user_id)
+    return auth_user
 
 
 def _llm(session_id: str, system: str, model: str = "gpt-5"):
@@ -61,7 +70,7 @@ async def _fetch_url_snippet(url: str) -> str:
 
 @api.post("/ai/seo-review")
 async def ai_seo_review(payload: AIRequest, request: Request):
-    user = await get_current_user(request)
+    user = await _gated_user(request)
     if not payload.url:
         raise HTTPException(status_code=400, detail="url is required")
 
@@ -90,12 +99,13 @@ async def ai_seo_review(payload: AIRequest, request: Request):
         "created_at": datetime.now(timezone.utc),
     }
     await db.reports.insert_one(report)
+    await record_ai_generation(user.user_id, "seo_review")
     return {"id": report["id"], "url": payload.url, "report": data}
 
 
 @api.post("/ai/site-scan")
 async def ai_site_scan(payload: AIRequest, request: Request):
-    user = await get_current_user(request)
+    user = await _gated_user(request)
     if not payload.url:
         raise HTTPException(status_code=400, detail="url is required")
 
@@ -124,12 +134,13 @@ async def ai_site_scan(payload: AIRequest, request: Request):
         "created_at": datetime.now(timezone.utc),
     }
     await db.reports.insert_one(report)
+    await record_ai_generation(user.user_id, "site_scan")
     return {"id": report["id"], "url": payload.url, "report": data}
 
 
 @api.post("/ai/insights")
 async def ai_insights(payload: AIRequest, request: Request):
-    user = await get_current_user(request)
+    user = await _gated_user(request)
     system = (
         "You are an AI marketing advisor. Given the user's context, produce: "
         "1) 5 actionable marketing insights tailored to them, "
@@ -142,12 +153,13 @@ async def ai_insights(payload: AIRequest, request: Request):
     text = payload.context or payload.prompt or "general small business marketing"
     raw = await chat.send_message(UserMessage(text=text))
     data = _safe_json(raw)
+    await record_ai_generation(user.user_id, "insights")
     return {"insights": data}
 
 
 @api.post("/ai/generate-post")
 async def ai_generate_post(payload: SocialPostRequest, request: Request):
-    user = await get_current_user(request)
+    user = await _gated_user(request)
     system = (
         "You are Kai, an AI social media manager. Write a high-performing social post. "
         "Respond ONLY in JSON: "
@@ -161,12 +173,13 @@ async def ai_generate_post(payload: SocialPostRequest, request: Request):
         prompt += f"\nListing/Source URL: {payload.listing_url}"
     raw = await chat.send_message(UserMessage(text=prompt))
     data = _safe_json(raw)
+    await record_ai_generation(user.user_id, "post")
     return data
 
 
 @api.post("/ai/generate-newsletter")
 async def ai_generate_newsletter(payload: NewsletterRequest, request: Request):
-    user = await get_current_user(request)
+    user = await _gated_user(request)
     system = (
         "You are Angela, an AI email marketer. Write a complete newsletter. "
         "Respond ONLY in JSON with this shape: "
@@ -188,12 +201,13 @@ async def ai_generate_newsletter(payload: NewsletterRequest, request: Request):
         "report": data,
         "created_at": datetime.now(timezone.utc),
     })
+    await record_ai_generation(user.user_id, "newsletter")
     return data
 
 
 @api.post("/ai/generate-content")
 async def ai_generate_content(payload: BlogRequest, request: Request):
-    user = await get_current_user(request)
+    user = await _gated_user(request)
     length_words = {"short": 400, "medium": 800, "long": 1500}.get(payload.length, 800)
     system = (
         "You are Sam, an AI SEO content writer. Write a complete blog article. "
@@ -218,12 +232,13 @@ async def ai_generate_content(payload: BlogRequest, request: Request):
         "report": data,
         "created_at": datetime.now(timezone.utc),
     })
+    await record_ai_generation(user.user_id, "blog")
     return data
 
 
 @api.post("/ai/generate-update")
 async def ai_generate_update(payload: UpdateRequest, request: Request):
-    user = await get_current_user(request)
+    user = await _gated_user(request)
     system = (
         "You are a product marketing writer. Turn raw release notes into a polished "
         "customer-facing update announcement. Respond ONLY in JSON: "
@@ -242,12 +257,13 @@ async def ai_generate_update(payload: UpdateRequest, request: Request):
         "report": data,
         "created_at": datetime.now(timezone.utc),
     })
+    await record_ai_generation(user.user_id, "update")
     return data
 
 
 @api.post("/ai/generate-video-script")
 async def ai_generate_video_script(payload: VideoScriptRequest, request: Request):
-    user = await get_current_user(request)
+    user = await _gated_user(request)
     system = (
         "You are a short-form video scriptwriter (TikTok/Reels/Shorts). "
         "Create a scene-by-scene script optimized for high retention. "
@@ -270,6 +286,7 @@ async def ai_generate_video_script(payload: VideoScriptRequest, request: Request
         "report": data,
         "created_at": datetime.now(timezone.utc),
     })
+    await record_ai_generation(user.user_id, "video_script")
     return data
 
 
@@ -299,7 +316,7 @@ async def channels_limits(request: Request):
 
 @api.post("/ai/multi-post")
 async def ai_multi_post(payload: MultiPostRequest, request: Request):
-    user = await get_current_user(request)
+    user = await _gated_user(request)
 
     # Build a tailored instruction with per-platform constraints
     selected_limits = {p: PLATFORM_LIMITS.get(p, {"chars": 2000, "tag": "No specific limit"}) for p in payload.platforms}

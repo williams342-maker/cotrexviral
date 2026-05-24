@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Menu, X, ArrowUpRight } from 'lucide-react';
+import { Menu, X, ArrowUpRight, LayoutDashboard } from 'lucide-react';
 import CVLogo from './CVLogo';
+import { useAuth } from '../../context/AuthContext';
 
 const links = [
   { label: 'System', href: '#system' },
@@ -16,6 +17,7 @@ const CVNavbar = ({ onGetStarted }) => {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const { user, login } = useAuth();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 14);
@@ -118,10 +120,10 @@ const CVNavbar = ({ onGetStarted }) => {
               </a>
             ))}
             <button
-              onClick={() => { setOpen(false); navigate('/dashboard'); }}
+              onClick={() => { setOpen(false); user ? navigate('/dashboard') : login(); }}
               className="px-3 py-3 rounded-xl text-[14px] font-medium text-zinc-300 hover:bg-white/5 hover:text-white text-left"
             >
-              Login
+              {user ? 'Dashboard' : 'Login'}
             </button>
           </motion.div>
         )}

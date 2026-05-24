@@ -267,6 +267,9 @@ async def create_portal_session(request: Request):
 async def billing_me(request: Request):
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id}) or {}
+    # Lazy import to keep billing.py free of plan internals
+    from routes.plans import get_usage
+    usage = await get_usage(user.user_id)
     return {
         "plan": user_doc.get("plan", "free"),
         "subscription_status": user_doc.get("subscription_status"),
@@ -274,7 +277,16 @@ async def billing_me(request: Request):
         "billing_interval": user_doc.get("billing_interval"),
         "stripe_customer_id": user_doc.get("stripe_customer_id"),
         "publishable_key": STRIPE_PUBLISHABLE_KEY,
+        "usage": usage,
     }
+
+
+@api.get("/billing/usage")
+async def billing_usage(request: Request):
+    """Lightweight endpoint just for the usage meter — polled more often than /me."""
+    user = await get_current_user(request)
+    from routes.plans import get_usage
+    return await get_usage(user.user_id)
 
 
 @api.get("/billing/checkout/status/{session_id}")

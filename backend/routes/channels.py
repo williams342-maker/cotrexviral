@@ -74,10 +74,20 @@ async def connect_channel(payload: ChannelConnectRequest, request: Request):
     user = await get_current_user(request)
     if payload.platform not in SUPPORTED_PLATFORMS:
         raise HTTPException(status_code=400, detail="Unsupported platform")
+
+    # If user already has this channel (just reconnecting), bypass the cap.
+    existing = await db.channels.find_one(
+        {"user_id": user.user_id, "platform": payload.platform, "connected": True},
+    )
+    if not existing:
+        from routes.plans import assert_can_connect_channel  # lazy import (circular safe)
+        await assert_can_connect_channel(user.user_id)
+
     doc = {
         "user_id": user.user_id,
         "platform": payload.platform,
         "handle": f"@{user.name.lower().replace(' ', '_')}",
+        "connected": True,
         "connected_at": datetime.now(timezone.utc),
     }
     await db.channels.update_one(

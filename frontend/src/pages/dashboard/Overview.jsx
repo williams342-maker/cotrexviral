@@ -5,6 +5,7 @@ import { API, useAuth } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useToast } from '../../hooks/use-toast';
 import { Send, Search, Radar, Share2, Sparkles, ArrowRight, FileText, Inbox, BarChart3, Wand2, CreditCard, CheckCircle2 } from 'lucide-react';
+import UsageMeter from '../../components/UsageMeter';
 
 const Overview = () => {
   const { user } = useAuth();
@@ -132,7 +133,37 @@ const Overview = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+      {/* Annual upsell — only shown to monthly subscribers (P2) */}
+      {billing?.plan && billing.plan !== 'free' && billing.billing_interval === 'month' && billing.subscription_status !== 'past_due' && (
+        <div
+          className="mb-7 rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50 via-indigo-50 to-violet-50 px-5 py-4 flex items-center justify-between gap-4 flex-wrap"
+          data-testid="annual-upsell-banner"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-white shadow-sm flex items-center justify-center text-violet-700">
+              <Sparkles size={16} />
+            </div>
+            <div>
+              <div className="text-[14px] font-semibold text-neutral-900">
+                Switch to annual billing & save {billing.plan === 'pro' ? '$58' : '$198'} per year
+              </div>
+              <div className="text-[12.5px] text-neutral-600">
+                2 months free — get the same {billing.plan === 'pro' ? 'Pro' : 'Scale'} features at {billing.plan === 'pro' ? '$24' : '$83'}/mo billed annually.
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={openPortal}
+            disabled={portalLoading}
+            className="cv-btn-primary inline-flex items-center gap-1.5 px-4 h-9 rounded-full text-[13px] font-semibold disabled:opacity-60"
+            data-testid="annual-upsell-cta"
+          >
+            {portalLoading ? 'Opening…' : 'Switch to annual'} <ArrowRight size={13} />
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {tiles.map((t) => (
           <div key={t.label} className="bg-white rounded-2xl p-5 border border-neutral-200/70">
             <div className={`w-9 h-9 rounded-lg ${t.color} flex items-center justify-center mb-3`}>
@@ -142,6 +173,10 @@ const Overview = () => {
             <div className="text-[13px] text-neutral-600 mt-1">{t.label}</div>
           </div>
         ))}
+      </div>
+
+      <div className="mb-10">
+        <UsageMeter />
       </div>
 
       <h2 className="text-xl font-semibold tracking-tight mb-4">Quick actions</h2>

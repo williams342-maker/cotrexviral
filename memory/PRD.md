@@ -35,7 +35,35 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
-- 2026-02-26 (this session — part 12) **💳 Stripe subscription billing (test mode)**
+- 2026-02-26 (this session — part 13) **🛡️ Plan-gating + Annual upsell + Login fix**
+  - **Plan-gating** (P1):
+    - New `routes/plans.py` (130 lines) — single source of truth for entitlements (`ENTITLEMENTS` dict: Free=20 AI/mo+2 channels, Pro=unlimited+10 channels, Scale=unlimited+unlimited).
+    - Usage counters stored per-month on `users.usage.YYYY-MM.ai_generations` — auto-resets on the 1st of each month with no cron needed.
+    - `assert_can_generate_ai()` → raises **HTTP 402 Payment Required** with structured `{code, message, plan, used, limit}` when cap hit.
+    - `assert_can_connect_channel()` → same pattern for channels.
+    - `record_ai_generation(user_id, kind)` — `$inc` counter atomically.
+    - Past-due subscribers auto-downgrade to free until Stripe recovers.
+    - Wired into all **9 AI generation endpoints** (`/ai/generate-post`, `/seo-review`, `/site-scan`, `/insights`, `/generate-newsletter`, `/generate-content`, `/generate-update`, `/generate-video-script`, `/multi-post`) — single shared `_gated_user(request)` helper does auth + cap-check in one call.
+    - Wired into `POST /api/channels/connect` — but with reconnect-bypass: if the channel was previously connected, reconnecting it doesn't count against the cap.
+    - New `GET /api/billing/usage` (lightweight, frontend polls this often).
+    - `/billing/me` now embeds the full usage block.
+  - **Frontend**:
+    - New `components/UsageMeter.jsx` — progress bar that turns amber at 80% and red at 100%, with inline "Upgrade" CTA. Two modes: full card or compact strip. Shows "Pro · Unlimited" badge for paid plans.
+    - New `hooks/use-paywall.js` — `usePaywallHandler()` returns a function that detects 402 responses, shows the appropriate toast, and redirects to `/pricing` after 1.2s.
+    - Wired into all 5 Studio tabs (Newsletter / Blog / Update / Video / Multi) and Channels page. Each tab also calls `onGenerated()` after success to live-refresh the meter.
+    - Overview page now has a `<UsageMeter />` strip below the stat tiles.
+  - **Annual upsell banner** (P2):
+    - Renders on Overview ONLY for monthly subscribers (`billing_interval === 'month'`) on Pro or Scale (not on past-due).
+    - Shows specific savings: "$58/yr saved" for Pro, "$198/yr saved" for Scale.
+    - "Switch to annual" button opens the Stripe Customer Portal where users can swap their subscription's price ID.
+    - `data-testid="annual-upsell-banner"`.
+  - **Login button fix**:
+    - `CVNavbar` now imports `useAuth` and calls `login()` instead of `navigate('/dashboard')`. Clicking Login redirects to `https://auth.emergentagent.com/?redirect=...` (the proper Emergent Google Auth flow).
+    - When logged in, the button auto-swaps to "Dashboard" with a `LayoutDashboard` icon.
+    - Mobile menu mirrors the same logic.
+  - **7 new pytest cases** (`tests/test_plans.py`) — usage endpoint, AI cap blocking, channel cap blocking, reconnect-bypass, Pro plan bypasses caps. Suite: **74/74 pass.**
+
+- 2026-02-26 (part 12) **💳 Stripe subscription billing (test mode)**
   - New `routes/billing.py` (450 lines):
     - **Server-side `PLANS` catalogue** — Pro $29/mo or $290/yr, Scale $99/mo or $990/yr, 14-day trial on both. Frontend can't manipulate prices.
     - **Auto-provisioning**: `ensure_stripe_products()` runs on startup and creates Stripe Products + monthly+annual recurring Prices if missing. Caches `price_id`s in `stripe_products` collection so we never recreate. Successfully created in user's Stripe account: `prod_UZtnNi…` (Pro), `prod_UZto1u…` (Scale) + 4 price IDs.

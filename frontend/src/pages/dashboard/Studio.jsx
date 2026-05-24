@@ -3,10 +3,12 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { API } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
+import UsageMeter from '../../components/UsageMeter';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { useToast } from '../../hooks/use-toast';
+import { usePaywallHandler } from '../../hooks/use-paywall';
 import {
   Loader2, Mail, FileText, Megaphone, Video, Layers,
   Sparkles, Copy, Send, Clock, Hash,
@@ -22,9 +24,14 @@ const TABS = [
 
 const Studio = () => {
   const [tab, setTab] = useState('newsletter');
+  const [usageKey, setUsageKey] = useState(0);
+  const refreshUsage = () => setUsageKey((k) => k + 1);
 
   return (
     <DashboardLayout title="Content Studio" subtitle="Generate newsletters, blog articles, product updates, video scripts, and platform-tailored posts.">
+      <div className="mb-5">
+        <UsageMeter refreshKey={usageKey} />
+      </div>
       <div className="flex flex-wrap gap-2 mb-7">
         {TABS.map((t) => (
           <button
@@ -42,11 +49,11 @@ const Studio = () => {
         ))}
       </div>
 
-      {tab === 'newsletter' && <NewsletterTab />}
-      {tab === 'blog' && <BlogTab />}
-      {tab === 'update' && <UpdateTab />}
-      {tab === 'video' && <VideoTab />}
-      {tab === 'multi' && <MultiTab />}
+      {tab === 'newsletter' && <NewsletterTab onGenerated={refreshUsage} />}
+      {tab === 'blog' && <BlogTab onGenerated={refreshUsage} />}
+      {tab === 'update' && <UpdateTab onGenerated={refreshUsage} />}
+      {tab === 'video' && <VideoTab onGenerated={refreshUsage} />}
+      {tab === 'multi' && <MultiTab onGenerated={refreshUsage} />}
     </DashboardLayout>
   );
 };
@@ -80,8 +87,9 @@ const copyText = (text, toast) => {
 };
 
 // ---------- Newsletter ----------
-const NewsletterTab = () => {
+const NewsletterTab = ({ onGenerated }) => {
   const { toast } = useToast();
+  const paywall = usePaywallHandler();
   const [form, setForm] = useState({ topic: '', audience: 'general subscribers', tone: 'friendly', sections: 3 });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -93,8 +101,9 @@ const NewsletterTab = () => {
     try {
       const r = await axios.post(`${API}/ai/generate-newsletter`, form, { withCredentials: true });
       setResult(r.data);
+      onGenerated?.();
     } catch (e) {
-      toast({ title: 'Generation failed' });
+      if (!paywall(e)) toast({ title: 'Generation failed' });
     } finally {
       setLoading(false);
     }
@@ -181,8 +190,9 @@ const NewsletterTab = () => {
 };
 
 // ---------- Blog ----------
-const BlogTab = () => {
+const BlogTab = ({ onGenerated }) => {
   const { toast } = useToast();
+  const paywall = usePaywallHandler();
   const [form, setForm] = useState({ topic: '', keywords: '', tone: 'professional', length: 'medium' });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -199,8 +209,9 @@ const BlogTab = () => {
         length: form.length,
       }, { withCredentials: true });
       setResult(r.data);
+      onGenerated?.();
     } catch (e) {
-      toast({ title: 'Generation failed' });
+      if (!paywall(e)) toast({ title: 'Generation failed' });
     } finally {
       setLoading(false);
     }
@@ -285,8 +296,9 @@ const BlogTab = () => {
 };
 
 // ---------- Update ----------
-const UpdateTab = () => {
+const UpdateTab = ({ onGenerated }) => {
   const { toast } = useToast();
+  const paywall = usePaywallHandler();
   const [form, setForm] = useState({ product: '', changes: '', tone: 'friendly' });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -298,8 +310,9 @@ const UpdateTab = () => {
     try {
       const r = await axios.post(`${API}/ai/generate-update`, form, { withCredentials: true });
       setResult(r.data);
+      onGenerated?.();
     } catch (e) {
-      toast({ title: 'Generation failed' });
+      if (!paywall(e)) toast({ title: 'Generation failed' });
     } finally {
       setLoading(false);
     }
@@ -378,8 +391,9 @@ const UpdateTab = () => {
 };
 
 // ---------- Video Script ----------
-const VideoTab = () => {
+const VideoTab = ({ onGenerated }) => {
   const { toast } = useToast();
+  const paywall = usePaywallHandler();
   const [form, setForm] = useState({ topic: '', platform: 'tiktok', duration_seconds: 30, tone: 'energetic' });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -391,8 +405,9 @@ const VideoTab = () => {
     try {
       const r = await axios.post(`${API}/ai/generate-video-script`, form, { withCredentials: true });
       setResult(r.data);
+      onGenerated?.();
     } catch (e) {
-      toast({ title: 'Generation failed' });
+      if (!paywall(e)) toast({ title: 'Generation failed' });
     } finally {
       setLoading(false);
     }
@@ -519,8 +534,9 @@ const PLATFORM_OPTIONS = [
 const platformLimit = (p) => PLATFORM_OPTIONS.find((o) => o.id === p)?.chars || 2000;
 const platformLabel = (p) => PLATFORM_OPTIONS.find((o) => o.id === p)?.label || p;
 
-const MultiTab = () => {
+const MultiTab = ({ onGenerated }) => {
   const { toast } = useToast();
+  const paywall = usePaywallHandler();
   const navigate = useNavigate();
   const [form, setForm] = useState({ listing: '', tone: 'friendly' });
   const [platforms, setPlatforms] = useState({ instagram: true, x: true, linkedin: true });
@@ -538,8 +554,9 @@ const MultiTab = () => {
     try {
       const r = await axios.post(`${API}/ai/multi-post`, { listing: form.listing, platforms: selected, tone: form.tone }, { withCredentials: true });
       setResult(r.data);
+      onGenerated?.();
     } catch (e) {
-      toast({ title: 'Generation failed' });
+      if (!paywall(e)) toast({ title: 'Generation failed' });
     } finally {
       setLoading(false);
     }
