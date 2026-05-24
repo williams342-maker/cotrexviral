@@ -913,7 +913,8 @@ async def performance_overview(request: Request, range: str = "24h"):
     is_hourly = range in ("24h", "48h")
     labels = []
     now = datetime.now(timezone.utc)
-    for i in range(points):
+    import builtins as _b
+    for i in _b.range(points):
         labels.append(
             (now - timedelta(hours=points - 1 - i)).strftime("%I%p").lstrip("0").lower()
             if is_hourly

@@ -5,7 +5,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import {
   Loader2, Calendar as CalIcon, ChevronLeft, ChevronRight,
   Instagram, Twitter, Facebook, Linkedin, Youtube, Plus, X as XIcon,
-  Sparkles, GripVertical, Zap,
+  Sparkles, GripVertical, Zap, MousePointerSquareDashed, Trash2, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
@@ -36,6 +36,13 @@ const MarketingCalendar = () => {
   const [niche, setNiche] = useState('');
   const [dropTarget, setDropTarget] = useState(null);
   const [dragging, setDragging] = useState(null);
+
+  // Lasso / multi-select state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [lasso, setLasso] = useState(null); // {x0,y0,x1,y1} in grid-local coords
+  const gridRef = React.useRef(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const range = useMemo(() => {
     const start = new Date(cursor);
@@ -141,6 +148,107 @@ const MarketingCalendar = () => {
     } catch (e) {}
   };
 
+  // --- Lasso multi-select handlers (active only in selectMode) ---
+  const toggleSelectMode = () => {
+    setSelectMode((m) => !m);
+    setSelectedIds(new Set());
+    setLasso(null);
+  };
+
+  const togglePostSelection = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const onGridMouseDown = (e) => {
+    if (!selectMode) return;
+    // ignore if click started on a post chip
+    if (e.target.closest('[data-post-chip]')) return;
+    const rect = gridRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left + gridRef.current.scrollLeft;
+    const y = e.clientY - rect.top + gridRef.current.scrollTop;
+    setLasso({ x0: x, y0: y, x1: x, y1: y });
+    if (!e.shiftKey) setSelectedIds(new Set());
+  };
+
+  const onGridMouseMove = (e) => {
+    if (!selectMode || !lasso) return;
+    const rect = gridRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left + gridRef.current.scrollLeft;
+    const y = e.clientY - rect.top + gridRef.current.scrollTop;
+    const newLasso = { ...lasso, x1: x, y1: y };
+    setLasso(newLasso);
+
+    // compute selection
+    const minX = Math.min(newLasso.x0, x);
+    const maxX = Math.max(newLasso.x0, x);
+    const minY = Math.min(newLasso.y0, y);
+    const maxY = Math.max(newLasso.y0, y);
+    const gridRect = gridRef.current.getBoundingClientRect();
+    const chips = gridRef.current.querySelectorAll('[data-post-chip]');
+    const hits = new Set(selectedIds);
+    chips.forEach((el) => {
+      const r = el.getBoundingClientRect();
+      const elX0 = r.left - gridRect.left + gridRef.current.scrollLeft;
+      const elY0 = r.top - gridRect.top + gridRef.current.scrollTop;
+      const elX1 = elX0 + r.width;
+      const elY1 = elY0 + r.height;
+      const intersects = elX0 < maxX && elX1 > minX && elY0 < maxY && elY1 > minY;
+      const id = el.getAttribute('data-post-id');
+      if (intersects) hits.add(id);
+    });
+    setSelectedIds(hits);
+  };
+
+  const onGridMouseUp = () => {
+    if (!selectMode) return;
+    setLasso(null);
+  };
+
+  const shiftSelected = async (deltaDays) => {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    const ids = Array.from(selectedIds);
+    const updates = ids.map((id) => {
+      const p = posts.find((x) => x.id === id);
+      if (!p) return null;
+      const newAt = new Date(p.scheduled_at);
+      newAt.setDate(newAt.getDate() + deltaDays);
+      if (newAt < today) return null;
+      return axios.patch(
+        `${API}/posts/scheduled/${id}`,
+        { scheduled_at: newAt.toISOString() },
+        { withCredentials: true }
+      ).catch(() => null);
+    }).filter(Boolean);
+    const results = await Promise.all(updates);
+    const ok = results.filter((r) => r && r.status === 200).length;
+    toast({ title: `Shifted ${ok} post${ok === 1 ? '' : 's'} by ${deltaDays > 0 ? '+' : ''}${deltaDays} day${Math.abs(deltaDays) === 1 ? '' : 's'}` });
+    setSelectedIds(new Set());
+    setBulkBusy(false);
+    load();
+  };
+
+  const cancelSelected = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    const ids = Array.from(selectedIds);
+    const results = await Promise.all(
+      ids.map((id) =>
+        axios.delete(`${API}/posts/scheduled/${id}`, { withCredentials: true }).catch(() => null)
+      )
+    );
+    const ok = results.filter((r) => r && r.status === 200).length;
+    toast({ title: `Cancelled ${ok} post${ok === 1 ? '' : 's'}` });
+    setSelectedIds(new Set());
+    setBulkBusy(false);
+    load();
+  };
+
   const onDragStart = (post, fromPlatform) => (e) => {
     setDragging({ post, fromPlatform });
     e.dataTransfer.effectAllowed = 'move';
@@ -204,6 +312,17 @@ const MarketingCalendar = () => {
         <div className="flex items-center gap-2">
           <Input value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="Your niche (optional, helps AI)" className="h-9 w-56 rounded-lg border-neutral-300 text-[13px]" />
           <button
+            onClick={toggleSelectMode}
+            data-testid="calendar-select-mode-btn"
+            className={`inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-[13px] font-medium border transition-colors ${
+              selectMode ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'
+            }`}
+            title="Lasso-select multiple posts for bulk actions"
+          >
+            <MousePointerSquareDashed size={13} />
+            {selectMode ? 'Done selecting' : 'Bulk select'}
+          </button>
+          <button
             onClick={showOptimal ? () => setShowOptimal(false) : fetchOptimal}
             disabled={loadingOptimal}
             className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-[13px] font-medium border transition-colors ${
@@ -230,7 +349,19 @@ const MarketingCalendar = () => {
       {loading ? (
         <div className="text-center py-12"><Loader2 className="animate-spin text-[#1B7BFF] mx-auto" /></div>
       ) : (
-        <div className="bg-white rounded-3xl border border-neutral-200/70 overflow-x-auto">
+        <div className="bg-white rounded-3xl border border-neutral-200/70 overflow-x-auto relative" ref={gridRef} onMouseDown={onGridMouseDown} onMouseMove={onGridMouseMove} onMouseUp={onGridMouseUp} onMouseLeave={onGridMouseUp} style={{ userSelect: selectMode ? 'none' : 'auto', cursor: selectMode ? 'crosshair' : 'default' }}>
+          {lasso && (
+            <div
+              data-testid="calendar-lasso-rect"
+              className="absolute bg-amber-200/30 border-2 border-dashed border-amber-500 pointer-events-none z-10 rounded"
+              style={{
+                left: Math.min(lasso.x0, lasso.x1),
+                top: Math.min(lasso.y0, lasso.y1),
+                width: Math.abs(lasso.x1 - lasso.x0),
+                height: Math.abs(lasso.y1 - lasso.y0),
+              }}
+            />
+          )}
           <div className="min-w-[900px]">
             {/* Header row */}
             <div className="grid border-b border-neutral-200/70" style={{ gridTemplateColumns: `120px repeat(${days.length}, minmax(0, 1fr))` }}>
@@ -291,25 +422,47 @@ const MarketingCalendar = () => {
                           </button>
                         )}
 
-                        {cellPosts.map((post) => (
+                        {cellPosts.map((post) => {
+                          const isSelected = selectedIds.has(post.id);
+                          return (
                           <div
                             key={post.id}
-                            draggable
-                            onDragStart={onDragStart(post, p.id)}
+                            data-post-chip
+                            data-post-id={post.id}
+                            draggable={!selectMode}
+                            onDragStart={selectMode ? undefined : onDragStart(post, p.id)}
                             onDragEnd={() => { setDragging(null); setDropTarget(null); }}
-                            className="mb-1 px-2 py-1.5 rounded-md bg-[#1B7BFF]/10 border border-[#1B7BFF]/20 text-[11px] cursor-move group/post hover:bg-[#1B7BFF]/15 transition-colors"
-                            title="Drag to reschedule"
+                            onClick={selectMode ? (e) => { e.stopPropagation(); togglePostSelection(post.id); } : undefined}
+                            className={`mb-1 px-2 py-1.5 rounded-md border text-[11px] group/post transition-colors ${
+                              isSelected
+                                ? 'bg-amber-100 border-amber-400 ring-2 ring-amber-300 cursor-pointer'
+                                : selectMode
+                                  ? 'bg-[#1B7BFF]/10 border-[#1B7BFF]/20 hover:bg-amber-50 hover:border-amber-300 cursor-pointer'
+                                  : 'bg-[#1B7BFF]/10 border-[#1B7BFF]/20 cursor-move hover:bg-[#1B7BFF]/15'
+                            }`}
+                            title={selectMode ? 'Click to (de)select' : 'Drag to reschedule'}
                           >
                             <div className="flex items-start gap-1">
-                              <GripVertical size={10} className="text-[#1B7BFF]/50 mt-0.5 shrink-0" />
-                              <span className="line-clamp-2 flex-1 text-[#1B7BFF] font-medium">{post.content.slice(0, 40)}</span>
-                              <button onClick={(e) => { e.stopPropagation(); cancelPost(post.id); }} className="opacity-0 group-hover/post:opacity-100 text-rose-500"><XIcon size={10} /></button>
+                              {!selectMode && <GripVertical size={10} className="text-[#1B7BFF]/50 mt-0.5 shrink-0" />}
+                              {selectMode && (
+                                <input
+                                  type="checkbox"
+                                  readOnly
+                                  checked={isSelected}
+                                  className="mt-0.5 w-3 h-3 accent-amber-500 shrink-0 pointer-events-none"
+                                />
+                              )}
+                              <span className={`line-clamp-2 flex-1 font-medium ${isSelected ? 'text-amber-900' : 'text-[#1B7BFF]'}`}>{post.content.slice(0, 40)}</span>
+                              {!selectMode && (
+                                <button onClick={(e) => { e.stopPropagation(); cancelPost(post.id); }} className="opacity-0 group-hover/post:opacity-100 text-rose-500"><XIcon size={10} /></button>
+                              )}
                             </div>
-                            <span className="inline-block mt-0.5 text-[9px] uppercase tracking-wider font-semibold text-[#1B7BFF]/70">
+                            <span className={`inline-block mt-0.5 text-[9px] uppercase tracking-wider font-semibold ${isSelected ? 'text-amber-700' : 'text-[#1B7BFF]/70'}`}>
                               {new Date(post.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </div>
-                        ))}
+                          );
+                        })}
 
                         {!isPast && cellPosts.length === 0 && (
                           <button
@@ -332,6 +485,7 @@ const MarketingCalendar = () => {
 
       <div className="mt-4 flex flex-wrap items-center gap-4 text-[12px] text-neutral-500">
         <div className="flex items-center gap-1.5"><GripVertical size={12} /> Drag a post to a new day or channel to reschedule</div>
+        <div className="flex items-center gap-1.5"><MousePointerSquareDashed size={12} className="text-amber-600" /> Toggle "Bulk select" then lasso-drag to pick multiple posts for shift/cancel</div>
         {showOptimal && <div className="flex items-center gap-1.5"><Sparkles size={12} className="text-violet-600" /> Violet badges show AI-recommended posting hours</div>}
       </div>
 
@@ -343,6 +497,67 @@ const MarketingCalendar = () => {
           onClose={() => setComposing(null)}
           onCreated={() => { setComposing(null); load(); }}
         />
+      )}
+
+      {selectMode && selectedIds.size > 0 && (
+        <div
+          data-testid="calendar-bulk-action-bar"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-neutral-900 text-white rounded-2xl shadow-2xl px-4 py-3 flex items-center gap-3 border border-neutral-700"
+        >
+          <span className="text-[13px] font-semibold pr-2 border-r border-neutral-700">
+            {selectedIds.size} selected
+          </span>
+          <button
+            onClick={() => shiftSelected(-7)}
+            disabled={bulkBusy}
+            data-testid="bulk-shift-minus-week"
+            className="inline-flex items-center gap-1 text-[12px] font-medium px-2.5 h-8 rounded-lg hover:bg-neutral-800 disabled:opacity-50"
+            title="Shift selected −7 days"
+          >
+            <ChevronsLeft size={12} /> −1w
+          </button>
+          <button
+            onClick={() => shiftSelected(-1)}
+            disabled={bulkBusy}
+            data-testid="bulk-shift-minus-day"
+            className="inline-flex items-center gap-1 text-[12px] font-medium px-2.5 h-8 rounded-lg hover:bg-neutral-800 disabled:opacity-50"
+          >
+            <ChevronLeft size={12} /> −1d
+          </button>
+          <button
+            onClick={() => shiftSelected(1)}
+            disabled={bulkBusy}
+            data-testid="bulk-shift-plus-day"
+            className="inline-flex items-center gap-1 text-[12px] font-medium px-2.5 h-8 rounded-lg hover:bg-neutral-800 disabled:opacity-50"
+          >
+            +1d <ChevronRight size={12} />
+          </button>
+          <button
+            onClick={() => shiftSelected(7)}
+            disabled={bulkBusy}
+            data-testid="bulk-shift-plus-week"
+            className="inline-flex items-center gap-1 text-[12px] font-medium px-2.5 h-8 rounded-lg hover:bg-neutral-800 disabled:opacity-50"
+          >
+            +1w <ChevronsRight size={12} />
+          </button>
+          <div className="w-px h-5 bg-neutral-700" />
+          <button
+            onClick={cancelSelected}
+            disabled={bulkBusy}
+            data-testid="bulk-cancel-btn"
+            className="inline-flex items-center gap-1 text-[12px] font-medium px-2.5 h-8 rounded-lg bg-rose-600 hover:bg-rose-500 disabled:opacity-50"
+          >
+            {bulkBusy ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Cancel
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            disabled={bulkBusy}
+            data-testid="bulk-clear-btn"
+            className="text-[12px] font-medium px-2.5 h-8 rounded-lg hover:bg-neutral-800 text-neutral-400"
+          >
+            Clear
+          </button>
+        </div>
       )}
     </DashboardLayout>
   );

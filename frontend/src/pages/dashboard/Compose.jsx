@@ -6,7 +6,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import { Textarea } from '../../components/ui/textarea';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Sparkles, Send, Loader2, AlertTriangle } from 'lucide-react';
+import { Sparkles, Send, Loader2, AlertTriangle, Wand2 } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 
 const PLATFORM_LIMITS = {
@@ -28,6 +28,8 @@ const Compose = () => {
   const [channels, setChannels] = useState([]);
   const [hashtags, setHashtags] = useState([]);
   const [scheduleAt, setScheduleAt] = useState('');
+  const [suggestingTime, setSuggestingTime] = useState(false);
+  const [aiTimeMeta, setAiTimeMeta] = useState(null); // { platform, day, hour }
 
   useEffect(() => {
     axios.get(`${API}/channels`, { withCredentials: true })
@@ -60,6 +62,40 @@ const Compose = () => {
     }
   };
 
+  const suggestOptimalTime = async () => {
+    const platforms = Object.keys(selected).filter((k) => selected[k]);
+    if (platforms.length !== 1) {
+      toast({ title: 'Select exactly one channel for an AI time suggestion' });
+      return;
+    }
+    setSuggestingTime(true);
+    try {
+      const r = await axios.post(
+        `${API}/ai/optimal-times`,
+        { platforms },
+        { withCredentials: true }
+      );
+      const slot = (r.data.slots?.[platforms[0]] || [])[0];
+      if (!slot) {
+        toast({ title: 'No suggestion available' });
+        return;
+      }
+      const d = new Date(slot.datetime);
+      const pad = (n) => String(n).padStart(2, '0');
+      const local = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      setScheduleAt(local);
+      setAiTimeMeta({ platform: platforms[0], day: slot.day, hour: slot.hour });
+      toast({
+        title: `AI suggests ${d.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
+        description: `Next best slot for ${platforms[0]}`,
+      });
+    } catch (e) {
+      toast({ title: 'Could not fetch AI optimal time' });
+    } finally {
+      setSuggestingTime(false);
+    }
+  };
+
   const publish = async () => {
     const platforms = Object.keys(selected).filter((k) => selected[k]);
     if (!content.trim() || platforms.length === 0) {
@@ -87,12 +123,15 @@ const Compose = () => {
       setTopic('');
       setHashtags([]);
       setScheduleAt('');
+      setAiTimeMeta(null);
     } catch (e) {
       toast({ title: 'Publishing failed' });
     } finally {
       setPublishing(false);
     }
   };
+
+  const singleChannelSelected = Object.values(selected).filter(Boolean).length === 1;
 
   return (
     <DashboardLayout title="Compose & Publish" subtitle="Generate a post with AI, pick your channels, and push it live.">
@@ -178,13 +217,39 @@ const Compose = () => {
               </label>
             ))}
           </div>
-          <button onClick={publish} disabled={publishing} className="mt-5 w-full inline-flex items-center justify-center gap-2 bg-[#1B7BFF] hover:bg-[#1668e0] text-white text-[14px] font-medium h-11 rounded-xl disabled:opacity-60">
+          <button onClick={publish} disabled={publishing} className="mt-5 w-full inline-flex items-center justify-center gap-2 bg-[#1B7BFF] hover:bg-[#1668e0] text-white text-[14px] font-medium h-11 rounded-xl disabled:opacity-60" data-testid="compose-publish-btn">
             {publishing ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
             {publishing ? (scheduleAt ? 'Scheduling…' : 'Publishing…') : (scheduleAt ? 'Schedule' : 'Publish now')}
           </button>
           <div className="mt-3">
-            <label className="text-[11.5px] font-medium text-neutral-600 mb-1 block">Schedule for later (optional)</label>
-            <Input type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} className="h-10 rounded-xl border-neutral-300 text-[13px]" />
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[11.5px] font-medium text-neutral-600 block">Schedule for later (optional)</label>
+              {singleChannelSelected && (
+                <button
+                  type="button"
+                  onClick={suggestOptimalTime}
+                  disabled={suggestingTime}
+                  data-testid="compose-ai-time-btn"
+                  className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-violet-700 hover:text-violet-900 disabled:opacity-60"
+                  title="Auto-pick the next best posting slot from AI"
+                >
+                  {suggestingTime ? <Loader2 size={10} className="animate-spin" /> : <Wand2 size={10} />}
+                  AI optimal time
+                </button>
+              )}
+            </div>
+            <Input
+              type="datetime-local"
+              value={scheduleAt}
+              onChange={(e) => { setScheduleAt(e.target.value); setAiTimeMeta(null); }}
+              className="h-10 rounded-xl border-neutral-300 text-[13px]"
+              data-testid="compose-schedule-input"
+            />
+            {aiTimeMeta && (
+              <div className="mt-1 inline-flex items-center gap-1 text-[10.5px] text-violet-700 font-medium" data-testid="compose-ai-time-meta">
+                <Sparkles size={9} /> Picked by AI · {aiTimeMeta.day} {aiTimeMeta.hour}:00 (best for {aiTimeMeta.platform})
+              </div>
+            )}
           </div>
           <p className="mt-3 text-[11.5px] text-neutral-500 text-center">MOCKED: posts are stored in your feed/calendar, not pushed to live platforms.</p>
         </div>

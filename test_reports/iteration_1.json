@@ -1,0 +1,37 @@
+{
+  "summary": "End-to-end testing of scheduling endpoints, AI optimal-times, Performance overview, Activity/Performance/Calendar pages, lasso bulk-select on Marketing Calendar, and AI optimal-time button on Compose. Backend 9/9 pass after a runtime bug fix in performance_overview. Frontend lasso flow, bulk action bar (-1w/-1d/+1d/+1w/Cancel/Clear), AI time autofill + meta clear-on-edit, and channel-count visibility logic all verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/performance/overview", "issue": "FIXED during test run: `range` URL parameter shadowed Python builtin `range()` inside the for-loop, causing every call to return 500 'TypeError: str object is not callable'. Patched by importing builtins as _b and using _b.range(points)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_scheduling_and_optimal.py",
+    "/app/test_reports/pytest/scheduling_results.xml"
+  ],
+  "action_items": [
+    "Review the small fix applied in /app/backend/server.py performance_overview() (alias `import builtins as _b; _b.range(points)`); consider renaming the route query param from `range` to `period` to permanently avoid builtin shadowing."
+  ],
+  "critical_code_review_comments": [
+    "performance_overview / performance_sources / performance_pages all accept a `range: str` query parameter which shadows the Python builtin. performance_sources and performance_pages don't use range() inside, so they happen to work, but rename to `period` for safety and clarity.",
+    "list_scheduled does not validate ISO format and will raise 500 on malformed start/end strings. Consider try/except → 400.",
+    "OPTIMAL_BASE only covers a fixed set of platforms; unknown platforms fall back to a 2-slot default. Consider documenting or extending."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (performance_overview range-shadow fix)",
+    "/app/backend/tests/test_scheduling_and_optimal.py (new test file, 9 tests)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (lasso toggle, chip select, action-bar visible, +1d shift persisted DB, AI time fill + meta, manual-edit clears meta, 0-channels hides button)"},
+  "test_credentials": "Backend Bearer: test_session_1779636592168 / user_test1779636592168 (test@automatex.dev). Frontend: same token injected as session_token cookie (samesite=None, secure=True).",
+  "seed_data_creation": "Seeded user (user_test1779636592168), session token, 1 connected instagram channel, and 3 scheduled posts (sched-1/2/3 spanning day+1..day+3). Posts cleaned post-test; user/session/channel kept for future regression runs.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Test user user_test1779636592168 with session_token test_session_1779636592168 still exists in test_database along with an instagram channel. Re-seed scheduled posts before re-testing calendar lasso flows. Backend pytest suite at /app/backend/tests/test_scheduling_and_optimal.py is the canonical regression test for the 4 scheduling endpoints + AI optimal times + performance overview.",
+  "rca of the issue": "GET /api/performance/overview returned HTTP 500. Backend stack trace showed `TypeError: 'str' object is not callable` at `for i in range(points)`. Root cause: the FastAPI endpoint signature accepts `range: str = '24h'` which rebinds the name `range` inside the function scope, so the call `range(points)` invoked the string. Mitigation applied: imported builtins as _b and used _b.range(points). Long-term fix recommended: rename the query parameter to `period` (or `time_range`) across performance_* endpoints and update Performance.jsx accordingly."
+}
