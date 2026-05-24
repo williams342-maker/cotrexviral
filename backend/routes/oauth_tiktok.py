@@ -40,6 +40,7 @@ from core import (
     PUBLIC_SITE_URL,
     TIKTOK_CLIENT_KEY,
     TIKTOK_CLIENT_SECRET,
+    TIKTOK_REDIRECT_URI_OVERRIDE,
 )
 from deps import get_current_user
 
@@ -57,7 +58,25 @@ TIKTOK_SCOPES = ["user.info.basic", "video.publish"]
 
 
 def _redirect_uri() -> str:
+    """Returns the redirect URI registered with TikTok.
+
+    Priority:
+      1. TIKTOK_REDIRECT_URI env var (override — useful for preview-pod testing).
+      2. PUBLIC_SITE_URL + /api/oauth/tiktok/callback (production default).
+    """
+    if TIKTOK_REDIRECT_URI_OVERRIDE:
+        return TIKTOK_REDIRECT_URI_OVERRIDE
     return f"{PUBLIC_SITE_URL}/api/oauth/tiktok/callback"
+
+
+def _post_oauth_redirect(query: str) -> str:
+    """Where to send the browser after the callback finishes.
+
+    Uses the host of the redirect URI itself so the user lands on the same
+    domain they started the OAuth flow from (preview pod or production).
+    """
+    base = _redirect_uri().split("/api/oauth/tiktok/callback")[0]
+    return f"{base}/dashboard/channels?{query}"
 
 
 def _check_configured():
@@ -105,7 +124,7 @@ async def tiktok_oauth_callback(
     if error:
         logger.info("TikTok callback denied: %s — %s", error, error_description)
         return RedirectResponse(
-            url=f"{PUBLIC_SITE_URL}/dashboard/channels?tiktok=denied",
+            url=_post_oauth_redirect("tiktok=denied"),
             status_code=302,
         )
     if not code or not state:
@@ -185,7 +204,7 @@ async def tiktok_oauth_callback(
     )
 
     return RedirectResponse(
-        url=f"{PUBLIC_SITE_URL}/dashboard/channels?tiktok=connected",
+        url=_post_oauth_redirect("tiktok=connected"),
         status_code=302,
     )
 

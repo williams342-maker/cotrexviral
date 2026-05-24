@@ -31,6 +31,10 @@ LINKEDIN_CLIENT_SECRET = os.environ.get("LINKEDIN_CLIENT_SECRET", "")
 # note: TikTok uses 'client_key' instead of 'client_id')
 TIKTOK_CLIENT_KEY = os.environ.get("TIKTOK_CLIENT_KEY", "")
 TIKTOK_CLIENT_SECRET = os.environ.get("TIKTOK_CLIENT_SECRET", "")
+# Optional: override the OAuth redirect URI (e.g. for preview-pod testing).
+# When set, it MUST exactly match one of the redirect URIs registered in the
+# TikTok app. When empty, we derive it from PUBLIC_SITE_URL.
+TIKTOK_REDIRECT_URI_OVERRIDE = os.environ.get("TIKTOK_REDIRECT_URI", "")
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
