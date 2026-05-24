@@ -75,9 +75,9 @@ const CVFooter = () => {
           <div className="md:col-span-2">
             <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-500 font-semibold mb-4">Legal</div>
             <ul className="space-y-2.5">
-              <li><a href="#" className="text-[13.5px] text-zinc-400 hover:text-white transition-colors">Privacy</a></li>
-              <li><a href="#" className="text-[13.5px] text-zinc-400 hover:text-white transition-colors">Terms</a></li>
-              <li><a href="#" className="text-[13.5px] text-zinc-400 hover:text-white transition-colors">Contact</a></li>
+              <li><Link to="/privacy" className="text-[13.5px] text-zinc-400 hover:text-white transition-colors">Privacy</Link></li>
+              <li><Link to="/terms" className="text-[13.5px] text-zinc-400 hover:text-white transition-colors">Terms</Link></li>
+              <li><a href="mailto:support@cortexviral.com" className="text-[13.5px] text-zinc-400 hover:text-white transition-colors">Contact</a></li>
             </ul>
           </div>
         </div>
