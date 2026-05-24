@@ -111,12 +111,18 @@ async def publish(payload: PublishRequest, request: Request):
     }
     await db.posts.insert_one(post)
 
-    # Immediate dispatch to live APIs (currently: LinkedIn only).
+    # Immediate dispatch to live APIs (currently: LinkedIn + TikTok).
     # Scheduled posts are picked up by the background scheduler instead.
     dispatch = {}
     if not is_scheduled and "linkedin" in (payload.platforms or []):
         from routes.oauth_linkedin import publish_to_linkedin  # lazy import (circular safe)
         dispatch["linkedin"] = await publish_to_linkedin(user.user_id, payload.content)
+    if not is_scheduled and "tiktok" in (payload.platforms or []):
+        from routes.oauth_tiktok import publish_to_tiktok  # lazy import (circular safe)
+        dispatch["tiktok"] = await publish_to_tiktok(
+            user.user_id, payload.content, payload.media_url,
+        )
+    if dispatch:
         await db.posts.update_one({"id": post["id"]}, {"$set": {"dispatch": dispatch}})
 
     return {

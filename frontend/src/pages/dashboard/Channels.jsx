@@ -80,36 +80,43 @@ const Channels = () => {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null);
   const [linkedInOAuth, setLinkedInOAuth] = useState({ configured: false, connected: false });
+  const [tiktokOAuth, setTiktokOAuth] = useState({ configured: false, connected: false });
   const { toast } = useToast();
 
   const load = async () => {
     setLoading(true);
     try {
-      const [cat, list, li] = await Promise.all([
+      const [cat, list, li, tt] = await Promise.all([
         axios.get(`${API}/channels/catalog`, { withCredentials: true }),
         axios.get(`${API}/channels`, { withCredentials: true }),
         axios.get(`${API}/oauth/linkedin/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
+        axios.get(`${API}/oauth/tiktok/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
       ]);
       setCatalog(cat.data);
       const map = {};
       list.data.forEach((c) => { map[c.platform] = c; });
       setStatusMap(map);
       setLinkedInOAuth(li.data);
+      setTiktokOAuth(tt.data);
     } catch (e) {}
     setLoading(false);
   };
 
   useEffect(() => { load(); }, []);
 
-  // Show a toast based on the ?linkedin=connected|denied query the OAuth callback redirects with.
+  // Show a toast based on the ?linkedin=... or ?tiktok=... query the OAuth callback redirects with.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const v = params.get('linkedin');
-    if (v === 'connected') toast({ title: 'LinkedIn connected!', description: 'Future posts to LinkedIn will publish live.' });
-    if (v === 'denied') toast({ title: 'LinkedIn connection cancelled' });
-    if (v) {
+    const li = params.get('linkedin');
+    const tt = params.get('tiktok');
+    if (li === 'connected') toast({ title: 'LinkedIn connected!', description: 'Future posts to LinkedIn will publish live.' });
+    if (li === 'denied') toast({ title: 'LinkedIn connection cancelled' });
+    if (tt === 'connected') toast({ title: 'TikTok connected!', description: 'Add a video URL to your posts to publish live.' });
+    if (tt === 'denied') toast({ title: 'TikTok connection cancelled' });
+    if (li || tt) {
       const url = new URL(window.location.href);
       url.searchParams.delete('linkedin');
+      url.searchParams.delete('tiktok');
       window.history.replaceState({}, '', url.toString());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -131,6 +138,16 @@ const Channels = () => {
           window.location.href = r.data.authorize_url;
           return; // navigation in progress — don't reset busy
         }
+      } else if (platform === 'tiktok' && tiktokOAuth.configured) {
+        if (tiktokOAuth.connected) {
+          await axios.delete(`${API}/oauth/tiktok`, { withCredentials: true });
+          toast({ title: 'Disconnected TikTok' });
+          await load();
+        } else {
+          const r = await axios.get(`${API}/oauth/tiktok/start`, { withCredentials: true });
+          window.location.href = r.data.authorize_url;
+          return; // navigation in progress
+        }
       } else if (ch?.connected) {
         await axios.post(`${API}/channels/disconnect`, { platform }, { withCredentials: true });
         toast({ title: `Disconnected from ${meta?.label || platform}` });
@@ -140,6 +157,8 @@ const Channels = () => {
           title: `Connected to ${meta?.label || platform}`,
           description: platform === 'linkedin'
             ? 'MOCKED — admin: set LINKEDIN_CLIENT_ID + LINKEDIN_CLIENT_SECRET in .env to enable real OAuth.'
+            : platform === 'tiktok'
+            ? 'MOCKED — admin: set TIKTOK_CLIENT_KEY + TIKTOK_CLIENT_SECRET in .env to enable real OAuth.'
             : 'MOCKED — no real OAuth in this demo.',
         });
       }
@@ -152,11 +171,16 @@ const Channels = () => {
   };
 
   const connectedCount = Object.values(statusMap).filter((c) => c.connected).length;
+  const liveOAuthCount = (linkedInOAuth.configured ? 1 : 0) + (tiktokOAuth.configured ? 1 : 0);
+  const liveOAuthLabel = [
+    linkedInOAuth.configured && 'LinkedIn',
+    tiktokOAuth.configured && 'TikTok',
+  ].filter(Boolean).join(' + ');
 
   return (
     <DashboardLayout
       title="Integrations"
-      subtitle={`Connect ${Object.keys(PLATFORM_META).length}+ platforms to publish, analyze, and grow.${linkedInOAuth.configured ? ' LinkedIn is live OAuth — other platforms are still mocked.' : ' All platforms are currently mocked.'}`}
+      subtitle={`Connect ${Object.keys(PLATFORM_META).length}+ platforms to publish, analyze, and grow.${liveOAuthCount > 0 ? ` ${liveOAuthLabel} ${liveOAuthCount > 1 ? 'are' : 'is'} live OAuth — other platforms are still mocked.` : ' All platforms are currently mocked.'}`}
     >
       <div className="flex items-center gap-3 mb-7 flex-wrap">
         <div className="px-4 py-2 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700 text-[13px] font-medium">
@@ -168,6 +192,11 @@ const Channels = () => {
         {linkedInOAuth.configured && (
           <div className="px-4 py-2 rounded-full bg-sky-50 border border-sky-200 text-sky-700 text-[13px] font-medium inline-flex items-center gap-1.5" data-testid="linkedin-live-oauth-badge">
             <span className="w-1.5 h-1.5 rounded-full bg-sky-500 cv-pulse" /> LinkedIn live OAuth
+          </div>
+        )}
+        {tiktokOAuth.configured && (
+          <div className="px-4 py-2 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-[13px] font-medium inline-flex items-center gap-1.5" data-testid="tiktok-live-oauth-badge">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 cv-pulse" /> TikTok live OAuth
           </div>
         )}
       </div>

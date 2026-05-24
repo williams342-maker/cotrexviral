@@ -27,6 +27,11 @@ PUBLIC_SITE_URL = os.environ.get("PUBLIC_SITE_URL", "https://cortexviral.com")
 LINKEDIN_CLIENT_ID = os.environ.get("LINKEDIN_CLIENT_ID", "")
 LINKEDIN_CLIENT_SECRET = os.environ.get("LINKEDIN_CLIENT_SECRET", "")
 
+# TikTok OAuth (filled by user after registering a TikTok Developer app —
+# note: TikTok uses 'client_key' instead of 'client_id')
+TIKTOK_CLIENT_KEY = os.environ.get("TIKTOK_CLIENT_KEY", "")
+TIKTOK_CLIENT_SECRET = os.environ.get("TIKTOK_CLIENT_SECRET", "")
+
 # --- Logging ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("automatex")

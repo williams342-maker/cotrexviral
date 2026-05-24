@@ -28,6 +28,7 @@ from routes import (  # noqa: F401
     health,      # depends on routes.scheduler internals; import after it
     seo,         # registers @app.get on root paths (/sitemap.xml etc.)
     oauth_linkedin,  # LinkedIn OAuth + live posting
+    oauth_tiktok,    # TikTok OAuth + Content Posting API
 )
 
 

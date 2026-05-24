@@ -52,12 +52,16 @@ async def _publish_due_posts_now() -> dict:
         {"$set": {"status": "published", "published_at": now, "publish_mode": "scheduler"}},
     )
 
-    # Dispatch to live platform APIs (currently: LinkedIn only).
-    # Lazy import to avoid a circular dependency with routes.oauth_linkedin.
+    # Dispatch to live platform APIs (currently: LinkedIn + TikTok).
+    # Lazy import to avoid a circular dependency with route modules.
     try:
         from routes.oauth_linkedin import publish_to_linkedin
     except Exception:  # pragma: no cover
         publish_to_linkedin = None
+    try:
+        from routes.oauth_tiktok import publish_to_tiktok
+    except Exception:  # pragma: no cover
+        publish_to_tiktok = None
 
     for post in due:
         platforms = post.get("platforms") or []
@@ -69,6 +73,14 @@ async def _publish_due_posts_now() -> dict:
             )
             if not res.get("ok"):
                 logger.warning("scheduler: linkedin dispatch failed for %s: %s", post["id"], res.get("reason"))
+        if "tiktok" in platforms and publish_to_tiktok:
+            res = await publish_to_tiktok(post["user_id"], post["content"], post.get("media_url"))
+            await db.posts.update_one(
+                {"id": post["id"]},
+                {"$set": {"dispatch.tiktok": res}},
+            )
+            if not res.get("ok"):
+                logger.warning("scheduler: tiktok dispatch failed for %s: %s", post["id"], res.get("reason"))
 
     return {"due": len(due), "published": result.modified_count, "ids": ids}
 
