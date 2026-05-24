@@ -35,7 +35,12 @@ async def get_current_user(request: Request) -> User:
     if not user_doc:
         raise HTTPException(status_code=401, detail="User not found")
 
-    user_doc.setdefault("is_admin", user_doc.get("email", "").lower() in ADMIN_EMAILS)
+    # Always re-evaluate admin: DB-flagged OR email is in ADMIN_EMAILS env var.
+    # This way: (a) promoting via /admin sticks (DB), and (b) adding an email to
+    # the env allow-list takes effect on the very next request — no re-login,
+    # no DB migration required.
+    email = (user_doc.get("email") or "").lower()
+    user_doc["is_admin"] = bool(user_doc.get("is_admin", False) or email in ADMIN_EMAILS)
     user_doc.setdefault("status", "active")
 
     if user_doc.get("status") == "suspended":
