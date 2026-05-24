@@ -6,7 +6,7 @@ import React from 'react';
  */
 const sizeMap = { sm: 28, md: 40, lg: 64, xl: 96 };
 
-const CVLogo = ({ size = 'md', withWordmark = false, className = '', wordmarkClass = '' }) => {
+const CVLogo = ({ size = 'md', withWordmark = false, className = '', wordmarkClass = '', priority = false }) => {
   const px = sizeMap[size] || size;
   return (
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
@@ -24,8 +24,13 @@ const CVLogo = ({ size = 'md', withWordmark = false, className = '', wordmarkCla
         <img
           src="/cortex-logo.png"
           alt="CortexViral"
+          width={px}
+          height={px}
           className="relative w-full h-full object-contain"
           draggable={false}
+          decoding="async"
+          loading={priority ? 'eager' : 'lazy'}
+          fetchpriority={priority ? 'high' : 'auto'}
         />
       </span>
       {withWordmark && (

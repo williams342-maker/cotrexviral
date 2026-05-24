@@ -13,9 +13,9 @@ const productLinks = [
 
 const companyLinks = [
   { label: 'Agents', to: '/agents' },
+  { label: 'Pricing', to: '/pricing' },
   { label: 'Blog', to: '/blog' },
   { label: 'Dashboard', to: '/dashboard' },
-  { label: 'Pricing', to: '/#pricing' },
 ];
 
 const CVFooter = () => {

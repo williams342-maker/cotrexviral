@@ -8,7 +8,7 @@ import { Helmet } from 'react-helmet-async';
  * Usage:
  *   <CVSeo title="..." description="..." path="/foo" schema={{...}} />
  */
-const SITE = 'https://social-sync-ai-1.emergent.host';
+const SITE = 'https://cortexviral.com';
 const DEFAULT_OG = `${SITE}/cortex-logo.png`;
 
 const CVSeo = ({

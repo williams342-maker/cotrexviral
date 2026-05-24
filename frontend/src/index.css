@@ -1,3 +1,5 @@
+/* Fonts: Space Grotesk + Inter are preloaded in index.html (LCP hint). The link
+   tag in index.html loads the same Google Fonts URL — browsers dedupe. */
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
 
 @tailwind base;

@@ -106,7 +106,7 @@ const CVHero = ({ onGetStarted }) => {
               background: 'radial-gradient(circle, rgba(124,58,237,.35), rgba(6,182,212,.18) 50%, transparent 70%)',
               filter: 'blur(40px)',
             }} />
-            <CVLogo size={420} className="absolute inset-0 flex items-center justify-center" />
+            <CVLogo size={420} priority className="absolute inset-0 flex items-center justify-center" />
           </div>
 
           {/* Floating mini-dashboard card */}

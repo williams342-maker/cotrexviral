@@ -5,4 +5,4 @@ Disallow: /dashboard
 Disallow: /admin
 Disallow: /auth/
 
-Sitemap: https://social-sync-ai-1.emergent.host/api/seo/sitemap.xml
+Sitemap: https://cortexviral.com/api/seo/sitemap.xml

@@ -4,6 +4,8 @@ import { HelmetProvider } from 'react-helmet-async';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import Marketing from './pages/Marketing';
 import Agents from './pages/Agents';
+import Pricing from './pages/Pricing';
+import NicheToolPage from './pages/programmatic/NicheToolPage';
 import { TikTokGenerator, ViralIdeas, InstagramCaption, ShortFormVideo, ContentAutomation } from './pages/landing';
 import { BlogIndex, BlogPost } from './pages/blog/Blog';
 import AuthCallback from './pages/AuthCallback';
@@ -40,11 +42,13 @@ function AppRouter() {
       <Route path="/" element={<Marketing />} />
       <Route path="/marketing" element={<Marketing />} />
       <Route path="/agents" element={<Agents />} />
+      <Route path="/pricing" element={<Pricing />} />
       <Route path="/ai-tiktok-post-generator" element={<TikTokGenerator />} />
       <Route path="/viral-content-ideas-generator" element={<ViralIdeas />} />
       <Route path="/instagram-caption-ai-generator" element={<InstagramCaption />} />
       <Route path="/short-form-video-ideas-ai" element={<ShortFormVideo />} />
       <Route path="/content-automation-tool" element={<ContentAutomation />} />
+      <Route path="/tools/:slug" element={<NicheToolPage />} />
       <Route path="/blog" element={<BlogIndex />} />
       <Route path="/blog/:slug" element={<BlogPost />} />
       <Route path="/dashboard" element={<ProtectedRoute><Overview /></ProtectedRoute>} />

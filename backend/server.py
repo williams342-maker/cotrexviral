@@ -1601,10 +1601,11 @@ async def shutdown():
 # /sitemap.xml are caught by the frontend SPA fallback, so search engines
 # crawl the /api/seo aliases linked from the HTML head as fallback.
 
-SITE_URL = os.environ.get("PUBLIC_SITE_URL", "https://social-sync-ai-1.emergent.host")
+SITE_URL = os.environ.get("PUBLIC_SITE_URL", "https://cortexviral.com")
 
 SEO_LANDING_PATHS = [
     ("/", "1.0", "weekly"),
+    ("/pricing", "0.95", "weekly"),
     ("/ai-tiktok-post-generator", "0.9", "weekly"),
     ("/viral-content-ideas-generator", "0.9", "weekly"),
     ("/instagram-caption-ai-generator", "0.9", "weekly"),
@@ -1617,14 +1618,51 @@ SEO_LANDING_PATHS = [
     ("/blog/ai-tools-for-viral-content-creation", "0.7", "monthly"),
 ]
 
+# Programmatic SEO: 4 tools × 8 niches = 32 long-tail landing pages.
+# Must stay in sync with /app/frontend/src/pages/programmatic/data.js.
+_PROG_TOOLS = [
+    "instagram-caption-generator",
+    "tiktok-script-generator",
+    "viral-content-ideas",
+    "linkedin-post-generator",
+]
+_PROG_NICHES = [
+    "fitness-coaches",
+    "real-estate",
+    "saas-founders",
+    "e-commerce-brands",
+    "restaurants",
+    "beauty-creators",
+    "consultants",
+    "agencies",
+]
+for _t in _PROG_TOOLS:
+    for _n in _PROG_NICHES:
+        SEO_LANDING_PATHS.append((f"/tools/{_t}-for-{_n}", "0.6", "monthly"))
+
 
 def _build_sitemap_xml() -> str:
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     urls = "\n".join(
-        f"  <url>\n    <loc>{SITE_URL}{path}</loc>\n    <lastmod>{today}</lastmod>\n    <changefreq>{freq}</changefreq>\n    <priority>{priority}</priority>\n  </url>"
+        f"  <url>\n"
+        f"    <loc>{SITE_URL}{path}</loc>\n"
+        f"    <lastmod>{today}</lastmod>\n"
+        f"    <changefreq>{freq}</changefreq>\n"
+        f"    <priority>{priority}</priority>\n"
+        f"    <image:image>\n"
+        f"      <image:loc>{SITE_URL}/cortex-logo.png</image:loc>\n"
+        f"      <image:title>CortexViral — AI viral content generator</image:title>\n"
+        f"    </image:image>\n"
+        f"  </url>"
         for path, priority, freq in SEO_LANDING_PATHS
     )
-    return f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n{urls}\n</urlset>\n'
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"\n'
+        '        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n'
+        f"{urls}\n"
+        "</urlset>\n"
+    )
 
 
 def _build_robots_txt() -> str:

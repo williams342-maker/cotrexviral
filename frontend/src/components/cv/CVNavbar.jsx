@@ -9,7 +9,7 @@ const links = [
   { label: 'Pipeline', href: '#pipeline' },
   { label: 'Results', href: '#results' },
   { label: 'Agents', href: '/agents', external: true },
-  { label: 'Pricing', href: '#pricing' },
+  { label: 'Pricing', href: '/pricing', external: true },
 ];
 
 const CVNavbar = ({ onGetStarted }) => {
