@@ -1,591 +1,523 @@
-#!/usr/bin/env python3
-"""Backend API tests for Automatex"""
+"""
+Backend test suite for Admin and Support endpoints
+Tests all 27 test cases as specified in the review request
+"""
 import requests
 import json
-import time
-from typing import Dict, Any
+import sys
+from datetime import datetime
 
 # Configuration
 BASE_URL = "https://social-sync-ai-1.preview.emergentagent.com/api"
-SESSION_TOKEN = "test_session_1779636592168"
-USER_ID = "user_test1779636592168"
 
-# Test results
-results = {
-    "passed": [],
-    "failed": [],
-    "warnings": []
-}
+# Test user tokens (from MongoDB setup)
+ADMIN_TOKEN = "admin_session_1779639613774"
+U1_TOKEN = "u1_session_1779639613774"
+U2_TOKEN = "u2_session_1779639613774"
+ADMIN_ID = "user_admin1779639613774"
+U1_ID = "user_one1779639613774"
+U2_ID = "user_two1779639613774"
 
-def log_test(name: str, passed: bool, details: str = ""):
-    """Log test result"""
-    status = "✅ PASS" if passed else "❌ FAIL"
-    print(f"{status}: {name}")
-    if details:
-        print(f"  Details: {details}")
-    
-    if passed:
-        results["passed"].append(name)
-    else:
-        results["failed"].append({"test": name, "details": details})
+# Test results tracking
+passed = 0
+failed = 0
+test_results = []
 
-def log_warning(name: str, details: str):
-    """Log warning"""
-    print(f"⚠️  WARNING: {name}")
-    print(f"  Details: {details}")
-    results["warnings"].append({"test": name, "details": details})
-
-def test_health_check():
-    """Test GET /api/ - health check (no auth)"""
+def test(name, func):
+    """Run a test and track results"""
+    global passed, failed
     try:
-        r = requests.get(f"{BASE_URL}/", timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("app") == "Automatex" and data.get("status") == "ok":
-                log_test("Health check", True, f"Response: {data}")
-            else:
-                log_test("Health check", False, f"Unexpected response: {data}")
-        else:
-            log_test("Health check", False, f"Status {r.status_code}: {r.text}")
+        print(f"\n{'='*60}")
+        print(f"TEST: {name}")
+        print('='*60)
+        func()
+        print(f"✅ PASSED: {name}")
+        test_results.append({"name": name, "status": "PASSED", "error": None})
+        passed += 1
+    except AssertionError as e:
+        print(f"❌ FAILED: {name}")
+        print(f"   Error: {str(e)}")
+        test_results.append({"name": name, "status": "FAILED", "error": str(e)})
+        failed += 1
     except Exception as e:
-        log_test("Health check", False, f"Exception: {e}")
+        print(f"❌ ERROR: {name}")
+        print(f"   Exception: {str(e)}")
+        test_results.append({"name": name, "status": "ERROR", "error": str(e)})
+        failed += 1
 
-def test_auth_me_with_token():
-    """Test GET /api/auth/me with valid Bearer token"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        r = requests.get(f"{BASE_URL}/auth/me", headers=headers, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("user_id") == USER_ID and data.get("email") == "test@automatex.dev":
-                log_test("Auth /me with token", True, f"User: {data.get('name')}")
-            else:
-                log_test("Auth /me with token", False, f"Unexpected user data: {data}")
-        else:
-            log_test("Auth /me with token", False, f"Status {r.status_code}: {r.text}")
-    except Exception as e:
-        log_test("Auth /me with token", False, f"Exception: {e}")
-
-def test_auth_me_without_token():
-    """Test GET /api/auth/me without token (should 401)"""
-    try:
-        r = requests.get(f"{BASE_URL}/auth/me", timeout=10)
-        if r.status_code == 401:
-            log_test("Auth /me without token (401)", True, "Correctly rejected")
-        else:
-            log_test("Auth /me without token (401)", False, f"Expected 401, got {r.status_code}")
-    except Exception as e:
-        log_test("Auth /me without token (401)", False, f"Exception: {e}")
-
-def test_create_lead_public():
-    """Test POST /api/leads - public endpoint"""
-    try:
-        payload = {
-            "agent_id": "nova",
-            "email": "lead@test.com",
-            "website": "https://test.com",
-            "platforms": ["instagram"],
-            "pain_points": "no traffic"
-        }
-        r = requests.post(f"{BASE_URL}/leads", json=payload, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("ok") and data.get("id"):
-                log_test("Create lead (public)", True, f"Lead ID: {data.get('id')}")
-                return data.get("id")
-            else:
-                log_test("Create lead (public)", False, f"Unexpected response: {data}")
-        else:
-            log_test("Create lead (public)", False, f"Status {r.status_code}: {r.text}")
-    except Exception as e:
-        log_test("Create lead (public)", False, f"Exception: {e}")
-    return None
-
-def test_list_leads():
-    """Test GET /api/leads - auth required"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        r = requests.get(f"{BASE_URL}/leads", headers=headers, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if isinstance(data, list):
-                log_test("List leads", True, f"Found {len(data)} leads")
-            else:
-                log_test("List leads", False, f"Expected list, got: {type(data)}")
-        else:
-            log_test("List leads", False, f"Status {r.status_code}: {r.text}")
-    except Exception as e:
-        log_test("List leads", False, f"Exception: {e}")
-
-def test_seo_review():
-    """Test POST /api/ai/seo-review - real LLM call"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        payload = {"url": "https://example.com"}
-        print("  ⏳ Calling LLM for SEO review (may take 10-30s)...")
-        r = requests.post(f"{BASE_URL}/ai/seo-review", json=payload, headers=headers, timeout=60)
-        if r.status_code == 200:
-            data = r.json()
-            report = data.get("report", {})
-            if "score" in report and "strengths" in report and "issues" in report:
-                log_test("AI SEO Review", True, f"Score: {report.get('score')}, Issues: {len(report.get('issues', []))}")
-            else:
-                log_warning("AI SEO Review", f"Response structure unexpected: {list(report.keys())}")
-                log_test("AI SEO Review", True, "Endpoint works but response format may vary")
-        else:
-            log_test("AI SEO Review", False, f"Status {r.status_code}: {r.text}")
-    except requests.Timeout:
-        log_test("AI SEO Review", False, "Request timeout (>60s)")
-    except Exception as e:
-        log_test("AI SEO Review", False, f"Exception: {e}")
-
-def test_site_scan():
-    """Test POST /api/ai/site-scan - real LLM call"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        payload = {"url": "https://example.com"}
-        print("  ⏳ Calling LLM for site scan (may take 10-30s)...")
-        r = requests.post(f"{BASE_URL}/ai/site-scan", json=payload, headers=headers, timeout=60)
-        if r.status_code == 200:
-            data = r.json()
-            report = data.get("report", {})
-            if "summary" in report and "notable_items" in report:
-                log_test("AI Site Scan", True, f"Summary length: {len(report.get('summary', ''))}")
-            else:
-                log_warning("AI Site Scan", f"Response structure unexpected: {list(report.keys())}")
-                log_test("AI Site Scan", True, "Endpoint works but response format may vary")
-        else:
-            log_test("AI Site Scan", False, f"Status {r.status_code}: {r.text}")
-    except requests.Timeout:
-        log_test("AI Site Scan", False, "Request timeout (>60s)")
-    except Exception as e:
-        log_test("AI Site Scan", False, f"Exception: {e}")
-
-def test_insights():
-    """Test POST /api/ai/insights - real LLM call"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        payload = {"context": "I run a small SaaS for project managers"}
-        print("  ⏳ Calling LLM for insights (may take 10-30s)...")
-        r = requests.post(f"{BASE_URL}/ai/insights", json=payload, headers=headers, timeout=60)
-        if r.status_code == 200:
-            data = r.json()
-            insights = data.get("insights", {})
-            if isinstance(insights, dict) and ("insights" in insights or "trends" in insights):
-                log_test("AI Insights", True, f"Keys: {list(insights.keys())}")
-            else:
-                log_warning("AI Insights", f"Response structure unexpected: {data}")
-                log_test("AI Insights", True, "Endpoint works but response format may vary")
-        else:
-            log_test("AI Insights", False, f"Status {r.status_code}: {r.text}")
-    except requests.Timeout:
-        log_test("AI Insights", False, "Request timeout (>60s)")
-    except Exception as e:
-        log_test("AI Insights", False, f"Exception: {e}")
-
-def test_generate_post():
-    """Test POST /api/ai/generate-post - real LLM call"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        payload = {
-            "topic": "new product launch",
-            "platform": "instagram",
-            "tone": "friendly"
-        }
-        print("  ⏳ Calling LLM for post generation (may take 10-30s)...")
-        r = requests.post(f"{BASE_URL}/ai/generate-post", json=payload, headers=headers, timeout=60)
-        if r.status_code == 200:
-            data = r.json()
-            if "caption" in data and "hashtags" in data:
-                log_test("AI Generate Post", True, f"Caption length: {len(data.get('caption', ''))}")
-            else:
-                log_warning("AI Generate Post", f"Response structure unexpected: {list(data.keys())}")
-                log_test("AI Generate Post", True, "Endpoint works but response format may vary")
-        else:
-            log_test("AI Generate Post", False, f"Status {r.status_code}: {r.text}")
-    except requests.Timeout:
-        log_test("AI Generate Post", False, "Request timeout (>60s)")
-    except Exception as e:
-        log_test("AI Generate Post", False, f"Exception: {e}")
-
-def test_generate_newsletter():
-    """Test POST /api/ai/generate-newsletter - real LLM call"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        payload = {
-            "topic": "Spring product launch",
-            "audience": "loyal customers",
-            "tone": "friendly",
-            "sections": 3
-        }
-        print("  ⏳ Calling LLM for newsletter generation (may take 10-30s)...")
-        r = requests.post(f"{BASE_URL}/ai/generate-newsletter", json=payload, headers=headers, timeout=60)
-        if r.status_code == 200:
-            data = r.json()
-            required_keys = ["subject", "preheader", "intro", "sections", "cta", "ps"]
-            if all(k in data for k in required_keys):
-                if isinstance(data.get("sections"), list) and len(data["sections"]) > 0:
-                    section = data["sections"][0]
-                    if "heading" in section and "body" in section:
-                        log_test("AI Generate Newsletter", True, f"Subject: {data.get('subject')[:50]}...")
-                    else:
-                        log_test("AI Generate Newsletter", False, f"Section missing heading/body: {section}")
-                else:
-                    log_test("AI Generate Newsletter", False, f"Sections not a list or empty: {data.get('sections')}")
-            else:
-                missing = [k for k in required_keys if k not in data]
-                log_test("AI Generate Newsletter", False, f"Missing keys: {missing}. Got: {list(data.keys())}")
-        else:
-            log_test("AI Generate Newsletter", False, f"Status {r.status_code}: {r.text}")
-    except requests.Timeout:
-        log_test("AI Generate Newsletter", False, "Request timeout (>60s)")
-    except Exception as e:
-        log_test("AI Generate Newsletter", False, f"Exception: {e}")
-
-def test_generate_content():
-    """Test POST /api/ai/generate-content - real LLM call"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        payload = {
-            "topic": "How to choose a yoga mat",
-            "keywords": ["yoga", "sustainable"],
-            "tone": "professional",
-            "length": "short"
-        }
-        print("  ⏳ Calling LLM for blog content generation (may take 10-30s)...")
-        r = requests.post(f"{BASE_URL}/ai/generate-content", json=payload, headers=headers, timeout=60)
-        if r.status_code == 200:
-            data = r.json()
-            required_keys = ["title", "meta_description", "slug", "outline", "intro", "sections", "conclusion", "tags", "estimated_read_minutes"]
-            if all(k in data for k in required_keys):
-                log_test("AI Generate Content", True, f"Title: {data.get('title')[:50]}...")
-            else:
-                missing = [k for k in required_keys if k not in data]
-                log_test("AI Generate Content", False, f"Missing keys: {missing}. Got: {list(data.keys())}")
-        else:
-            log_test("AI Generate Content", False, f"Status {r.status_code}: {r.text}")
-    except requests.Timeout:
-        log_test("AI Generate Content", False, "Request timeout (>60s)")
-    except Exception as e:
-        log_test("AI Generate Content", False, f"Exception: {e}")
-
-def test_generate_update():
-    """Test POST /api/ai/generate-update - real LLM call"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        payload = {
-            "product": "Automatex v2.4",
-            "changes": "- New AI insights tab\n- Faster loads\n- Login bug fix",
-            "tone": "friendly"
-        }
-        print("  ⏳ Calling LLM for update generation (may take 10-30s)...")
-        r = requests.post(f"{BASE_URL}/ai/generate-update", json=payload, headers=headers, timeout=60)
-        if r.status_code == 200:
-            data = r.json()
-            required_keys = ["headline", "subheadline", "highlights", "social_post", "email_subject", "email_body"]
-            if all(k in data for k in required_keys):
-                if isinstance(data.get("highlights"), list) and len(data["highlights"]) > 0:
-                    highlight = data["highlights"][0]
-                    if "title" in highlight and "desc" in highlight:
-                        log_test("AI Generate Update", True, f"Headline: {data.get('headline')[:50]}...")
-                    else:
-                        log_test("AI Generate Update", False, f"Highlight missing title/desc: {highlight}")
-                else:
-                    log_test("AI Generate Update", False, f"Highlights not a list or empty: {data.get('highlights')}")
-            else:
-                missing = [k for k in required_keys if k not in data]
-                log_test("AI Generate Update", False, f"Missing keys: {missing}. Got: {list(data.keys())}")
-        else:
-            log_test("AI Generate Update", False, f"Status {r.status_code}: {r.text}")
-    except requests.Timeout:
-        log_test("AI Generate Update", False, "Request timeout (>60s)")
-    except Exception as e:
-        log_test("AI Generate Update", False, f"Exception: {e}")
-
-def test_generate_video_script():
-    """Test POST /api/ai/generate-video-script - real LLM call"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        payload = {
-            "topic": "3 hidden features of our app",
-            "platform": "tiktok",
-            "duration_seconds": 30,
-            "tone": "energetic"
-        }
-        print("  ⏳ Calling LLM for video script generation (may take 10-30s)...")
-        r = requests.post(f"{BASE_URL}/ai/generate-video-script", json=payload, headers=headers, timeout=60)
-        if r.status_code == 200:
-            data = r.json()
-            required_keys = ["hook", "title", "scenes", "caption", "hashtags", "music_vibe"]
-            if all(k in data for k in required_keys):
-                if isinstance(data.get("scenes"), list) and len(data["scenes"]) > 0:
-                    scene = data["scenes"][0]
-                    scene_keys = ["timestamp", "visual", "voiceover", "on_screen_text"]
-                    if all(k in scene for k in scene_keys):
-                        log_test("AI Generate Video Script", True, f"Hook: {data.get('hook')[:50]}...")
-                    else:
-                        missing = [k for k in scene_keys if k not in scene]
-                        log_test("AI Generate Video Script", False, f"Scene missing keys: {missing}")
-                else:
-                    log_test("AI Generate Video Script", False, f"Scenes not a list or empty: {data.get('scenes')}")
-            else:
-                missing = [k for k in required_keys if k not in data]
-                log_test("AI Generate Video Script", False, f"Missing keys: {missing}. Got: {list(data.keys())}")
-        else:
-            log_test("AI Generate Video Script", False, f"Status {r.status_code}: {r.text}")
-    except requests.Timeout:
-        log_test("AI Generate Video Script", False, "Request timeout (>60s)")
-    except Exception as e:
-        log_test("AI Generate Video Script", False, f"Exception: {e}")
-
-def test_multi_post():
-    """Test POST /api/ai/multi-post - real LLM call"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        payload = {
-            "listing": "New organic cotton tote bag, $29, made in Portugal, 5 colors",
-            "platforms": ["instagram", "linkedin", "x"],
-            "tone": "friendly"
-        }
-        print("  ⏳ Calling LLM for multi-post generation (may take 10-30s)...")
-        r = requests.post(f"{BASE_URL}/ai/multi-post", json=payload, headers=headers, timeout=60)
-        if r.status_code == 200:
-            data = r.json()
-            if "posts" in data and isinstance(data["posts"], list):
-                if len(data["posts"]) == 3:
-                    post = data["posts"][0]
-                    if "platform" in post and "content" in post and "hashtags" in post:
-                        log_test("AI Multi-Post", True, f"Generated {len(data['posts'])} platform posts")
-                    else:
-                        log_test("AI Multi-Post", False, f"Post missing keys: {list(post.keys())}")
-                else:
-                    log_test("AI Multi-Post", False, f"Expected 3 posts, got {len(data['posts'])}")
-            else:
-                log_test("AI Multi-Post", False, f"Missing 'posts' key or not a list. Got: {list(data.keys())}")
-        else:
-            log_test("AI Multi-Post", False, f"Status {r.status_code}: {r.text}")
-    except requests.Timeout:
-        log_test("AI Multi-Post", False, "Request timeout (>60s)")
-    except Exception as e:
-        log_test("AI Multi-Post", False, f"Exception: {e}")
-
-def test_ai_endpoints_without_auth():
-    """Test that all 5 new AI endpoints return 401 without auth"""
-    endpoints = [
-        ("/ai/generate-newsletter", {"topic": "test", "audience": "test", "tone": "test", "sections": 1}),
-        ("/ai/generate-content", {"topic": "test", "keywords": [], "tone": "test", "length": "short"}),
-        ("/ai/generate-update", {"product": "test", "changes": "test", "tone": "test"}),
-        ("/ai/generate-video-script", {"topic": "test", "platform": "tiktok", "duration_seconds": 30, "tone": "test"}),
-        ("/ai/multi-post", {"listing": "test", "platforms": ["instagram"], "tone": "test"})
-    ]
-    
-    all_passed = True
-    for endpoint, payload in endpoints:
+def get(path, token=None, params=None):
+    """Helper for GET requests"""
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    r = requests.get(f"{BASE_URL}{path}", headers=headers, params=params)
+    print(f"GET {path} -> {r.status_code}")
+    if r.status_code != 204:
         try:
-            r = requests.post(f"{BASE_URL}{endpoint}", json=payload, timeout=10)
-            if r.status_code != 401:
-                all_passed = False
-                print(f"  ❌ {endpoint} returned {r.status_code} instead of 401")
-        except Exception as e:
-            all_passed = False
-            print(f"  ❌ {endpoint} exception: {e}")
+            print(f"Response: {json.dumps(r.json(), indent=2)[:500]}")
+        except:
+            print(f"Response: {r.text[:500]}")
+    return r
+
+def post(path, token=None, data=None, expect_cookie=False):
+    """Helper for POST requests"""
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    r = requests.post(f"{BASE_URL}{path}", headers=headers, json=data)
+    print(f"POST {path} -> {r.status_code}")
+    if r.status_code != 204:
+        try:
+            print(f"Response: {json.dumps(r.json(), indent=2)[:500]}")
+        except:
+            print(f"Response: {r.text[:500]}")
+    if expect_cookie:
+        print(f"Cookies: {r.cookies.get_dict()}")
+    return r
+
+def delete(path, token=None):
+    """Helper for DELETE requests"""
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    r = requests.delete(f"{BASE_URL}{path}", headers=headers)
+    print(f"DELETE {path} -> {r.status_code}")
+    if r.status_code != 204:
+        try:
+            print(f"Response: {json.dumps(r.json(), indent=2)[:500]}")
+        except:
+            print(f"Response: {r.text[:500]}")
+    return r
+
+# Global variables for test data
+ticket_id = None
+chat_session_id = None
+impersonate_cookie = None
+
+# ==================== SUPPORT TESTS (User 1) ====================
+
+def test_1_faq():
+    """GET /api/support/faq — public, returns array of 8 articles"""
+    r = get("/support/faq")
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert isinstance(data, list), "Expected array"
+    assert len(data) == 8, f"Expected 8 articles, got {len(data)}"
+    assert all("id" in a and "title" in a and "body" in a for a in data), "Missing required fields"
+
+def test_2_chat_first():
+    """POST /api/support/chat — first message"""
+    global chat_session_id
+    r = post("/support/chat", token=U1_TOKEN, data={"message": "How do I generate a newsletter?"})
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert "reply" in data, "Missing reply field"
+    assert "session_id" in data, "Missing session_id field"
+    assert "Content Studio" in data["reply"] or "newsletter" in data["reply"].lower(), "Reply doesn't mention Content Studio or newsletter"
+    chat_session_id = data["session_id"]
+    print(f"Chat session ID: {chat_session_id}")
+
+def test_3_chat_followup():
+    """POST /api/support/chat — follow-up with session_id"""
+    assert chat_session_id, "No session_id from previous test"
+    r = post("/support/chat", token=U1_TOKEN, data={"message": "What about video scripts?", "session_id": chat_session_id})
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert "reply" in data, "Missing reply field"
+    assert "video" in data["reply"].lower() or "script" in data["reply"].lower(), "Reply doesn't mention video scripts"
+
+def test_4_create_ticket():
+    """POST /api/support/tickets — create ticket"""
+    global ticket_id
+    r = post("/support/tickets", token=U1_TOKEN, data={
+        "subject": "Cannot connect Instagram",
+        "message": "I clicked connect but nothing happens"
+    })
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert "id" in data, "Missing id field"
+    assert data.get("status") == "open", f"Expected status 'open', got {data.get('status')}"
+    ticket_id = data["id"]
+    print(f"Ticket ID: {ticket_id}")
+
+def test_5_list_tickets():
+    """GET /api/support/tickets — list user's tickets"""
+    r = get("/support/tickets", token=U1_TOKEN)
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert isinstance(data, list), "Expected array"
+    assert len(data) >= 1, "Expected at least 1 ticket"
+    assert any(t["id"] == ticket_id for t in data), "Created ticket not in list"
+
+def test_6_get_ticket():
+    """GET /api/support/tickets/{id} — get ticket detail"""
+    assert ticket_id, "No ticket_id from previous test"
+    r = get(f"/support/tickets/{ticket_id}", token=U1_TOKEN)
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert "ticket" in data, "Missing ticket field"
+    assert "messages" in data, "Missing messages field"
+    assert len(data["messages"]) == 1, f"Expected 1 message, got {len(data['messages'])}"
+    assert data["messages"][0]["message"] == "I clicked connect but nothing happens", "First message doesn't match"
+
+def test_7_add_ticket_message():
+    """POST /api/support/tickets/{id}/message — user adds message"""
+    assert ticket_id, "No ticket_id from previous test"
+    r = post(f"/support/tickets/{ticket_id}/message", token=U1_TOKEN, data={
+        "message": "Also tried in Chrome incognito"
+    })
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert data.get("ok") == True, "Expected ok: true"
     
-    if all_passed:
-        log_test("AI endpoints without auth (401)", True, "All 5 endpoints correctly return 401")
-    else:
-        log_test("AI endpoints without auth (401)", False, "Some endpoints did not return 401")
+    # Verify status is still "open" (user reply doesn't change status)
+    r2 = get(f"/support/tickets/{ticket_id}", token=U1_TOKEN)
+    ticket_data = r2.json()
+    assert ticket_data["ticket"]["status"] == "open", f"Expected status 'open', got {ticket_data['ticket']['status']}"
 
-def test_list_channels():
-    """Test GET /api/channels - auth required"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        r = requests.get(f"{BASE_URL}/channels", headers=headers, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if isinstance(data, list) and len(data) == 6:
-                platforms = [ch.get("platform") for ch in data]
-                expected = ["instagram", "tiktok", "x", "facebook", "linkedin", "reddit"]
-                if set(platforms) == set(expected):
-                    log_test("List channels", True, f"All 6 platforms present")
-                else:
-                    log_test("List channels", False, f"Expected {expected}, got {platforms}")
-            else:
-                log_test("List channels", False, f"Expected 6 channels, got {len(data) if isinstance(data, list) else 'non-list'}")
-        else:
-            log_test("List channels", False, f"Status {r.status_code}: {r.text}")
-    except Exception as e:
-        log_test("List channels", False, f"Exception: {e}")
+# ==================== ADMIN TESTS ====================
 
-def test_connect_channel():
-    """Test POST /api/channels/connect - auth required"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        payload = {"platform": "instagram"}
-        r = requests.post(f"{BASE_URL}/channels/connect", json=payload, headers=headers, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("ok") and data.get("platform") == "instagram":
-                log_test("Connect channel", True, f"Handle: {data.get('handle')}")
-                return True
-            else:
-                log_test("Connect channel", False, f"Unexpected response: {data}")
-        else:
-            log_test("Connect channel", False, f"Status {r.status_code}: {r.text}")
-    except Exception as e:
-        log_test("Connect channel", False, f"Exception: {e}")
-    return False
+def test_8_admin_me():
+    """GET /api/admin/me — returns admin user"""
+    r = get("/admin/me", token=ADMIN_TOKEN)
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert data.get("is_admin") == True, "Expected is_admin: true"
+    assert data.get("email") == "williams342@gmail.com", "Wrong admin email"
 
-def test_disconnect_channel():
-    """Test POST /api/channels/disconnect - auth required"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        payload = {"platform": "instagram"}
-        r = requests.post(f"{BASE_URL}/channels/disconnect", json=payload, headers=headers, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("ok"):
-                log_test("Disconnect channel", True)
-            else:
-                log_test("Disconnect channel", False, f"Unexpected response: {data}")
-        else:
-            log_test("Disconnect channel", False, f"Status {r.status_code}: {r.text}")
-    except Exception as e:
-        log_test("Disconnect channel", False, f"Exception: {e}")
+def test_9_admin_stats():
+    """GET /api/admin/stats — returns all count fields"""
+    r = get("/admin/stats", token=ADMIN_TOKEN)
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    required_fields = ["total_users", "active_users", "suspended_users", "admins", 
+                      "total_leads", "total_posts", "total_reports", "total_channels",
+                      "open_tickets", "answered_tickets", "closed_tickets"]
+    for field in required_fields:
+        assert field in data, f"Missing field: {field}"
+        assert isinstance(data[field], int), f"Field {field} should be int"
 
-def test_publish_post():
-    """Test POST /api/channels/publish - auth required"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        payload = {
-            "content": "Hello world post from automated test",
-            "platforms": ["instagram"]
-        }
-        r = requests.post(f"{BASE_URL}/channels/publish", json=payload, headers=headers, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("ok") and data.get("status") == "published":
-                log_test("Publish post", True, f"Post ID: {data.get('id')}")
-                return data.get("id")
-            else:
-                log_test("Publish post", False, f"Unexpected response: {data}")
-        else:
-            log_test("Publish post", False, f"Status {r.status_code}: {r.text}")
-    except Exception as e:
-        log_test("Publish post", False, f"Exception: {e}")
-    return None
+def test_10_admin_list_users():
+    """GET /api/admin/users — returns array with stats"""
+    r = get("/admin/users", token=ADMIN_TOKEN)
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert isinstance(data, list), "Expected array"
+    assert len(data) >= 3, f"Expected at least 3 users, got {len(data)}"
+    
+    # Check that all test users are present
+    user_ids = [u["user_id"] for u in data]
+    assert ADMIN_ID in user_ids, "Admin user not in list"
+    assert U1_ID in user_ids, "User 1 not in list"
+    assert U2_ID in user_ids, "User 2 not in list"
+    
+    # Check stats structure
+    for user in data:
+        assert "stats" in user, "Missing stats field"
+        assert all(k in user["stats"] for k in ["posts", "leads", "reports", "channels"]), "Missing stats fields"
 
-def test_list_posts():
-    """Test GET /api/posts - auth required"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        r = requests.get(f"{BASE_URL}/posts", headers=headers, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if isinstance(data, list):
-                log_test("List posts", True, f"Found {len(data)} posts")
-            else:
-                log_test("List posts", False, f"Expected list, got: {type(data)}")
-        else:
-            log_test("List posts", False, f"Status {r.status_code}: {r.text}")
-    except Exception as e:
-        log_test("List posts", False, f"Exception: {e}")
+def test_11_admin_search_users():
+    """GET /api/admin/users?q=user1 — filtered list"""
+    r = get("/admin/users", token=ADMIN_TOKEN, params={"q": "user1"})
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert isinstance(data, list), "Expected array"
+    # Should find user1@test.dev
+    assert any("user1" in u.get("email", "").lower() or "user one" in u.get("name", "").lower() for u in data), "Search didn't find user1"
 
-def test_list_reports():
-    """Test GET /api/reports - auth required"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        r = requests.get(f"{BASE_URL}/reports", headers=headers, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if isinstance(data, list):
-                log_test("List reports", True, f"Found {len(data)} reports")
-            else:
-                log_test("List reports", False, f"Expected list, got: {type(data)}")
-        else:
-            log_test("List reports", False, f"Status {r.status_code}: {r.text}")
-    except Exception as e:
-        log_test("List reports", False, f"Exception: {e}")
+def test_12_admin_user_detail():
+    """GET /api/admin/users/{U1_ID} — returns user detail"""
+    r = get(f"/admin/users/{U1_ID}", token=ADMIN_TOKEN)
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert "user" in data, "Missing user field"
+    assert "stats" in data, "Missing stats field"
+    assert "recent_posts" in data, "Missing recent_posts field"
+    assert "recent_leads" in data, "Missing recent_leads field"
+    assert data["user"]["user_id"] == U1_ID, "Wrong user returned"
 
-def test_dashboard_stats():
-    """Test GET /api/dashboard/stats - auth required"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        r = requests.get(f"{BASE_URL}/dashboard/stats", headers=headers, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            required_keys = ["posts", "reports", "channels", "leads"]
-            if all(k in data for k in required_keys):
-                log_test("Dashboard stats", True, f"Stats: {data}")
-            else:
-                log_test("Dashboard stats", False, f"Missing keys. Got: {list(data.keys())}")
-        else:
-            log_test("Dashboard stats", False, f"Status {r.status_code}: {r.text}")
-    except Exception as e:
-        log_test("Dashboard stats", False, f"Exception: {e}")
+def test_13_admin_suspend():
+    """POST /api/admin/users/{U1_ID}/suspend — suspends user"""
+    r = post(f"/admin/users/{U1_ID}/suspend", token=ADMIN_TOKEN)
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert data.get("ok") == True, "Expected ok: true"
+    
+    # Verify user is suspended
+    r2 = get(f"/admin/users/{U1_ID}", token=ADMIN_TOKEN)
+    user_data = r2.json()
+    assert user_data["user"]["status"] == "suspended", "User not suspended"
+    
+    # Verify U1's session is deleted (should get 401)
+    r3 = get("/auth/me", token=U1_TOKEN)
+    assert r3.status_code == 401, f"Expected 401 for suspended user's token, got {r3.status_code}"
 
-def test_logout():
-    """Test POST /api/auth/logout"""
-    try:
-        headers = {"Authorization": f"Bearer {SESSION_TOKEN}"}
-        r = requests.post(f"{BASE_URL}/auth/logout", headers=headers, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("ok"):
-                log_test("Logout", True)
-            else:
-                log_test("Logout", False, f"Unexpected response: {data}")
-        else:
-            log_test("Logout", False, f"Status {r.status_code}: {r.text}")
-    except Exception as e:
-        log_test("Logout", False, f"Exception: {e}")
+def test_14_admin_unsuspend():
+    """POST /api/admin/users/{U1_ID}/unsuspend — unsuspends user"""
+    r = post(f"/admin/users/{U1_ID}/unsuspend", token=ADMIN_TOKEN)
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert data.get("ok") == True, "Expected ok: true"
+    
+    # Verify user is active
+    r2 = get(f"/admin/users/{U1_ID}", token=ADMIN_TOKEN)
+    user_data = r2.json()
+    assert user_data["user"]["status"] == "active", "User not active"
 
-def print_summary():
-    """Print test summary"""
+def test_15_admin_promote():
+    """POST /api/admin/users/{U2_ID}/promote — promotes to admin"""
+    r = post(f"/admin/users/{U2_ID}/promote", token=ADMIN_TOKEN)
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert data.get("ok") == True, "Expected ok: true"
+    
+    # Verify user is admin
+    r2 = get(f"/admin/users/{U2_ID}", token=ADMIN_TOKEN)
+    user_data = r2.json()
+    assert user_data["user"]["is_admin"] == True, "User not promoted to admin"
+
+def test_16_admin_demote():
+    """POST /api/admin/users/{U2_ID}/demote — demotes from admin"""
+    r = post(f"/admin/users/{U2_ID}/demote", token=ADMIN_TOKEN)
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert data.get("ok") == True, "Expected ok: true"
+    
+    # Verify user is not admin
+    r2 = get(f"/admin/users/{U2_ID}", token=ADMIN_TOKEN)
+    user_data = r2.json()
+    assert user_data["user"]["is_admin"] == False, "User still admin"
+
+def test_17_admin_suspend_self():
+    """POST /api/admin/users/{ADMIN_ID}/suspend — should return 400"""
+    r = post(f"/admin/users/{ADMIN_ID}/suspend", token=ADMIN_TOKEN)
+    assert r.status_code == 400, f"Expected 400, got {r.status_code}"
+    data = r.json()
+    assert "yourself" in data.get("detail", "").lower(), "Wrong error message"
+
+def test_18_admin_demote_self():
+    """POST /api/admin/users/{ADMIN_ID}/demote — should return 400"""
+    r = post(f"/admin/users/{ADMIN_ID}/demote", token=ADMIN_TOKEN)
+    assert r.status_code == 400, f"Expected 400, got {r.status_code}"
+    data = r.json()
+    assert "yourself" in data.get("detail", "").lower(), "Wrong error message"
+
+def test_19_admin_impersonate():
+    """POST /api/admin/users/{U2_ID}/impersonate — impersonate user"""
+    global impersonate_cookie
+    r = post(f"/admin/users/{U2_ID}/impersonate", token=ADMIN_TOKEN, expect_cookie=True)
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert data.get("ok") == True, "Expected ok: true"
+    assert "impersonating" in data, "Missing impersonating field"
+    assert data["impersonating"]["user_id"] == U2_ID, "Wrong user being impersonated"
+    
+    # Get the new session token from cookies
+    impersonate_cookie = r.cookies.get("session_token")
+    assert impersonate_cookie, "No session_token cookie returned"
+    print(f"Impersonate token: {impersonate_cookie}")
+    
+    # Verify /api/auth/me returns User Two's data
+    r2 = get("/auth/me", token=impersonate_cookie)
+    assert r2.status_code == 200, f"Expected 200, got {r2.status_code}"
+    me_data = r2.json()
+    assert me_data["user_id"] == U2_ID, f"Expected User Two's ID, got {me_data.get('user_id')}"
+    assert me_data["name"] == "User Two", f"Expected 'User Two', got {me_data.get('name')}"
+
+def test_20_admin_stop_impersonate():
+    """POST /api/admin/stop-impersonating — restore admin"""
+    assert impersonate_cookie, "No impersonate cookie from previous test"
+    r = post("/admin/stop-impersonating", token=impersonate_cookie, expect_cookie=True)
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert data.get("ok") == True, "Expected ok: true"
+    
+    # Get restored cookie
+    restored_cookie = r.cookies.get("session_token")
+    assert restored_cookie, "No session_token cookie returned"
+    
+    # Verify it's the admin again
+    r2 = get("/auth/me", token=restored_cookie)
+    assert r2.status_code == 200, f"Expected 200, got {r2.status_code}"
+    me_data = r2.json()
+    assert me_data["user_id"] == ADMIN_ID, f"Expected admin ID, got {me_data.get('user_id')}"
+
+def test_21_admin_list_tickets():
+    """GET /api/admin/tickets — list all tickets"""
+    r = get("/admin/tickets", token=ADMIN_TOKEN)
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert isinstance(data, list), "Expected array"
+    assert len(data) >= 1, "Expected at least 1 ticket"
+    assert any(t["id"] == ticket_id for t in data), "Test ticket not in admin list"
+
+def test_22_admin_filter_tickets():
+    """GET /api/admin/tickets?status=open — filtered tickets"""
+    r = get("/admin/tickets", token=ADMIN_TOKEN, params={"status": "open"})
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert isinstance(data, list), "Expected array"
+    # All returned tickets should have status "open"
+    assert all(t["status"] == "open" for t in data), "Non-open tickets in filtered list"
+
+def test_23_admin_reply_ticket():
+    """POST /api/support/tickets/{ticket_id}/message as ADMIN — status becomes 'answered'"""
+    assert ticket_id, "No ticket_id from previous test"
+    r = post(f"/support/tickets/{ticket_id}/message", token=ADMIN_TOKEN, data={
+        "message": "Hi, we're looking into this."
+    })
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert data.get("ok") == True, "Expected ok: true"
+    
+    # Verify status changed to "answered"
+    r2 = get(f"/support/tickets/{ticket_id}", token=ADMIN_TOKEN)
+    ticket_data = r2.json()
+    assert ticket_data["ticket"]["status"] == "answered", f"Expected status 'answered', got {ticket_data['ticket']['status']}"
+
+def test_24_admin_close_ticket():
+    """POST /api/support/tickets/{ticket_id}/close — status becomes 'closed'"""
+    assert ticket_id, "No ticket_id from previous test"
+    r = post(f"/support/tickets/{ticket_id}/close", token=ADMIN_TOKEN)
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert data.get("ok") == True, "Expected ok: true"
+    
+    # Verify status is "closed"
+    r2 = get(f"/support/tickets/{ticket_id}", token=ADMIN_TOKEN)
+    ticket_data = r2.json()
+    assert ticket_data["ticket"]["status"] == "closed", f"Expected status 'closed', got {ticket_data['ticket']['status']}"
+
+def test_25_admin_delete_user():
+    """DELETE /api/admin/users/{U2_ID} — cascades delete"""
+    r = delete(f"/admin/users/{U2_ID}", token=ADMIN_TOKEN)
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+    data = r.json()
+    assert data.get("ok") == True, "Expected ok: true"
+    
+    # Verify user is gone
+    r2 = get(f"/admin/users/{U2_ID}", token=ADMIN_TOKEN)
+    assert r2.status_code == 404, f"Expected 404, got {r2.status_code}"
+    
+    # Verify U2's session is gone (should get 401)
+    r3 = get("/auth/me", token=U2_TOKEN)
+    assert r3.status_code == 401, f"Expected 401 for deleted user's token, got {r3.status_code}"
+
+def test_26_admin_delete_self():
+    """DELETE /api/admin/users/{ADMIN_ID} — should return 400"""
+    r = delete(f"/admin/users/{ADMIN_ID}", token=ADMIN_TOKEN)
+    assert r.status_code == 400, f"Expected 400, got {r.status_code}"
+    data = r.json()
+    assert "yourself" in data.get("detail", "").lower(), "Wrong error message"
+
+def test_27_non_admin_access():
+    """GET /api/admin/me with U1_TOKEN — should be 403"""
+    # First, recreate U1's session since it was deleted during suspend test
+    import pymongo
+    mongo_client = pymongo.MongoClient("mongodb://localhost:27017")
+    db = mongo_client["test_database"]
+    from datetime import datetime, timedelta
+    db.user_sessions.insert_one({
+        "user_id": U1_ID,
+        "session_token": U1_TOKEN,
+        "expires_at": datetime.utcnow() + timedelta(days=7),
+        "created_at": datetime.utcnow()
+    })
+    
+    r = get("/admin/me", token=U1_TOKEN)
+    assert r.status_code == 403, f"Expected 403, got {r.status_code}"
+    data = r.json()
+    assert "admin" in data.get("detail", "").lower(), "Wrong error message"
+
+# ==================== CLEANUP ====================
+
+def cleanup():
+    """Delete all test users and related data"""
+    print("\n" + "="*60)
+    print("CLEANUP: Deleting test users and data")
+    print("="*60)
+    
+    import pymongo
+    mongo_client = pymongo.MongoClient("mongodb://localhost:27017")
+    db = mongo_client["test_database"]
+    
+    # Delete test users
+    result = db.users.delete_many({"user_id": {"$in": [ADMIN_ID, U1_ID, U2_ID]}})
+    print(f"Deleted {result.deleted_count} users")
+    
+    # Delete sessions
+    result = db.user_sessions.delete_many({"user_id": {"$in": [ADMIN_ID, U1_ID, U2_ID]}})
+    print(f"Deleted {result.deleted_count} sessions")
+    
+    # Delete tickets
+    result = db.tickets.delete_many({"user_id": {"$in": [ADMIN_ID, U1_ID, U2_ID]}})
+    print(f"Deleted {result.deleted_count} tickets")
+    
+    # Delete ticket messages
+    result = db.ticket_messages.delete_many({"author_id": {"$in": [ADMIN_ID, U1_ID, U2_ID]}})
+    print(f"Deleted {result.deleted_count} ticket messages")
+    
+    # Delete support chat logs
+    result = db.support_chat_log.delete_many({"user_id": {"$in": [ADMIN_ID, U1_ID, U2_ID]}})
+    print(f"Deleted {result.deleted_count} chat logs")
+    
+    print("✅ Cleanup complete")
+
+# ==================== RUN ALL TESTS ====================
+
+if __name__ == "__main__":
+    print("\n" + "="*60)
+    print("BACKEND TEST SUITE: Admin + Support Endpoints")
+    print("="*60)
+    print(f"Base URL: {BASE_URL}")
+    print(f"Admin Token: {ADMIN_TOKEN}")
+    print(f"User 1 Token: {U1_TOKEN}")
+    print(f"User 2 Token: {U2_TOKEN}")
+    
+    # Support tests (User 1)
+    test("1. GET /api/support/faq", test_1_faq)
+    test("2. POST /api/support/chat (first message)", test_2_chat_first)
+    test("3. POST /api/support/chat (follow-up)", test_3_chat_followup)
+    test("4. POST /api/support/tickets (create)", test_4_create_ticket)
+    test("5. GET /api/support/tickets (list)", test_5_list_tickets)
+    test("6. GET /api/support/tickets/{id} (detail)", test_6_get_ticket)
+    test("7. POST /api/support/tickets/{id}/message (user reply)", test_7_add_ticket_message)
+    
+    # Admin tests
+    test("8. GET /api/admin/me", test_8_admin_me)
+    test("9. GET /api/admin/stats", test_9_admin_stats)
+    test("10. GET /api/admin/users", test_10_admin_list_users)
+    test("11. GET /api/admin/users?q=user1", test_11_admin_search_users)
+    test("12. GET /api/admin/users/{U1_ID}", test_12_admin_user_detail)
+    test("13. POST /api/admin/users/{U1_ID}/suspend", test_13_admin_suspend)
+    test("14. POST /api/admin/users/{U1_ID}/unsuspend", test_14_admin_unsuspend)
+    test("15. POST /api/admin/users/{U2_ID}/promote", test_15_admin_promote)
+    test("16. POST /api/admin/users/{U2_ID}/demote", test_16_admin_demote)
+    test("17. POST /api/admin/users/{ADMIN_ID}/suspend (self)", test_17_admin_suspend_self)
+    test("18. POST /api/admin/users/{ADMIN_ID}/demote (self)", test_18_admin_demote_self)
+    test("19. POST /api/admin/users/{U2_ID}/impersonate", test_19_admin_impersonate)
+    test("20. POST /api/admin/stop-impersonating", test_20_admin_stop_impersonate)
+    test("21. GET /api/admin/tickets", test_21_admin_list_tickets)
+    test("22. GET /api/admin/tickets?status=open", test_22_admin_filter_tickets)
+    test("23. POST /api/support/tickets/{id}/message (admin reply)", test_23_admin_reply_ticket)
+    test("24. POST /api/support/tickets/{id}/close", test_24_admin_close_ticket)
+    test("25. DELETE /api/admin/users/{U2_ID}", test_25_admin_delete_user)
+    test("26. DELETE /api/admin/users/{ADMIN_ID} (self)", test_26_admin_delete_self)
+    test("27. GET /api/admin/me with U1_TOKEN (non-admin)", test_27_non_admin_access)
+    
+    # Cleanup
+    cleanup()
+    
+    # Summary
     print("\n" + "="*60)
     print("TEST SUMMARY")
     print("="*60)
-    print(f"✅ Passed: {len(results['passed'])}")
-    print(f"❌ Failed: {len(results['failed'])}")
-    print(f"⚠️  Warnings: {len(results['warnings'])}")
+    print(f"✅ Passed: {passed}")
+    print(f"❌ Failed: {failed}")
+    print(f"Total: {passed + failed}")
+    print(f"Success Rate: {(passed / (passed + failed) * 100):.1f}%")
     
-    if results['failed']:
-        print("\nFailed Tests:")
-        for fail in results['failed']:
-            print(f"  - {fail['test']}: {fail['details']}")
+    if failed > 0:
+        print("\n" + "="*60)
+        print("FAILED TESTS:")
+        print("="*60)
+        for result in test_results:
+            if result["status"] != "PASSED":
+                print(f"❌ {result['name']}")
+                print(f"   {result['error']}")
     
-    if results['warnings']:
-        print("\nWarnings:")
-        for warn in results['warnings']:
-            print(f"  - {warn['test']}: {warn['details']}")
-    
-    print("="*60)
-
-if __name__ == "__main__":
-    print("Starting Automatex Backend API Tests")
-    print(f"Base URL: {BASE_URL}")
-    print(f"Session Token: {SESSION_TOKEN[:20]}...")
-    print("="*60 + "\n")
-    
-    # Run tests in order
-    print("1. Testing Health Check...")
-    test_health_check()
-    
-    print("\n2. Testing Auth Endpoints...")
-    test_auth_me_with_token()
-    test_auth_me_without_token()
-    
-    print("\n3. Testing Leads Endpoints...")
-    test_create_lead_public()
-    test_list_leads()
-    
-    print("\n4. Testing NEW AI Content Generator Endpoints (LLM calls - will take time)...")
-    test_generate_newsletter()
-    test_generate_content()
-    test_generate_update()
-    test_generate_video_script()
-    test_multi_post()
-    
-    print("\n5. Testing AI Endpoints Auth (401 without token)...")
-    test_ai_endpoints_without_auth()
-    
-    print_summary()
+    sys.exit(0 if failed == 0 else 1)

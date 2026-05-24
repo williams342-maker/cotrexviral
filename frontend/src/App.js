@@ -13,6 +13,10 @@ import Compose from './pages/dashboard/Compose';
 import Posts from './pages/dashboard/Posts';
 import Leads from './pages/dashboard/Leads';
 import Studio from './pages/dashboard/Studio';
+import Help from './pages/dashboard/Help';
+import AdminOverview from './pages/admin/AdminOverview';
+import AdminUsers from './pages/admin/AdminUsers';
+import AdminTickets from './pages/admin/AdminTickets';
 import { Toaster } from './components/ui/toaster';
 import { AuthProvider } from './context/AuthContext';
 
@@ -35,6 +39,10 @@ function AppRouter() {
       <Route path="/dashboard/studio" element={<ProtectedRoute><Studio /></ProtectedRoute>} />
       <Route path="/dashboard/posts" element={<ProtectedRoute><Posts /></ProtectedRoute>} />
       <Route path="/dashboard/leads" element={<ProtectedRoute><Leads /></ProtectedRoute>} />
+      <Route path="/dashboard/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
+      <Route path="/admin" element={<ProtectedRoute admin><AdminOverview /></ProtectedRoute>} />
+      <Route path="/admin/users" element={<ProtectedRoute admin><AdminUsers /></ProtectedRoute>} />
+      <Route path="/admin/tickets" element={<ProtectedRoute admin><AdminTickets /></ProtectedRoute>} />
     </Routes>
   );
 }
