@@ -35,12 +35,21 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
-- 2026-02-25 (this session — part 2)
-  - **Background scheduler (APScheduler in-process)** — flips `scheduled → published` every 60s with a Mongo-backed TTL lock (`scheduler_locks` collection) so multiple uvicorn workers don't double-publish.
-  - New admin endpoint `POST /api/admin/scheduler/run-once` — manually triggers the job (bypasses lock) for debugging.
-  - Post documents now also carry `publish_mode: "scheduler"` and `published_at` when promoted by the worker.
-  - Disabled via `DISABLE_SCHEDULER=true` env (for tests/local).
-  - Backend pytest: 4 new scheduler tests in `/app/backend/tests/test_scheduler.py` (total now 13/13 pass).
+- 2026-02-25 (this session — part 3) **🎨 Brand & UI overhaul**
+  - Full landing page rebuild to neural/dark aesthetic per uploaded spec (Space Grotesk + Inter, deep-space-black + violet/blue/cyan palette, glassmorphism, animated auroras + grid + drifting particles).
+  - New CV component library in `/app/frontend/src/components/cv/` — CVNavbar, CVHero, CVNeuralEngine, CVPipeline, CVResults, CVCTAFooter, CVFooter, CVBackdrop, CVLogo.
+  - Landing sections shipped: Hero ("Turn Attention Into Digital Momentum."), Neural Engine with live growth chart + 4 capability cards, 5-step Growth Pipeline timeline, 3 case-study Result cards (GlowSkin/Liam Carter/Taskly), final CTA vortex, dark Footer.
+  - Animations: Framer Motion entrance + whileInView triggers, CSS aurora/float/pulse/drift keyframes (no Three.js — kept bundle lean).
+  - New `/agents` sub-page houses the 4 AI agents (Nova/Sam/Kai/Angela) — direct-chat on card click.
+  - New logo PNG → `/cortex-logo.png` (used as favicon, navbar logo, dashboard sidebar logo).
+  - Modals fixed: added `sr-only` DialogTitle for Radix a11y compliance.
+  - **Frontend testing agent: 100% pass** (all data-testids verified, mobile hamburger, scrolled navbar, agent direct-chat flow, ProtectedRoute redirect).
+
+- 2026-02-25 (this session — part 2) **Background scheduler**
+  - APScheduler in-process AsyncIOScheduler with Mongo TTL lock (`scheduler_locks`), promotes `scheduled → published` every 60s.
+  - Admin debug endpoint `POST /api/admin/scheduler/run-once`.
+  - `DISABLE_SCHEDULER=true` kill-switch.
+  - 4 new pytest cases in `/app/backend/tests/test_scheduler.py` (total 13/13 pass).
 - 2026-02-24 (this session — part 1)
   - **AI optimal time button on Compose** — visible only when exactly one channel checkbox is selected; auto-fills datetime-local and shows violet meta line, cleared on manual edit.
   - **Bulk lasso multi-select on Marketing Calendar** — toggle "Bulk select" → drag rectangle (Shift adds), floating bottom action bar with **−1w / −1d / +1d / +1w / Cancel / Clear**, runs PATCH/DELETE in parallel.

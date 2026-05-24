@@ -98,6 +98,7 @@ const AgentChatModal = ({ open, onClose, agent, onBack }) => {
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-lg bg-white rounded-3xl border-0 p-0 overflow-hidden">
+        <DialogTitle className="sr-only">Chat with {agent?.name || 'AI agent'}</DialogTitle>
         <div className="p-7">
           <button onClick={onBack} className="text-[13px] text-neutral-500 hover:text-neutral-800 flex items-center gap-1 mb-4">
             <ArrowLeft size={14} /> Choose another
