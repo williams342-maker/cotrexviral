@@ -1590,3 +1590,73 @@ async def shutdown():
     if scheduler is not None:
         scheduler.shutdown(wait=False)
     client.close()
+
+
+# ==================== SEO: robots.txt + sitemap.xml ====================
+# These must live at the site root for search engines. The Kubernetes ingress
+# routes non-/api paths to the frontend by default, so we expose them via
+# /api/seo/* and ALSO mount aliases at /robots.txt and /sitemap.xml. The
+# frontend `_redirects` (or ingress rules) should rewrite the root paths to
+# these backend endpoints; in this preview pod both /robots.txt and
+# /sitemap.xml are caught by the frontend SPA fallback, so search engines
+# crawl the /api/seo aliases linked from the HTML head as fallback.
+
+SITE_URL = os.environ.get("PUBLIC_SITE_URL", "https://social-sync-ai-1.emergent.host")
+
+SEO_LANDING_PATHS = [
+    ("/", "1.0", "weekly"),
+    ("/ai-tiktok-post-generator", "0.9", "weekly"),
+    ("/viral-content-ideas-generator", "0.9", "weekly"),
+    ("/instagram-caption-ai-generator", "0.9", "weekly"),
+    ("/short-form-video-ideas-ai", "0.9", "weekly"),
+    ("/content-automation-tool", "0.9", "weekly"),
+    ("/agents", "0.7", "monthly"),
+    ("/blog", "0.8", "weekly"),
+    ("/blog/what-makes-content-go-viral-2026", "0.7", "monthly"),
+    ("/blog/viral-tiktok-hooks-that-work", "0.7", "monthly"),
+    ("/blog/ai-tools-for-viral-content-creation", "0.7", "monthly"),
+]
+
+
+def _build_sitemap_xml() -> str:
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    urls = "\n".join(
+        f"  <url>\n    <loc>{SITE_URL}{path}</loc>\n    <lastmod>{today}</lastmod>\n    <changefreq>{freq}</changefreq>\n    <priority>{priority}</priority>\n  </url>"
+        for path, priority, freq in SEO_LANDING_PATHS
+    )
+    return f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n{urls}\n</urlset>\n'
+
+
+def _build_robots_txt() -> str:
+    return (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /api/\n"
+        "Disallow: /dashboard\n"
+        "Disallow: /admin\n"
+        "Disallow: /auth/\n\n"
+        f"Sitemap: {SITE_URL}/sitemap.xml\n"
+    )
+
+
+@app.get("/sitemap.xml")
+async def sitemap_xml():
+    return Response(content=_build_sitemap_xml(), media_type="application/xml")
+
+
+@app.get("/robots.txt")
+async def robots_txt():
+    return Response(content=_build_robots_txt(), media_type="text/plain")
+
+
+# Aliases under /api/seo so the ingress routes them to the backend even if
+# the SPA fallback intercepts the root-level paths. Registered on `app`
+# directly (not the api router, which is already included above).
+@app.get("/api/seo/sitemap.xml")
+async def api_sitemap_xml():
+    return Response(content=_build_sitemap_xml(), media_type="application/xml")
+
+
+@app.get("/api/seo/robots.txt")
+async def api_robots_txt():
+    return Response(content=_build_robots_txt(), media_type="text/plain")

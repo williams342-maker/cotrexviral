@@ -205,6 +205,31 @@ code {
   from { transform: translate3d(0, 0, 0); }
   to   { transform: translate3d(-1200px, 0, 0); }
 }
+
+/* Blog prose (article body) */
+.cv-prose h2 {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  font-size: 1.625rem;
+  font-weight: 600;
+  color: #F4F4F5;
+  margin: 2.25rem 0 1rem;
+  letter-spacing: -0.01em;
+}
+.cv-prose h3 {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #F4F4F5;
+  margin: 1.75rem 0 0.75rem;
+}
+.cv-prose p { margin: 0 0 1.1rem; color: #D4D4D8; }
+.cv-prose ol, .cv-prose ul { margin: 0 0 1.25rem 1.4rem; color: #D4D4D8; }
+.cv-prose ol li, .cv-prose ul li { margin: 0.4rem 0; }
+.cv-prose ol { list-style: decimal; }
+.cv-prose ul { list-style: disc; }
+.cv-prose a { color: #67E8F9; text-decoration: underline; text-underline-offset: 3px; }
+.cv-prose a:hover { color: #A5F3FC; }
+.cv-prose strong { color: #F4F4F5; }
 .cv-particles::before,
 .cv-particles::after {
   content: '';

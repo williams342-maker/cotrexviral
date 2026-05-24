@@ -108,9 +108,10 @@ const CVResults = () => {
         <div className="text-center mb-14">
           <span className="text-[11px] uppercase tracking-[0.22em] text-violet-400 font-semibold">Proven results</span>
           <h2 className="cv-display text-4xl sm:text-5xl font-semibold text-white mt-3 leading-tight">
-            Real Growth. <span className="cv-gradient-text">Real Impact.</span>
+            Grow Faster With{' '}
+            <span className="cv-gradient-text">AI Content Systems.</span>
           </h2>
-          <p className="mt-4 text-zinc-400">We don't just promise growth — we deliver it.</p>
+          <p className="mt-4 text-zinc-400">Three brands. Three industries. One AI engine driving viral growth.</p>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">

@@ -19,10 +19,10 @@ const CVPipeline = () => {
         <div className="text-center mb-16">
           <span className="text-[11px] uppercase tracking-[0.22em] text-violet-400 font-semibold">How we drive growth</span>
           <h2 className="cv-display text-4xl sm:text-5xl font-semibold text-white mt-3 leading-tight">
-            A Data-Backed{' '}
-            <span className="cv-gradient-text">Growth Pipeline.</span>
+            How to Create Viral Posts{' '}
+            <span className="cv-gradient-text">Automatically.</span>
           </h2>
-          <p className="mt-4 text-zinc-400 max-w-xl mx-auto">Proven system. Predictable results. Sustainable scale.</p>
+          <p className="mt-4 text-zinc-400 max-w-xl mx-auto">Five steps. Proven system. Predictable, sustainable scale.</p>
         </div>
 
         <div className="relative">

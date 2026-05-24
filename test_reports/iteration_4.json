@@ -1,0 +1,47 @@
+{
+  "summary": "Comprehensive SEO Phase-1 verification: backend sitemap/robots endpoints (15 pytest cases) + frontend Helmet/JSON-LD/H1-H2/FAQ/footer/blog/redirect checks across homepage + 5 landing pages + blog index + 1 blog post. All assertions pass. Found and fixed one user-visible HTML-entity bug in the short-form-video-ideas-ai H1 (literal '&amp;' rendered as text).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "ShortFormVideoIdeas landing page H1",
+        "issue": "H1 string in /app/frontend/src/pages/landing/content.js contained literal '&amp;' which React renders verbatim (not decoded) since it's a JS string, not JSX text. Fixed by replacing with '&'.",
+        "selector": "/short-form-video-ideas-ai h1",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_seo.py",
+    "/app/test_reports/pytest/seo_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL a11y polish: CVFaq question buttons do not toggle aria-expanded on the trigger. Add aria-expanded={isOpen} and aria-controls on the button, plus role='region' on the answer panel — purely a11y/screen-reader, not a functional regression.",
+    "OPTIONAL: robots.txt Sitemap directive points to https://social-sync-ai-1.emergent.host/sitemap.xml (root). Spec mentioned /api/seo/sitemap.xml; either alias is acceptable for crawlers since /sitemap.xml is also exposed by CRA static + backend route, but consider adding a second 'Sitemap:' line for the /api/seo/sitemap.xml alias to be explicit.",
+    "INFO: 16 console 401 errors during page-load are pre-existing auth probes (unrelated to SEO work, also noted in iteration 3)."
+  ],
+  "critical_code_review_comments": [
+    "Schema strategy is clean: homepage emits a single application/ld+json containing an array of [Organization, SoftwareApplication, FAQPage] — fewer DOM nodes, same crawl value.",
+    "Each landing page correctly emits its own SoftwareApplication + FAQPage schema and a unique canonical pointing at the production host (https://social-sync-ai-1.emergent.host) — not the preview host. Good.",
+    "BlogPost renders Article schema and a 'Keep reading' section linking the other two posts (internal linking working).",
+    "/blog/<bad-slug> correctly client-side redirects to /blog (Navigate replace) — no 404 page needed since the SPA handles it.",
+    "Footer (CVFooter) cleanly lists all 5 landing pages under AI TOOLS column + /blog + /agents + /dashboard + /#pricing under COMPANY — internal-linking graph is solid for SEO juice flow.",
+    "Sitemap returned 11 <url> entries (1 home + 5 landings + 1 agents + 1 blog index + 3 posts) exactly as spec."
+  ],
+  "updated_files": [
+    "/app/frontend/src/pages/landing/content.js (h1 typo fix: '&amp;' -> '&')",
+    "/app/backend/tests/test_seo.py (new pytest module, 15 cases)"
+  ],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% (after 1 entity fix)"},
+  "test_credentials": "Not needed — all SEO routes are public.",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend SEO endpoints live at /api/seo/sitemap.xml and /api/seo/robots.txt (and root /sitemap.xml, /robots.txt). Regression test file: /app/backend/tests/test_seo.py. Helmet writes title/meta/canonical/JSON-LD after ~1s — when asserting in Playwright, wait_for_load_state('networkidle') + 1500ms timeout. Static robots.txt and the backend /robots.txt are intentionally different (static is augmented with Cloudflare bot rules); both return 200.",
+  "rca of the issue": "Bug: literal '&amp;' shown in /short-form-video-ideas-ai H1. RCA: the h1 was authored as a JS string literal in content.js (content object) and rendered via JSX expression `<h1>{h1}</h1>`. Unlike JSX text nodes (where the parser decodes HTML entities), JSX expression children are treated as plain strings and entities are NOT decoded. Mitigation: use the actual Unicode character ('&' or '—' etc.) directly in content.js strings, never HTML entities."
+}

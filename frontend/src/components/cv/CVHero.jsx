@@ -36,8 +36,8 @@ const CVHero = ({ onGetStarted }) => {
             transition={{ duration: 0.7, delay: 0.05 }}
             className="cv-display text-5xl sm:text-6xl lg:text-7xl font-semibold text-white leading-[0.95]"
           >
-            Turn Attention Into{' '}
-            <span className="cv-gradient-text">Digital Momentum.</span>
+            Create Viral Content{' '}
+            <span className="cv-gradient-text">Using AI in Minutes.</span>
           </motion.h1>
 
           <motion.p
@@ -46,8 +46,9 @@ const CVHero = ({ onGetStarted }) => {
             transition={{ duration: 0.7, delay: 0.15 }}
             className="mt-6 max-w-2xl text-[17px] leading-relaxed text-zinc-400"
           >
-            CortexViral combines AI-driven strategy, viral content, and a performance engine
-            that scales creators, brands, and SaaS faster — all from one inbox.
+            CortexViral is an <strong className="text-zinc-200">AI viral content generator</strong> that writes,
+            schedules, and grows your social media across TikTok, Instagram, X, LinkedIn, and YouTube —
+            all from one inbox. Built for creators, startups, and brands that want compounding growth.
           </motion.p>
 
           <motion.div

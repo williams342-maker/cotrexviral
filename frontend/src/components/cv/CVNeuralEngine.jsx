@@ -19,12 +19,13 @@ const CVNeuralEngine = () => {
         <div className="lg:col-span-5">
           <span className="inline-block text-[11px] uppercase tracking-[0.22em] text-violet-400 font-semibold mb-4">Our system</span>
           <h2 className="cv-display text-4xl sm:text-5xl font-semibold text-white leading-tight">
-            The Neural Engine{' '}
-            <span className="cv-gradient-text block sm:inline">Behind Viral Growth.</span>
+            AI Content Generation{' '}
+            <span className="cv-gradient-text block sm:inline">for Social Media.</span>
           </h2>
           <p className="mt-5 text-[16px] text-zinc-400 leading-relaxed max-w-md">
-            We blend AI intelligence with human creativity to ship scalable growth systems
-            that drive real engagement, real results, and real impact — not vanity metrics.
+            CortexViral's neural engine writes hook-tested, platform-tailored posts in your voice,
+            then schedules them at each channel's peak window. The result: real engagement,
+            real followers, and a content system that compounds month over month.
           </p>
           <button
             onClick={() => document.querySelector('#pipeline')?.scrollIntoView({ behavior: 'smooth' })}
