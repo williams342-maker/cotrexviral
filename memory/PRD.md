@@ -35,6 +35,17 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 18) **🎁 Comped-user ribbon on dashboard**
+  - When `usage.comped === true` (set via the new admin plan endpoint), the Overview billing strip now shows:
+    - Gift icon (emerald) instead of `CreditCard`/`CheckCircle2`.
+    - Inline pill **"✦ Comped by CortexViral"** next to the plan label (`data-testid="comped-ribbon"`).
+    - Friendly subtitle: *"Gifted by the CortexViral team — enjoy! No card on file, no renewal."*
+    - Right-side CTA is replaced with passive *"No action needed ✨"* (no Upgrade / Manage-billing buttons that would confuse the user).
+    - Annual-upsell banner is suppressed for comped users (they're not on Stripe).
+    - Trial / Past-due pills are also suppressed when comped (irrelevant).
+  - Reduces support-ticket noise ("why am I on Growth?"), and builds goodwill — comped creators tend to publicly thank the brand, which is organic marketing.
+  - P3 Next.js migration **deferred** per user direction. Current `react-helmet-async` + JSON-LD is good enough until there's evidence of indexing problems; revisit later with `react-snap` if needed.
+
 - 2026-02-26 (part 17) **🛡️ Admin plan-tier override + comped users**
   - **Admin login verified** — `GET /api/admin/me` returns `is_admin: true` for the allow-listed email. `ADMIN_EMAILS=williams342@gmail.com` is the source of truth; promote/demote also flips the flag at runtime.
   - **New endpoint `POST /api/admin/users/{user_id}/plan`** — body `{plan, comped, reason}`. Validates plan against `ENTITLEMENTS`, persists `plan`, `comped`, `comped_by`, `comped_reason`, `comped_at`, and writes an audit-log entry (`action: "set_user_plan"`).

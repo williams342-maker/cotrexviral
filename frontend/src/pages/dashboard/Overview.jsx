@@ -4,7 +4,7 @@ import axios from 'axios';
 import { API, useAuth } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useToast } from '../../hooks/use-toast';
-import { Send, Search, Radar, Share2, Sparkles, ArrowRight, FileText, Inbox, BarChart3, Wand2, CreditCard, CheckCircle2 } from 'lucide-react';
+import { Send, Search, Radar, Share2, Sparkles, ArrowRight, FileText, Inbox, BarChart3, Wand2, CreditCard, CheckCircle2, Gift } from 'lucide-react';
 import UsageMeter from '../../components/UsageMeter';
 
 const Overview = () => {
@@ -99,24 +99,37 @@ const Overview = () => {
       {/* Billing strip */}
       <div className="mb-7 flex items-center justify-between gap-4 flex-wrap rounded-2xl border border-neutral-200/70 bg-white px-5 py-4" data-testid="dashboard-billing-strip">
         <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${billing?.plan && billing.plan !== 'free' ? 'bg-violet-50 text-violet-700' : 'bg-neutral-100 text-neutral-600'}`}>
-            {billing?.plan && billing.plan !== 'free' ? <CheckCircle2 size={16} /> : <CreditCard size={16} />}
+          <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${billing?.usage?.comped ? 'bg-emerald-50 text-emerald-700' : billing?.plan && billing.plan !== 'free' ? 'bg-violet-50 text-violet-700' : 'bg-neutral-100 text-neutral-600'}`}>
+            {billing?.usage?.comped ? <Gift size={16} /> : billing?.plan && billing.plan !== 'free' ? <CheckCircle2 size={16} /> : <CreditCard size={16} />}
           </div>
           <div>
-            <div className="text-[14px] font-semibold text-neutral-900">
-              {billing?.usage?.plan_label || 'Free plan'} plan
-              {billing?.subscription_status === 'trialing' && <span className="ml-2 text-[11px] uppercase tracking-wider bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">Trial</span>}
-              {billing?.subscription_status === 'past_due' && <span className="ml-2 text-[11px] uppercase tracking-wider bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full font-semibold">Past due</span>}
+            <div className="text-[14px] font-semibold text-neutral-900 flex items-center flex-wrap gap-2">
+              <span>{billing?.usage?.plan_label || 'Free plan'} plan</span>
+              {billing?.usage?.comped && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10.5px] uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold"
+                  data-testid="comped-ribbon"
+                  title="Your account was gifted premium access by the CortexViral team. No billing required."
+                >
+                  <Gift size={9} /> Comped by CortexViral
+                </span>
+              )}
+              {!billing?.usage?.comped && billing?.subscription_status === 'trialing' && <span className="text-[11px] uppercase tracking-wider bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">Trial</span>}
+              {!billing?.usage?.comped && billing?.subscription_status === 'past_due' && <span className="text-[11px] uppercase tracking-wider bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full font-semibold">Past due</span>}
             </div>
             <div className="text-[12.5px] text-neutral-500">
-              {!billing?.plan || billing.plan === 'free'
+              {billing?.usage?.comped
+                ? 'Gifted by the CortexViral team — enjoy! No card on file, no renewal.'
+                : !billing?.plan || billing.plan === 'free'
                 ? 'Free forever — 5 viral hooks / week, TikTok only.'
                 : `Billed ${billing.billing_interval === 'year' ? 'annually' : 'monthly'}.${billing.current_period_end ? ` Renews ${new Date(billing.current_period_end).toLocaleDateString()}` : ''}`}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {(!billing?.plan || billing.plan === 'free') ? (
+          {billing?.usage?.comped ? (
+            <span className="text-[12px] text-emerald-700 font-medium">No action needed ✨</span>
+          ) : (!billing?.plan || billing.plan === 'free') ? (
             <Link to="/pricing" className="cv-btn-primary inline-flex items-center gap-1.5 px-4 h-9 rounded-full text-[13px] font-semibold" data-testid="upgrade-btn">
               Upgrade <ArrowRight size={13} />
             </Link>
@@ -134,7 +147,7 @@ const Overview = () => {
       </div>
 
       {/* Annual upsell — only shown to monthly subscribers (P2) */}
-      {billing?.plan && billing.plan !== 'free' && billing.billing_interval === 'month' && billing.subscription_status !== 'past_due' && (() => {
+      {!billing?.usage?.comped && billing?.plan && billing.plan !== 'free' && billing.billing_interval === 'month' && billing.subscription_status !== 'past_due' && (() => {
         // Annual savings = 12 × monthly − annual (2 months free).
         const savings = { starter: 30, growth: 78, agency: 198, pro: 58, scale: 198 };
         const perMonthAnnual = { starter: 13, growth: 33, agency: 83, pro: 24, scale: 83 };
