@@ -2,20 +2,30 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { API } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
-import { Users, Shield, ShieldCheck, FileText, Send, Inbox, BarChart3, Ticket as TicketIcon, Loader2, Sparkles, Crown, Zap } from 'lucide-react';
+import { Users, Shield, ShieldCheck, FileText, Send, Inbox, BarChart3, Ticket as TicketIcon, Loader2, Sparkles, Crown, Zap, TrendingUp, Eye, UserPlus, Wand2, CreditCard } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const AdminOverview = () => {
   const [stats, setStats] = useState(null);
   const [aiUsage, setAiUsage] = useState(null);
+  const [funnel, setFunnel] = useState(null);
+  const [funnelDays, setFunnelDays] = useState(30);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       axios.get(`${API}/admin/stats`, { withCredentials: true }).then((r) => setStats(r.data)).catch(() => {}),
       axios.get(`${API}/admin/ai-usage?months=6`, { withCredentials: true }).then((r) => setAiUsage(r.data)).catch(() => {}),
+      axios.get(`${API}/admin/funnel?days=30`, { withCredentials: true }).then((r) => setFunnel(r.data)).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, []);
+
+  const reloadFunnel = (days) => {
+    setFunnelDays(days);
+    axios.get(`${API}/admin/funnel?days=${days}`, { withCredentials: true })
+      .then((r) => setFunnel(r.data))
+      .catch(() => {});
+  };
 
   if (loading) return <DashboardLayout><div className="text-center py-12"><Loader2 className="animate-spin text-[#1B7BFF] mx-auto" /></div></DashboardLayout>;
 
@@ -85,6 +95,30 @@ const AdminOverview = () => {
               <div className="text-[13px] text-neutral-600 mt-1">{t.label}</div>
             </div>
           ))}
+        </div>
+      </Section>
+
+      <Section title="Conversion funnel">
+        <div className="bg-white rounded-2xl p-6 border border-neutral-200/70" data-testid="admin-funnel">
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
+            <div>
+              <div className="text-[13px] text-neutral-500 font-medium">Last {funnelDays} days</div>
+              <div className="text-[15px] font-semibold text-neutral-900 mt-0.5">Visitor → Paid conversion</div>
+            </div>
+            <div className="inline-flex rounded-full bg-neutral-100 p-1" data-testid="admin-funnel-tabs">
+              {[7, 30, 90].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => reloadFunnel(d)}
+                  data-testid={`admin-funnel-tab-${d}`}
+                  className={`px-3 h-7 rounded-full text-[12px] font-semibold transition-colors ${funnelDays === d ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
+          </div>
+          <FunnelStages funnel={funnel} />
         </div>
       </Section>
 
@@ -215,5 +249,81 @@ const Grid = ({ items }) => (
     ))}
   </div>
 );
+
+const FunnelStages = ({ funnel }) => {
+  if (!funnel) {
+    return <div className="text-[12.5px] text-neutral-500 italic py-4 text-center">Loading funnel…</div>;
+  }
+  const b = funnel.buckets || {};
+  const r = funnel.rates || {};
+  const stages = [
+    {
+      key: 'visitors', icon: Eye, label: 'Visitors', value: b.visitors || 0,
+      sub: `${b.raw_views || 0} raw views`, color: 'bg-sky-50 text-sky-700 border-sky-100',
+    },
+    {
+      key: 'signups', icon: UserPlus, label: 'Signups', value: b.signups || 0,
+      sub: `${pct(r.visit_to_signup)} of visitors`, color: 'bg-violet-50 text-violet-700 border-violet-100',
+    },
+    {
+      key: 'activated', icon: Wand2, label: 'Activated', value: b.activated || 0,
+      sub: `${pct(r.signup_to_activated)} of signups`, color: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-100',
+    },
+    {
+      key: 'paid', icon: CreditCard, label: 'Paid', value: b.paid || 0,
+      sub: `${pct(r.activated_to_paid)} of activated`, color: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+    },
+  ];
+  const peak = Math.max(1, ...stages.map((s) => s.value));
+
+  return (
+    <div className="space-y-2.5">
+      {stages.map((s, i) => {
+        const width = Math.max(8, Math.round((s.value / peak) * 100));
+        return (
+          <div
+            key={s.key}
+            className="flex items-center gap-4"
+            data-testid={`admin-funnel-stage-${s.key}`}
+          >
+            <div className="w-32 shrink-0 flex items-center gap-2">
+              <div className={`w-7 h-7 rounded-lg border ${s.color} flex items-center justify-center`}>
+                <s.icon size={13} />
+              </div>
+              <div className="text-[13.5px] font-semibold text-neutral-900">{s.label}</div>
+            </div>
+            <div className="flex-1">
+              <div
+                className={`h-9 rounded-lg border ${s.color} flex items-center px-3 transition-all duration-500`}
+                style={{ width: `${width}%`, minWidth: '40px' }}
+              >
+                <span className="text-[14px] font-semibold tabular-nums">{s.value.toLocaleString()}</span>
+              </div>
+            </div>
+            <div className="w-44 shrink-0 text-right text-[11.5px] text-neutral-500 tabular-nums">{s.sub}</div>
+          </div>
+        );
+      })}
+      <div className="mt-5 pt-4 border-t border-neutral-200/70 flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <TrendingUp size={14} className="text-emerald-600" />
+          <span className="text-[13px] text-neutral-700">
+            Overall <strong className="text-neutral-900">{pct(r.visit_to_paid)}</strong> of visitors become paid customers
+          </span>
+        </div>
+        {b.comped > 0 && (
+          <span className="text-[11.5px] text-neutral-500" data-testid="admin-funnel-comped">
+            + {b.comped} comped (not counted)
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const pct = (n) => {
+  if (typeof n !== 'number' || !isFinite(n)) return '0%';
+  return `${(n * 100).toFixed(n < 0.001 && n > 0 ? 3 : 1)}%`;
+};
 
 export default AdminOverview;

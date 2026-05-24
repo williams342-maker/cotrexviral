@@ -33,6 +33,7 @@ import AdminAudit from './pages/admin/AdminAudit';
 import AdminBroadcasts from './pages/admin/AdminBroadcasts';
 import { Toaster } from './components/ui/toaster';
 import { AuthProvider } from './context/AuthContext';
+import VisitTracker from './components/VisitTracker';
 
 function AppRouter() {
   const location = useLocation();
@@ -41,7 +42,9 @@ function AppRouter() {
     return <AuthCallback />;
   }
   return (
-    <Routes>
+    <>
+      <VisitTracker />
+      <Routes>
       <Route path="/" element={<Marketing />} />
       <Route path="/marketing" element={<Marketing />} />
       <Route path="/agents" element={<Agents />} />
@@ -76,6 +79,7 @@ function AppRouter() {
       <Route path="/admin/audit-log" element={<ProtectedRoute admin><AdminAudit /></ProtectedRoute>} />
       <Route path="/admin/broadcasts" element={<ProtectedRoute admin><AdminBroadcasts /></ProtectedRoute>} />
     </Routes>
+    </>
   );
 }
 

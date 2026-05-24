@@ -61,7 +61,8 @@
     "start": "craco start",
     "build": "craco build",
     "test": "craco test",
-    "prebuild": "node scripts/refresh-sitemap.js"
+    "prebuild": "node scripts/refresh-sitemap.js",
+    "build:seo": "craco build && react-snap"
   },
   "browserslist": {
     "production": [
@@ -88,7 +89,36 @@
     "eslint-plugin-react-hooks": "5.2.0",
     "globals": "15.15.0",
     "postcss": "^8.4.49",
+    "react-snap": "^1.23.0",
     "tailwindcss": "^3.4.17"
   },
-  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e",
+  "reactSnap": {
+    "inlineCss": false,
+    "puppeteerExecutablePath": "/usr/bin/google-chrome",
+    "puppeteerArgs": [
+      "--no-sandbox",
+      "--disable-setuid-sandbox"
+    ],
+    "skipThirdPartyRequests": true,
+    "include": [
+      "/",
+      "/pricing",
+      "/agents",
+      "/blog",
+      "/privacy",
+      "/terms",
+      "/sitemap",
+      "/ai-tiktok-post-generator",
+      "/viral-content-ideas-generator",
+      "/instagram-caption-ai-generator",
+      "/short-form-video-ideas-ai",
+      "/content-automation-tool"
+    ],
+    "crawl": true,
+    "minifyHtml": {
+      "collapseWhitespace": true,
+      "removeComments": true
+    }
+  }
 }

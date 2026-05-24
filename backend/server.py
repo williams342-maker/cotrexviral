@@ -32,6 +32,7 @@ from routes import (  # noqa: F401
     billing,         # Stripe subscriptions + webhook
     trends,          # Live TikTok trending hashtag feed
     ab_lab,          # A/B Hook Lab — variant generation + scoring
+    funnel,          # Marketing funnel analytics
 )
 
 
