@@ -28,6 +28,7 @@ SEO_LANDING_PATHS = [
     ("/agents", "0.7", "monthly"),
     ("/privacy", "0.3", "yearly"),
     ("/terms", "0.3", "yearly"),
+    ("/sitemap", "0.4", "monthly"),
     ("/blog", "0.8", "weekly"),
     # ----- Cluster: viral content -----
     ("/blog/what-makes-content-go-viral-2026", "0.7", "monthly"),
