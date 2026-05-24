@@ -41,7 +41,7 @@ const DashboardLayout = ({ children, title, subtitle }) => {
         <aside className="w-64 shrink-0 border-r border-neutral-200/70 bg-white/60 backdrop-blur-sm min-h-screen sticky top-0 pb-24">
           <div className="p-5 border-b border-neutral-200/70">
             <button onClick={() => navigate('/')} className="flex items-center gap-2 group">
-              <div className="w-9 h-9 rounded-lg bg-[#0B2F66] text-white flex items-center justify-center font-bold text-sm">cv</div>
+              <img src="/cortex-logo.png" alt="CortexViral" className="w-9 h-9 rounded-lg object-contain" style={{ background: '#0B0B16' }} />
               <span className="font-semibold text-[15px]">CortexViral</span>
               {user?.is_admin && <span className="ml-1 text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-violet-100 text-violet-700">admin</span>}
             </button>

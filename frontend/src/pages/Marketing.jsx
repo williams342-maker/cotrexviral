@@ -1,16 +1,11 @@
 import React, { useState } from 'react';
-import Navbar from '../components/Navbar';
-import Hero from '../components/Hero';
-import LogoBar from '../components/LogoBar';
-import HowWeWork from '../components/HowWeWork';
-import Capabilities from '../components/Capabilities';
-import WhyUs from '../components/WhyUs';
-import Agents from '../components/Agents';
-import Solutions from '../components/Solutions';
-import Stats from '../components/Stats';
-import Testimonials from '../components/Testimonials';
-import CTAFooter from '../components/CTAFooter';
-import Footer from '../components/Footer';
+import CVNavbar from '../components/cv/CVNavbar';
+import CVHero from '../components/cv/CVHero';
+import CVNeuralEngine from '../components/cv/CVNeuralEngine';
+import CVPipeline from '../components/cv/CVPipeline';
+import CVResults from '../components/cv/CVResults';
+import CVCTAFooter from '../components/cv/CVCTAFooter';
+import CVFooter from '../components/cv/CVFooter';
 import { SelectAgentModal, AgentChatModal } from '../components/Modals';
 
 const Marketing = () => {
@@ -31,27 +26,18 @@ const Marketing = () => {
     setChatOpen(false);
     setTimeout(() => setSelectOpen(true), 120);
   };
-  const openAgentDirect = (a) => {
-    setActiveAgent(a);
-    setChatOpen(true);
-  };
 
   return (
-    <div className="min-h-screen bg-[#F6F4ED] text-neutral-900 antialiased">
-      <Navbar onGetStarted={openSelect} />
+    <div className="min-h-screen cv-dark antialiased">
+      <CVNavbar onGetStarted={openSelect} />
       <main>
-        <Hero onGetStarted={openSelect} />
-        <LogoBar />
-        <HowWeWork />
-        <Capabilities />
-        <WhyUs />
-        <Agents onSelect={openAgentDirect} />
-        <Solutions />
-        <Stats />
-        <Testimonials />
-        <CTAFooter onGetStarted={openSelect} />
+        <CVHero onGetStarted={openSelect} />
+        <CVNeuralEngine />
+        <CVPipeline />
+        <CVResults />
+        <CVCTAFooter onGetStarted={openSelect} />
       </main>
-      <Footer />
+      <CVFooter />
 
       <SelectAgentModal
         open={selectOpen}

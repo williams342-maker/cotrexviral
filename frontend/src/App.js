@@ -2,6 +2,7 @@ import React from 'react';
 import './App.css';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import Marketing from './pages/Marketing';
+import Agents from './pages/Agents';
 import AuthCallback from './pages/AuthCallback';
 import ProtectedRoute from './components/ProtectedRoute';
 import Overview from './pages/dashboard/Overview';
@@ -35,6 +36,7 @@ function AppRouter() {
     <Routes>
       <Route path="/" element={<Marketing />} />
       <Route path="/marketing" element={<Marketing />} />
+      <Route path="/agents" element={<Agents />} />
       <Route path="/dashboard" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
       <Route path="/dashboard/main" element={<ProtectedRoute><Main /></ProtectedRoute>} />
       <Route path="/dashboard/performance" element={<ProtectedRoute><Performance /></ProtectedRoute>} />
