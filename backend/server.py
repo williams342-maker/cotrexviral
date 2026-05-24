@@ -596,14 +596,47 @@ async def ai_generate_video_script(payload: VideoScriptRequest, request: Request
     return data
 
 
+PLATFORM_LIMITS = {
+    "instagram": {"chars": 2200, "tag": "Up to 2,200 chars, 30 hashtags"},
+    "tiktok": {"chars": 2200, "tag": "Up to 2,200 chars"},
+    "x": {"chars": 280, "tag": "Up to 280 chars"},
+    "facebook": {"chars": 63206, "tag": "Long-form, but best <500"},
+    "linkedin": {"chars": 3000, "tag": "Up to 3,000 chars"},
+    "youtube": {"chars": 5000, "tag": "Description up to 5,000 chars"},
+    "pinterest": {"chars": 500, "tag": "Up to 500 chars"},
+    "threads": {"chars": 500, "tag": "Up to 500 chars"},
+    "reddit": {"chars": 40000, "tag": "Long-form supported"},
+    "substack": {"chars": 100000, "tag": "Newsletter / long-form"},
+    "blogger": {"chars": 100000, "tag": "Long-form"},
+}
+
+POSTABLE_PLATFORMS = list(PLATFORM_LIMITS.keys())
+
+
+@api.get("/channels/limits")
+async def channels_limits(request: Request):
+    """Returns per-platform publishing limits used by the AI and UI."""
+    await get_current_user(request)
+    return PLATFORM_LIMITS
+
+
 @api.post("/ai/multi-post")
 async def ai_multi_post(payload: MultiPostRequest, request: Request):
     user = await get_current_user(request)
+
+    # Build a tailored instruction with per-platform constraints
+    selected_limits = {p: PLATFORM_LIMITS.get(p, {"chars": 2000, "tag": "No specific limit"}) for p in payload.platforms}
+    limits_text = "\n".join([f"- {p}: max {info['chars']} chars ({info['tag']})" for p, info in selected_limits.items()])
+
     system = (
         "You are a multi-platform social media manager. Given a listing or news item, "
-        "generate platform-tailored posts. Each platform has different character limits and styles. "
-        "Respond ONLY in JSON: "
-        '{"posts": [{"platform": str, "content": str, "hashtags": [str]}]}'
+        "generate platform-tailored posts respecting EACH platform's character limit. "
+        "Use the right voice for each: X is punchy, LinkedIn is professional, Instagram is visual+emoji-friendly, "
+        "TikTok is energetic, Threads is casual, Pinterest is descriptive, YouTube is detail-rich, "
+        "Reddit is conversational and authentic (no salesy tone), Substack/Blogger are long-form.\n\n"
+        f"PLATFORM CONSTRAINTS:\n{limits_text}\n\n"
+        'Respond ONLY in JSON: '
+        '{"posts": [{"platform": str, "content": str, "hashtags": [str], "char_count": int}]}'
     )
     chat = _llm(f"multipost-{user.user_id}", system)
     prompt = (

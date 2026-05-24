@@ -502,7 +502,22 @@ const VideoTab = () => {
 };
 
 // ---------- Multi-platform ----------
-const PLATFORM_OPTIONS = ['instagram', 'tiktok', 'x', 'facebook', 'linkedin', 'reddit'];
+const PLATFORM_OPTIONS = [
+  { id: 'instagram', label: 'Instagram', chars: 2200 },
+  { id: 'tiktok', label: 'TikTok', chars: 2200 },
+  { id: 'x', label: 'X (Twitter)', chars: 280 },
+  { id: 'facebook', label: 'Facebook', chars: 63206 },
+  { id: 'linkedin', label: 'LinkedIn', chars: 3000 },
+  { id: 'youtube', label: 'YouTube', chars: 5000 },
+  { id: 'pinterest', label: 'Pinterest', chars: 500 },
+  { id: 'threads', label: 'Threads', chars: 500 },
+  { id: 'reddit', label: 'Reddit', chars: 40000 },
+  { id: 'substack', label: 'Substack', chars: 100000 },
+  { id: 'blogger', label: 'Blogger', chars: 100000 },
+];
+
+const platformLimit = (p) => PLATFORM_OPTIONS.find((o) => o.id === p)?.chars || 2000;
+const platformLabel = (p) => PLATFORM_OPTIONS.find((o) => o.id === p)?.label || p;
 
 const MultiTab = () => {
   const { toast } = useToast();
@@ -545,20 +560,24 @@ const MultiTab = () => {
           <Textarea value={form.listing} onChange={(e) => setForm({ ...form, listing: e.target.value })} rows={4} placeholder="New product: organic cotton tote bag, $29, available in 5 colors, made in Portugal..." className="rounded-xl border-neutral-300" />
         </div>
         <div>
-          <FieldLabel>Platforms</FieldLabel>
+          <FieldLabel>Platforms — AI will tailor copy & respect each platform's limit</FieldLabel>
           <div className="flex flex-wrap gap-2">
             {PLATFORM_OPTIONS.map((p) => (
               <button
-                key={p}
-                onClick={() => togglePlatform(p)}
+                key={p.id}
+                onClick={() => togglePlatform(p.id)}
                 type="button"
-                className={`px-3.5 py-1.5 rounded-full text-[13px] font-medium border capitalize transition-all ${
-                  platforms[p]
+                title={`${p.chars.toLocaleString()} char max`}
+                className={`px-3.5 py-1.5 rounded-full text-[13px] font-medium border transition-all ${
+                  platforms[p.id]
                     ? 'bg-[#1B7BFF] text-white border-[#1B7BFF]'
                     : 'bg-white text-neutral-700 border-neutral-300 hover:border-neutral-400'
                 }`}
               >
-                {p}
+                {p.label}
+                <span className={`ml-1.5 text-[10.5px] ${platforms[p.id] ? 'text-blue-100' : 'text-neutral-400'}`}>
+                  {p.chars >= 1000 ? `${(p.chars / 1000).toFixed(p.chars % 1000 === 0 ? 0 : 1)}k` : p.chars}
+                </span>
               </button>
             ))}
           </div>
@@ -584,27 +603,37 @@ const MultiTab = () => {
 
       {result?.posts?.length > 0 && (
         <div className="grid md:grid-cols-2 gap-4">
-          {result.posts.map((p, i) => (
-            <div key={i} className="bg-white rounded-3xl p-5 border border-neutral-200/70">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] uppercase tracking-wider px-2.5 py-1 rounded-full bg-[#1B7BFF]/10 text-[#1B7BFF] font-semibold capitalize">{p.platform}</span>
-                <button onClick={() => copyText(p.content, toast)} className="text-neutral-500 hover:text-neutral-800"><Copy size={13} /></button>
-              </div>
-              <p className="text-[14px] text-neutral-800 whitespace-pre-line leading-relaxed mb-3">{p.content}</p>
-              {p.hashtags?.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {p.hashtags.map((h, j) => (
-                    <span key={j} className="text-[11.5px] text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-100">
-                      <Hash size={9} className="inline" />{h.replace(/^#/, '')}
+          {result.posts.map((p, i) => {
+            const limit = platformLimit(p.platform);
+            const len = p.char_count || p.content?.length || 0;
+            const overLimit = len > limit;
+            return (
+              <div key={i} className="bg-white rounded-3xl p-5 border border-neutral-200/70">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[11px] uppercase tracking-wider px-2.5 py-1 rounded-full bg-[#1B7BFF]/10 text-[#1B7BFF] font-semibold">{platformLabel(p.platform)}</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[11px] font-medium ${overLimit ? 'text-rose-600' : 'text-neutral-500'}`}>
+                      {len.toLocaleString()} / {limit.toLocaleString()}
                     </span>
-                  ))}
+                    <button onClick={() => copyText(p.content, toast)} className="text-neutral-500 hover:text-neutral-800"><Copy size={13} /></button>
+                  </div>
                 </div>
-              )}
-              <button onClick={() => sendToCompose(p)} className="w-full text-[12.5px] font-medium bg-neutral-50 hover:bg-neutral-100 text-neutral-700 border border-neutral-200 px-3 py-2 rounded-lg inline-flex items-center justify-center gap-1.5 transition-colors">
-                <Send size={12} /> Send to Compose
-              </button>
-            </div>
-          ))}
+                <p className="text-[14px] text-neutral-800 whitespace-pre-line leading-relaxed mb-3">{p.content}</p>
+                {p.hashtags?.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {p.hashtags.map((h, j) => (
+                      <span key={j} className="text-[11.5px] text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-100">
+                        <Hash size={9} className="inline" />{h.replace(/^#/, '')}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <button onClick={() => sendToCompose(p)} className="w-full text-[12.5px] font-medium bg-neutral-50 hover:bg-neutral-100 text-neutral-700 border border-neutral-200 px-3 py-2 rounded-lg inline-flex items-center justify-center gap-1.5 transition-colors">
+                  <Send size={12} /> Send to Compose
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
       {result?.raw && <pre className="bg-white p-4 rounded-2xl border border-neutral-200 text-[13px] whitespace-pre-wrap">{result.raw}</pre>}

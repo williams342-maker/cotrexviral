@@ -6,8 +6,14 @@ import DashboardLayout from '../../components/DashboardLayout';
 import { Textarea } from '../../components/ui/textarea';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Sparkles, Send, Loader2, Check } from 'lucide-react';
+import { Sparkles, Send, Loader2, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
+
+const PLATFORM_LIMITS = {
+  instagram: 2200, tiktok: 2200, x: 280, facebook: 63206, linkedin: 3000,
+  youtube: 5000, pinterest: 500, threads: 500, reddit: 40000,
+  substack: 100000, blogger: 100000,
+};
 
 const Compose = () => {
   const { toast } = useToast();
@@ -107,6 +113,25 @@ const Compose = () => {
           <div>
             <label className="text-[12px] font-medium text-neutral-600 mb-1.5 block">Post content</label>
             <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={9} placeholder="Your post will appear here…" className="rounded-xl border-neutral-300 text-[14.5px] leading-relaxed" />
+            {(() => {
+              const len = (content + (hashtags.length ? '\n\n' + hashtags.map(h => h.startsWith('#') ? h : '#' + h).join(' ') : '')).length;
+              const selectedPlatforms = Object.keys(selected).filter((k) => selected[k]);
+              const tightestLimit = selectedPlatforms.length
+                ? Math.min(...selectedPlatforms.map((p) => PLATFORM_LIMITS[p] || 2000))
+                : null;
+              const tightestPlatform = selectedPlatforms.length
+                ? selectedPlatforms.reduce((a, b) => (PLATFORM_LIMITS[a] || 9999) < (PLATFORM_LIMITS[b] || 9999) ? a : b)
+                : null;
+              if (!tightestLimit) return <div className="text-[11.5px] text-neutral-500 mt-1.5">{len.toLocaleString()} characters</div>;
+              const over = len > tightestLimit;
+              return (
+                <div className={`mt-1.5 flex items-center gap-1.5 text-[11.5px] ${over ? 'text-rose-600 font-medium' : 'text-neutral-500'}`}>
+                  {over && <AlertTriangle size={12} />}
+                  {len.toLocaleString()} / {tightestLimit.toLocaleString()} chars
+                  <span className="text-neutral-400">(limited by {tightestPlatform})</span>
+                </div>
+              );
+            })()}
           </div>
 
           {hashtags.length > 0 && (
