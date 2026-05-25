@@ -109,6 +109,57 @@ class TestBadSignature:
             billing.STRIPE_WEBHOOK_SECRET = original
 
 
+class TestAdminWebhookEvents:
+    H = {"Authorization": "Bearer test_session_1779636592168", "Content-Type": "application/json"}
+
+    def test_requires_admin(self):
+        r = httpx.get(f"{API_URL}/api/admin/webhook-events", timeout=10)
+        assert r.status_code == 401
+
+    def test_lists_recent_events_with_redelivery_count(self):
+        _clear_stripe_events()
+        evt = _fresh_event("customer.subscription.updated")
+        # First delivery
+        httpx.post(WEBHOOK, json=evt, timeout=10).raise_for_status()
+        # Two redeliveries — should bump redeliveries to 2
+        httpx.post(WEBHOOK, json=evt, timeout=10).raise_for_status()
+        httpx.post(WEBHOOK, json=evt, timeout=10).raise_for_status()
+
+        r = httpx.get(f"{API_URL}/api/admin/webhook-events", headers=self.H, timeout=10)
+        r.raise_for_status()
+        body = r.json()
+        assert body["total"] == 1
+        assert len(body["items"]) == 1
+        item = body["items"][0]
+        assert item["event_id"] == evt["id"]
+        assert item["type"] == "customer.subscription.updated"
+        assert item["redeliveries"] == 2
+
+    def test_top_event_types_aggregation(self):
+        _clear_stripe_events()
+        # Mix of types
+        for _ in range(3):
+            httpx.post(WEBHOOK, json=_fresh_event("invoice.payment_failed"), timeout=10).raise_for_status()
+        for _ in range(2):
+            httpx.post(WEBHOOK, json=_fresh_event("customer.subscription.created"), timeout=10).raise_for_status()
+        httpx.post(WEBHOOK, json=_fresh_event("checkout.session.completed"), timeout=10).raise_for_status()
+
+        r = httpx.get(f"{API_URL}/api/admin/webhook-events", headers=self.H, timeout=10)
+        r.raise_for_status()
+        types = {t["type"]: t["n"] for t in r.json()["top_event_types"]}
+        assert types["invoice.payment_failed"] == 3
+        assert types["customer.subscription.created"] == 2
+        assert types["checkout.session.completed"] == 1
+
+    def test_limit_clamped(self):
+        r = httpx.get(f"{API_URL}/api/admin/webhook-events?limit=5000", headers=self.H, timeout=10)
+        r.raise_for_status()
+        assert r.json()["limit"] == 200
+        r2 = httpx.get(f"{API_URL}/api/admin/webhook-events?limit=0", headers=self.H, timeout=10)
+        r2.raise_for_status()
+        assert r2.json()["limit"] == 1
+
+
 @pytest.fixture
 def monkeypatch_env(monkeypatch):
     """Placeholder fixture for the strict-mode test that doesn't actually need

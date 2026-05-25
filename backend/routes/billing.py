@@ -424,11 +424,19 @@ async def stripe_webhook(request: Request):
             "event_id": event_id,
             "type": etype,
             "received_at": datetime.now(timezone.utc),
+            "redeliveries": 0,
         })
     except Exception as e:
         # DuplicateKeyError → already processed. Pymongo raises this with
         # `code=11000`; we check the str representation to keep the import light.
         if "duplicate key" in str(e).lower() or "E11000" in str(e):
+            # Bump a redelivery counter on the existing row so the admin
+            # "Webhook Events" page can show how often Stripe retried.
+            await db.stripe_events.update_one(
+                {"event_id": event_id},
+                {"$inc": {"redeliveries": 1},
+                 "$set": {"last_redelivery_at": datetime.now(timezone.utc)}},
+            )
             logger.info("Stripe webhook: duplicate event_id=%s type=%s — skipping", event_id, etype)
             return {"received": True, "duplicate": True, "event_id": event_id}
         logger.exception("Failed to record stripe_event")
@@ -546,4 +554,42 @@ async def billing_config():
             }
             for plan_id, p in PLANS.items()
         },
+    }
+
+
+# -----------------------------------------------------------------------------
+# Admin — list recent Stripe webhook events for debugging deliveries.
+# -----------------------------------------------------------------------------
+@api.get("/admin/webhook-events")
+async def admin_list_webhook_events(request: Request, limit: int = 50):
+    """Return the most recent Stripe events received by /api/webhook/stripe.
+
+    Powers the /admin/webhook-events page. Useful for sanity-checking Stripe
+    deliveries after a deploy, debugging why a subscription didn't apply, and
+    confirming idempotency (the `duplicate` flag tells you which events were
+    re-deliveries Stripe sent because of network issues)."""
+    from deps import require_admin
+    await require_admin(request)
+    limit = max(1, min(limit, 200))
+
+    cursor = db.stripe_events.find({}, {"_id": 0}).sort("received_at", -1).limit(limit)
+    items = []
+    async for row in cursor:
+        if isinstance(row.get("received_at"), datetime):
+            row["received_at"] = row["received_at"].isoformat()
+        items.append(row)
+
+    total = await db.stripe_events.count_documents({})
+    by_type_pipe = [
+        {"$group": {"_id": "$type", "n": {"$sum": 1}}},
+        {"$sort": {"n": -1}},
+        {"$limit": 8},
+    ]
+    by_type = [{"type": r["_id"], "n": r["n"]} async for r in db.stripe_events.aggregate(by_type_pipe)]
+
+    return {
+        "total": total,
+        "limit": limit,
+        "items": items,
+        "top_event_types": by_type,
     }

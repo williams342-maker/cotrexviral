@@ -35,6 +35,12 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 24) **🪝 Admin "Webhook Events" page**
+  - New `GET /api/admin/webhook-events?limit=50` reads the `stripe_events` collection. Returns `{total, items[], top_event_types[]}` — items include `event_id`, `type`, `received_at`, and a new `redeliveries` counter.
+  - **Stripe webhook upgrade**: when a duplicate `event_id` hits the receiver, instead of silently short-circuiting we now `$inc redeliveries` and `$set last_redelivery_at` on the existing row — gives admins visibility into how often Stripe is re-delivering each event (signals downstream processing issues or network flakes).
+  - **`/admin/webhook-events` page**: stats card with total + Refresh button, "By Event Type" pill row with top 8 types + counts, sortable table showing the last 50 events with green "Processed" / amber "+N Repeat" status pills. Empty-state copy ("No Stripe events received yet…") guides setup. New "Webhook Events" link in admin sidebar with `Webhook` icon.
+  - **4 new pytest cases** covering admin auth, full payload shape, redelivery counter (verified to bump to 2 after 3 deliveries), `limit` clamping. **122 backend tests pass.**
+
 - 2026-02-26 (part 23) **📬 Email Health card + cookie@1 resolution**
   - New `GET /api/admin/email/health?hours=24` aggregates `email_log` by status: `{total, sent, rejected, errored, skipped, delivery_rate, last_problem}`. `last_problem` surfaces the most recent non-success row with reason + Mailgun HTTP status so an admin can diagnose without opening MongoDB. `hours` is clamped 1–720.
   - **AdminOverview card** — sits between Funnel and AI analytics. Color-coded "Mailgun delivery" pill (Healthy ≥95% / Degraded ≥70% / Failing) with delivery-rate + total-sends sub-line, 4 tile counts (Sent / Rejected / Errored / Skipped — coloured red when non-zero), and an amber "Most recent issue" expandable line showing the status + subject + raw reason. Right now it correctly shows `Failing` + the Mailgun "Account disabled" 403, which is exactly what you'd need to debug deliverability.

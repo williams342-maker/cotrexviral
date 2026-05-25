@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Sparkles, Search, Radar, Share2, Send, Inbox, FileText, LogOut, ChevronRight, Wand2, LifeBuoy, ShieldCheck, Users as UsersIcon, Ticket as TicketIcon, History, Megaphone, Activity, TrendingUp, Calendar } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Search, Radar, Share2, Send, Inbox, FileText, LogOut, ChevronRight, Wand2, LifeBuoy, ShieldCheck, Users as UsersIcon, Ticket as TicketIcon, History, Megaphone, Activity, TrendingUp, Calendar, Webhook } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ImpersonateBanner from './ImpersonateBanner';
 import BroadcastBanner from './BroadcastBanner';
@@ -27,6 +27,7 @@ const adminItems = [
   { to: '/admin/tickets', label: 'Support Inbox', icon: TicketIcon },
   { to: '/admin/broadcasts', label: 'Broadcasts', icon: Megaphone },
   { to: '/admin/audit-log', label: 'Audit Log', icon: History },
+  { to: '/admin/webhook-events', label: 'Webhook Events', icon: Webhook },
 ];
 
 const DashboardLayout = ({ children, title, subtitle }) => {
