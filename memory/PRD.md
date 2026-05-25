@@ -35,6 +35,30 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 33) **⚙️ Admin system settings — signup pause + per-platform kill-switches**
+  - **New `routes/admin_settings.py`** — single-doc settings collection `system_settings` with two switches:
+    - `signups_enabled: bool` (default True) — when False, brand-new Google signups return 503 from `/api/auth/session` so the marketing landing's "Start Growing" CTA stops creating accounts. Existing users + email-allowlisted admins always log in (so the admin can never lock themselves out of the panel). Admin-create + lead-form auto-create both bypass the pause so warm leads aren't lost.
+    - `disabled_platforms: list[str]` (default []) — `/api/channels/connect` rejects with 403 when the requested platform is in the list, *including reconnects* (so an admin can yank a misbehaving integration immediately). Existing connections are NOT auto-disconnected — scheduled posts that already reference the platform continue to dispatch.
+  - **Endpoints**:
+    - `GET /api/admin/settings` (admin) — current settings.
+    - `PATCH /api/admin/settings` (admin) — partial update; dedupe + sort platforms; audit-logged.
+    - `GET /api/system/settings` (public) — exposes only user-safe fields. Channels page polls this on load to dim & lock disabled platforms.
+  - **In-process 5s-TTL cache** on `get_settings()` so the hot paths (every `/auth/session`, every `/channels/connect`) avoid hitting Mongo. PATCH calls invalidate the cache so admin toggles propagate near-instantly.
+  - **Frontend `/admin/settings` page** (`AdminSettings.jsx`):
+    - "Accept new users" card: large emerald/rose icon, status copy that adapts to the toggle state ("Anyone with a Google account can sign up" vs "Brand-new signups paused"), a rose `SIGNUPS PAUSED` badge when off.
+    - "Integration kill-switches" card: 3-column grid of platform rows (Instagram, TikTok, X, Facebook, LinkedIn, YouTube, Pinterest, Threads, Reddit) — each with platform icon, name, live status (`Enabled`/`Disabled`), and a custom emerald/grey toggle switch. Disabled rows turn rose.
+    - **Dirty-state sticky action bar** at the bottom shows "Unsaved changes" + Discard / Save buttons. Bar only appears when local state ≠ server state.
+    - New `Settings` icon item in the admin sidebar.
+  - **Channels page** (`Channels.jsx`) — fetches `/api/system/settings` alongside the catalog and:
+    - Adds a rose `DISABLED` pill next to the platform label.
+    - Status line reads "Off — by admin" instead of "Not connected".
+    - Connect button is disabled + greyed out + tooltipped ("This integration has been temporarily disabled by the admin").
+    - Already-connected users can still hit Disconnect to clean up — they're not forced to keep a stale connection.
+  - **10 new pytest cases** (`test_admin_settings.py`):
+    - Public read returns defaults · admin auth required · GET shape · PATCH signups toggle persists & is visible publicly · PATCH platforms dedupes + sorts + ignores blanks · partial patch preserves untouched field · connect to disabled platform → 403 · connect to non-disabled platform succeeds · reconnect of a previously-connected disabled platform → 403 · admin-create bypasses signup pause.
+  - **Bug found+fixed during testing**: pytest runs in a separate process from the live backend, so directly deleting the settings doc from a test wouldn't invalidate the backend's in-process cache → test order leakage. Reworked `_reset_settings()` to call `PATCH /api/admin/settings` instead so the cache is busted server-side. Saves future cache-related flake.
+  - **Live screenshot-verified** end-to-end: toggling signups off → "SIGNUPS PAUSED" badge appears → toggling Pinterest off → save → /dashboard/channels shows Pinterest with the rose DISABLED pill and locked Connect button. Reset back to defaults verified.
+
 - 2026-02-26 (part 32) **🔁 Series-aware cancel + Shift+drag series shift**
   - **Backend** (`routes/channels.py`):
     - `DELETE /api/posts/scheduled/{id}?scope=only|future|all` — new optional `scope` query param. `only` (default) preserves the old behavior. `future` deletes every still-scheduled post in the same `recurrence_group_id` whose `scheduled_at` ≥ this one (past instances kept). `all` deletes the entire series. Non-recurring posts always downgrade to `only`. Returns `{ok, deleted, scope}`.

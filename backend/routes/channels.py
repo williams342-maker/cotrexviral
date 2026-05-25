@@ -75,6 +75,16 @@ async def connect_channel(payload: ChannelConnectRequest, request: Request):
     if payload.platform not in SUPPORTED_PLATFORMS:
         raise HTTPException(status_code=400, detail="Unsupported platform")
 
+    # Platform-level admin kill-switch — blocks new connects but doesn't yank
+    # existing channels (so an admin can disable a misbehaving integration
+    # without breaking already-scheduled posts).
+    from routes.admin_settings import is_platform_enabled
+    if not await is_platform_enabled(payload.platform):
+        raise HTTPException(
+            status_code=403,
+            detail=f"The {payload.platform} integration is temporarily disabled by the admin.",
+        )
+
     # If user already has this channel (just reconnecting), bypass the cap.
     existing = await db.channels.find_one(
         {"user_id": user.user_id, "platform": payload.platform, "connected": True},

@@ -32,6 +32,7 @@ import AdminTickets from './pages/admin/AdminTickets';
 import AdminAudit from './pages/admin/AdminAudit';
 import AdminBroadcasts from './pages/admin/AdminBroadcasts';
 import AdminWebhookEvents from './pages/admin/AdminWebhookEvents';
+import AdminSettings from './pages/admin/AdminSettings';
 import Onboarding from './pages/Onboarding';
 import AuthClaim from './pages/AuthClaim';
 import { Toaster } from './components/ui/toaster';
@@ -84,6 +85,7 @@ function AppRouter() {
       <Route path="/admin/audit-log" element={<ProtectedRoute admin><AdminAudit /></ProtectedRoute>} />
       <Route path="/admin/broadcasts" element={<ProtectedRoute admin><AdminBroadcasts /></ProtectedRoute>} />
       <Route path="/admin/webhook-events" element={<ProtectedRoute admin><AdminWebhookEvents /></ProtectedRoute>} />
+      <Route path="/admin/settings" element={<ProtectedRoute admin><AdminSettings /></ProtectedRoute>} />
     </Routes>
     </>
   );

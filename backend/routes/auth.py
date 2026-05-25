@@ -34,6 +34,18 @@ async def create_session(request: Request, response: Response):
     existing = await db.users.find_one({"email": email}, {"_id": 0})
     is_admin_flag = email.lower() in ADMIN_EMAILS
     is_new_user = existing is None
+
+    # Block brand-new signups when admin has paused them. Existing users +
+    # email-allowlisted admins always get through (so admins can still log in
+    # to flip the switch back).
+    if is_new_user and not is_admin_flag:
+        from routes.admin_settings import are_signups_enabled
+        if not await are_signups_enabled():
+            raise HTTPException(
+                status_code=503,
+                detail="Signups are temporarily paused. Please check back soon.",
+            )
+
     if existing:
         user_id = existing["user_id"]
         await db.users.update_one(

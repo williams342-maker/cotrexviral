@@ -82,17 +82,19 @@ const Channels = () => {
   const [busy, setBusy] = useState(null);
   const [linkedInOAuth, setLinkedInOAuth] = useState({ configured: false, connected: false });
   const [tiktokOAuth, setTiktokOAuth] = useState({ configured: false, connected: false });
+  const [disabledPlatforms, setDisabledPlatforms] = useState([]);
   const { toast } = useToast();
   const paywall = usePaywallHandler();
 
   const load = async () => {
     setLoading(true);
     try {
-      const [cat, list, li, tt] = await Promise.all([
+      const [cat, list, li, tt, sys] = await Promise.all([
         axios.get(`${API}/channels/catalog`, { withCredentials: true }),
         axios.get(`${API}/channels`, { withCredentials: true }),
         axios.get(`${API}/oauth/linkedin/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
         axios.get(`${API}/oauth/tiktok/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
+        axios.get(`${API}/system/settings`).catch(() => ({ data: { disabled_platforms: [] } })),
       ]);
       setCatalog(cat.data);
       const map = {};
@@ -100,6 +102,7 @@ const Channels = () => {
       setStatusMap(map);
       setLinkedInOAuth(li.data);
       setTiktokOAuth(tt.data);
+      setDisabledPlatforms(sys.data.disabled_platforms || []);
     } catch (e) {}
     setLoading(false);
   };
@@ -225,6 +228,7 @@ const Channels = () => {
                       status={statusMap[p]}
                       busy={busy === p}
                       onToggle={() => toggle(p)}
+                      disabledByAdmin={disabledPlatforms.includes(p)}
                     />
                   ))}
                 </div>
@@ -237,36 +241,53 @@ const Channels = () => {
   );
 };
 
-const PlatformCard = ({ platform, meta, status, busy, onToggle }) => {
+const PlatformCard = ({ platform, meta, status, busy, onToggle, disabledByAdmin = false }) => {
   if (!meta) return null;
   const Icon = meta.icon;
   const connected = status?.connected;
+  // Admin-disabled but not yet connected → fully locked. If user is already
+  // connected, we leave the disconnect button enabled so they can clean up.
+  const locked = disabledByAdmin && !connected;
   return (
-    <div className="bg-white rounded-2xl p-4 border border-neutral-200/70 hover:shadow-md transition-all">
+    <div className={`rounded-2xl p-4 border transition-all ${
+      locked
+        ? 'bg-neutral-50/60 border-neutral-200/70 opacity-80'
+        : 'bg-white border-neutral-200/70 hover:shadow-md'
+    }`} data-testid={`platform-card-${platform}`}>
       <div className="flex items-center gap-3 mb-3">
-        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${meta.color} text-white flex items-center justify-center shrink-0`}>
+        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${meta.color} text-white flex items-center justify-center shrink-0 ${locked ? 'grayscale' : ''}`}>
           <Icon size={18} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[14px] font-semibold truncate">{meta.label}</div>
+          <div className="text-[14px] font-semibold truncate flex items-center gap-2">
+            {meta.label}
+            {disabledByAdmin && (
+              <span className="inline-flex items-center text-[9.5px] uppercase tracking-wider font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded-full" data-testid={`platform-disabled-badge-${platform}`}>
+                Disabled
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-1.5 text-[11.5px] mt-0.5">
             <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-neutral-300'}`} />
             <span className={connected ? 'text-emerald-700' : 'text-neutral-500'}>
-              {connected ? (status.handle || 'Connected') : 'Not connected'}
+              {connected ? (status.handle || 'Connected') : (locked ? 'Off — by admin' : 'Not connected')}
             </span>
           </div>
         </div>
       </div>
       <button
         onClick={onToggle}
-        disabled={busy}
-        className={`w-full h-9 rounded-lg text-[12.5px] font-medium inline-flex items-center justify-center gap-1.5 transition-colors ${
+        disabled={busy || locked}
+        title={locked ? 'This integration has been temporarily disabled by the admin' : undefined}
+        className={`w-full h-9 rounded-lg text-[12.5px] font-medium inline-flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
           connected
             ? 'bg-neutral-50 text-neutral-700 hover:bg-neutral-100 border border-neutral-200'
-            : 'bg-[#1B7BFF] hover:bg-[#1668e0] text-white'
+            : locked
+              ? 'bg-neutral-100 text-neutral-500 border border-neutral-200'
+              : 'bg-[#1B7BFF] hover:bg-[#1668e0] text-white'
         }`}
       >
-        {busy ? <Loader2 size={13} className="animate-spin" /> : connected ? <><Check size={13} /> Disconnect</> : 'Connect'}
+        {busy ? <Loader2 size={13} className="animate-spin" /> : connected ? <><Check size={13} /> Disconnect</> : locked ? 'Unavailable' : 'Connect'}
       </button>
     </div>
   );
