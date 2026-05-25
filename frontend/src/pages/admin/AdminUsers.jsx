@@ -7,7 +7,7 @@ import { Input } from '../../components/ui/input';
 import { useToast } from '../../hooks/use-toast';
 import {
   Search, Loader2, Shield, ShieldOff, Pause, Play, Trash2,
-  UserCog, AlertTriangle, Gift,
+  UserCog, AlertTriangle, Gift, UserPlus, Mail, Copy,
 } from 'lucide-react';
 
 const PLAN_OPTIONS = [
@@ -34,6 +34,8 @@ const AdminUsers = () => {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [resendingFor, setResendingFor] = useState(null);
 
   const load = async (query = '') => {
     setLoading(true);
@@ -113,6 +115,14 @@ const AdminUsers = () => {
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or email…" className="h-11 rounded-xl border-neutral-300 pl-9" />
         </div>
         <button className="bg-[#1B7BFF] hover:bg-[#1668e0] text-white text-[13px] font-medium px-5 h-11 rounded-xl">Search</button>
+        <button
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          data-testid="admin-create-user-btn"
+          className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[13px] font-medium px-4 h-11 rounded-xl"
+        >
+          <UserPlus size={14} /> Create user
+        </button>
       </form>
 
       {loading ? (

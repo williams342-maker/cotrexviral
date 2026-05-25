@@ -35,6 +35,7 @@ from routes import (  # noqa: F401
     funnel,          # Marketing funnel analytics
     email,           # Mailgun transactional emails
     onboarding,      # New-user onboarding profile capture
+    magic_link,      # Admin-create user + passwordless claim flow
 )
 
 

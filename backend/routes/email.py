@@ -347,6 +347,32 @@ async def send_past_due_email(to: str, name: str, plan: str):
     )
 
 
+async def send_account_invite_email(to: str, name: str, magic_link: str,
+                                     inviter_name: str = "the CortexViral team"):
+    """Sent when an admin creates an account (or the lead form auto-creates one).
+    Contains a single-use magic-link URL so the user can claim their account
+    WITHOUT needing Google Auth."""
+    first = (name or "there").split()[0]
+    subj = "Your CortexViral account is ready — claim it in one click"
+    body = f"""
+    <p>Hey <strong>{first}</strong>,</p>
+    <p>{inviter_name} just created a CortexViral account for you. No password needed — click the button below and you're in.</p>
+    <p style="background:#f5f3ff;border:1px solid #ddd6fe;padding:14px 18px;border-radius:8px;margin:18px 0;color:#404045;font-size:13.5px">
+      <strong>Heads up:</strong> This link works once and expires in 7 days. If it stops working, just reply and we'll send a fresh one.
+    </p>
+    <p style="color:#71717a;font-size:13.5px">If the button doesn't work, copy &amp; paste this URL into your browser:<br>
+      <a href="{magic_link}" style="color:#7c3aed;word-break:break-all;font-size:12px">{magic_link}</a>
+    </p>
+    <p style="color:#71717a;font-size:13.5px">Welcome aboard 🚀<br>— The CortexViral team</p>
+    """
+    return await send_email(
+        to=to, subject=subj, tags=["account_invite"],
+        html=_layout("Claim your CortexViral account →", body,
+                     cta_label="Sign in & get started",
+                     cta_url=magic_link),
+    )
+
+
 async def send_onboarding_admin_notification(
     user_email: str, user_name: str, profile: dict, recipients: list,
 ):
@@ -489,7 +515,7 @@ async def send_lead_admin_notification(lead: dict, recipients: list[str]):
     return results
 
 
-async def send_lead_auto_reply(lead: dict):
+async def send_lead_auto_reply(lead: dict, magic_link: Optional[str] = None):
     """Friendly auto-reply to the lead, written as if from the chosen agent.
     Sets expectation that a human will follow up within 24h."""
     if not lead.get("email"):
@@ -512,19 +538,26 @@ async def send_lead_auto_reply(lead: dict):
         f'<p style="color:#404045;background:#f5f3ff;border-left:3px solid #7c3aed;padding:12px 16px;border-radius:6px;margin:18px 0"><em>"{pain}"</em></p>'
         if pain else ""
     )
+    instant_access = (
+        '<p>In the meantime, your CortexViral account is already set up — '
+        'click the button below to sign in instantly (no password needed). '
+        'Most leads find their first viral hook within the first 5 minutes inside.</p>'
+        if magic_link else
+        '<p>In the meantime, if you want to skip the wait and explore the platform yourself, you can sign in any time — your account is already created.</p>'
+    )
     body = f"""
     <p>Hey <strong>{first}</strong>,</p>
     <p>Thanks for reaching out — {intro}</p>
     {pain_block}
     <p>I've got the details you sent. I'll dig into your site, draft a quick plan, and follow up <strong>within 24 hours</strong> with the first 2-3 things I'd ship for you.</p>
-    <p>In the meantime, if you want to skip the wait and explore the platform yourself, you can sign in any time — your account is already created.</p>
+    {instant_access}
     <p style="color:#71717a;font-size:13.5px">Talk soon,<br>— {agent_name}</p>
     """
     return await send_email(
         to=lead["email"], subject=subj, tags=["lead_auto_reply", f"agent:{agent_id}"],
         html=_layout(f"{agent_name} here 👋", body,
-                     cta_label="Sign in to CortexViral",
-                     cta_url=f"{PUBLIC_SITE_URL}/"),
+                     cta_label="Sign in to CortexViral" if magic_link else None,
+                     cta_url=magic_link or None),
     )
 
 
