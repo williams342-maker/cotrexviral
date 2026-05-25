@@ -18,7 +18,7 @@ const BroadcastBanner = () => {
 
   useEffect(() => {
     axios.get(`${API}/broadcasts/active`, { withCredentials: true })
-      .then((r) => setBroadcasts(r.data))
+      .then((r) => setBroadcasts(Array.isArray(r.data) ? r.data : []))
       .catch(() => {});
   }, []);
 
@@ -28,7 +28,7 @@ const BroadcastBanner = () => {
     localStorage.setItem('dismissed_broadcasts', JSON.stringify(next));
   };
 
-  const visible = broadcasts.filter((b) => !dismissed.includes(b.id));
+  const visible = (broadcasts || []).filter((b) => !dismissed.includes(b.id));
   if (visible.length === 0) return null;
 
   return (

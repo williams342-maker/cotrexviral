@@ -35,6 +35,14 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 26) **📣 Email blast for admin broadcasts**
+  - `POST /api/admin/broadcasts/{id}/email` body `{plans?: string[], include_comped: bool, dry_run: bool}` — sends an email version of the broadcast to all matching users via Mailtrap. Throttled 50ms between sends to stay polite. Dry-run mode counts recipients without sending so admin can confirm reach before firing.
+  - `send_broadcast_email()` template — colour-coded severity badge (📣 info / ⚠️ warning / 🚨 critical / 🎉 success), styled blockquote, "Open dashboard" CTA. Wrapped in the same brand layout as welcome/gift/etc.
+  - Broadcast doc now persists `emailed_at`, `emailed_by`, `emailed_recipients`, `emailed_sent`, `emailed_failed`, `emailed_filter` after a send — surfaced as a purple "Emailed N/M" pill on the broadcast row in AdminBroadcasts.
+  - **Frontend modal** (`/admin/broadcasts`): purple "Email blast" button on each broadcast row → opens a modal with plan-filter chips (Free/Starter/Growth/Agency multi-select), an "Include comped users" switch, a "Preview" button that runs the dry-run and shows "N users match the filter", and a "Send to N" CTA that's disabled until preview has been run AND matched > 0 users. Confirmation prompt before send. Toast on success with sent/failed counts.
+  - **Side bug fixed**: `BroadcastBanner.jsx` was crashing with "Cannot read properties of null (reading 'filter')" because `GET /api/broadcasts/active` was accidentally returning `null` after my edit to add the email-blast endpoint (the function body was severed). Restored the body + added defensive `Array.isArray()` guard on the client.
+  - **6 new pytest cases** including a live Mailtrap-send roundtrip that verifies `emailed_sent / emailed_recipients` are persisted correctly. **128 backend tests pass.**
+
 - 2026-02-26 (part 25) **✉️ Mailtrap integration (Mailgun → fallback)**
   - **Mailtrap** is now the primary transactional-email provider. Endpoint: `https://send.api.mailtrap.io/api/send`. Sender verified at `hello@cortexviral.com` (DKIM/DMARC/CNAME all pass; account `team@cortexviral.com`).
   - **Provider chain in `routes/email.py`**: tries `_send_via_mailtrap` first → falls back to `_send_via_mailgun` ONLY when Mailtrap is unconfigured or returns a 5xx/network error. 4xx responses (bad sender, invalid payload, etc.) deliberately don't trigger fallback because Mailgun would reject the same payload. `email_log` rows now carry a `provider` field and (when fallback fired) `fallback_from` + `primary_error` so admins can see exactly which path delivered.

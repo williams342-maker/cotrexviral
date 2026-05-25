@@ -347,6 +347,41 @@ async def send_past_due_email(to: str, name: str, plan: str):
     )
 
 
+_SEVERITY_STYLES = {
+    "info": ("📣", "#6366f1", "#eef2ff"),
+    "warning": ("⚠️", "#d97706", "#fffbeb"),
+    "critical": ("🚨", "#dc2626", "#fef2f2"),
+    "success": ("🎉", "#10b981", "#ecfdf5"),
+}
+
+
+async def send_broadcast_email(to: str, name: str, title: str, body: str,
+                                severity: str = "info"):
+    """Email version of an admin broadcast. Used by the 'Email blast' button on
+    /admin/broadcasts — converts the broadcast title+body into a styled message."""
+    icon, accent, bg = _SEVERITY_STYLES.get(severity, _SEVERITY_STYLES["info"])
+    first = (name or "there").split()[0]
+    subj = title if len(title) < 90 else title[:87] + "…"
+    # body may contain newlines from the broadcast composer — render them as <p>.
+    paragraphs = "\n".join(
+        f"<p>{p.strip()}</p>" for p in (body or "").split("\n") if p.strip()
+    ) or "<p></p>"
+    html_body = f"""
+    <p>Hey <strong>{first}</strong>,</p>
+    <div style="background:{bg};border-left:3px solid {accent};padding:14px 18px;border-radius:8px;margin:18px 0">
+      <div style="font-size:18px;margin-bottom:6px">{icon} <strong>{title}</strong></div>
+      <div style="color:#404045;font-size:14.5px;line-height:1.55">{paragraphs}</div>
+    </div>
+    <p style="color:#71717a;font-size:13.5px">If you have questions, just reply — we read every email.<br>— The CortexViral team</p>
+    """
+    return await send_email(
+        to=to, subject=subj, tags=["broadcast", f"severity:{severity}"],
+        html=_layout(title, html_body,
+                     cta_label="Open dashboard",
+                     cta_url=f"{PUBLIC_SITE_URL}/dashboard"),
+    )
+
+
 # -----------------------------------------------------------------------------
 # Background-task wrappers — for fire-and-forget from sync code paths.
 # -----------------------------------------------------------------------------
