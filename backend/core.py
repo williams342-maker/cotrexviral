@@ -50,6 +50,11 @@ MAILGUN_DOMAIN = os.environ.get("MAILGUN_DOMAIN", "")
 MAILGUN_BASE_URL = os.environ.get("MAILGUN_BASE_URL", "https://api.mailgun.net")
 MAILGUN_FROM = os.environ.get("MAILGUN_FROM", "")
 
+# Mailtrap (primary; Mailgun is the fallback)
+MAILTRAP_TOKEN = os.environ.get("MAILTRAP_TOKEN", "")
+MAILTRAP_FROM = os.environ.get("MAILTRAP_FROM", "")
+MAILTRAP_API_URL = os.environ.get("MAILTRAP_API_URL", "https://send.api.mailtrap.io/api/send")
+
 # --- Logging ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("automatex")

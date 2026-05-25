@@ -1,15 +1,18 @@
-"""Mailgun transactional email integration.
+"""Transactional email integration with provider fallback.
 
-One helper `send_email(to, subject, html, ...)` and a registry of templates
-for our lifecycle emails. Failures are logged but never raised — analytics
-shouldn't ever break a user-facing request.
+Primary: **Mailtrap** (Email Sending API).
+Fallback: **Mailgun** (used only if Mailtrap is unconfigured OR returns a 5xx /
+network error — Mailgun is currently sandbox-disabled, so a 403 there should
+NOT trigger another fallback; we let the first provider's error bubble up).
 
-Sandbox limitation: until a real domain is verified in Mailgun, sends to
-unauthorised recipients return 400. We log the recipient + reason and move on.
+One helper `send_email(to, subject, html, ...)`. Failures are logged but never
+raised — analytics shouldn't ever break a user-facing request.
 """
 from __future__ import annotations
 
 import asyncio
+import json as _json
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlencode
@@ -19,32 +22,92 @@ import httpx
 from core import (
     db, api, logger,
     MAILGUN_API_KEY, MAILGUN_DOMAIN, MAILGUN_BASE_URL, MAILGUN_FROM,
+    MAILTRAP_TOKEN, MAILTRAP_FROM, MAILTRAP_API_URL,
     PUBLIC_SITE_URL,
 )
 
 
-# -----------------------------------------------------------------------------
-# Low-level send
-# -----------------------------------------------------------------------------
-async def send_email(
-    to: str,
-    subject: str,
-    html: str,
-    text: Optional[str] = None,
-    from_addr: Optional[str] = None,
-    tags: Optional[list[str]] = None,
-) -> dict:
-    """Send a single email via Mailgun. Returns a status dict — never raises.
+def _parse_from(addr: str) -> dict:
+    """Split 'Name <email@host>' into {'name': ..., 'email': ...} for Mailtrap.
+    Falls back to {'email': addr} if no display name is present."""
+    if not addr:
+        return {"email": ""}
+    m = re.match(r"^\s*(.+?)\s*<\s*([^>]+)\s*>\s*$", addr)
+    if m:
+        return {"name": m.group(1).strip(), "email": m.group(2).strip()}
+    return {"email": addr.strip()}
 
-    Status shapes:
-      {"sent": True, "id": "<mailgun-id>"}                  → delivered to Mailgun
-      {"sent": False, "skipped": "not_configured"}          → no API key
-      {"sent": False, "error": "<reason>", "status": <int>} → Mailgun rejected
-    """
+
+# -----------------------------------------------------------------------------
+# Provider: Mailtrap (Email Sending API)
+# -----------------------------------------------------------------------------
+async def _send_via_mailtrap(
+    to: str, subject: str, html: str, text: Optional[str],
+    from_addr: Optional[str], tags: Optional[list[str]],
+) -> dict:
+    if not MAILTRAP_TOKEN or not MAILTRAP_FROM:
+        return {"sent": False, "skipped": "not_configured", "provider": "mailtrap"}
+
+    payload = {
+        "from": _parse_from(from_addr or MAILTRAP_FROM),
+        "to": [{"email": to}],
+        "subject": subject,
+        "html": html,
+    }
+    if text:
+        payload["text"] = text
+    if tags:
+        # Mailtrap supports a single 'category' string (not multiple tags),
+        # so we pick the first/primary tag as category.
+        payload["category"] = tags[0][:255]
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            transport=httpx.AsyncHTTPTransport(),
+        ) as cli:
+            r = await cli.post(
+                MAILTRAP_API_URL,
+                content=_json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {MAILTRAP_TOKEN}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
+        if 200 <= r.status_code < 300:
+            data = r.json() if r.text else {}
+            mid = ((data.get("message_ids") or [None])[0]
+                   if isinstance(data.get("message_ids"), list)
+                   else data.get("message_id"))
+            logger.info("Mailtrap ✉  sent %s to %s (id=%s)", subject, to, mid)
+            return {"sent": True, "id": mid, "provider": "mailtrap"}
+        body = (r.text or "")[:300]
+        logger.warning("Mailtrap ✉  rejected %s to %s: %s %s", subject, to, r.status_code, body)
+        return {
+            "sent": False, "error": body, "status": r.status_code,
+            "provider": "mailtrap",
+            # 5xx → worth falling back. 4xx (bad payload / invalid sender) → don't
+            # fall back because Mailgun will reject the same payload too.
+            "transient": r.status_code >= 500,
+        }
+    except Exception as e:
+        logger.exception("Mailtrap ✉  network error to %s", to)
+        return {
+            "sent": False, "error": str(e)[:300],
+            "provider": "mailtrap", "transient": True,
+        }
+
+
+# -----------------------------------------------------------------------------
+# Provider: Mailgun (fallback)
+# -----------------------------------------------------------------------------
+async def _send_via_mailgun(
+    to: str, subject: str, html: str, text: Optional[str],
+    from_addr: Optional[str], tags: Optional[list[str]],
+) -> dict:
     if not MAILGUN_API_KEY or not MAILGUN_DOMAIN or not MAILGUN_FROM:
-        logger.warning("Mailgun not configured — skipping email to %s", to)
-        await _log_email(to, subject, status="skipped", reason="not_configured", tags=tags)
-        return {"sent": False, "skipped": "not_configured"}
+        return {"sent": False, "skipped": "not_configured", "provider": "mailgun"}
 
     payload: list[tuple[str, str]] = [
         ("from", from_addr or MAILGUN_FROM),
@@ -63,9 +126,6 @@ async def send_email(
             timeout=15.0,
             transport=httpx.AsyncHTTPTransport(),
         ) as cli:
-            # urlencode preserves duplicate keys (multiple o:tag entries).
-            # We can't pass data=<list of tuples> because httpx 0.28's
-            # AsyncClient interprets that as a sync byte-stream and crashes.
             body = urlencode(payload).encode("utf-8")
             r = await cli.post(
                 url,
@@ -76,17 +136,74 @@ async def send_email(
         if r.status_code == 200:
             mg_id = (r.json() or {}).get("id")
             logger.info("Mailgun ✉  sent %s to %s (id=%s)", subject, to, mg_id)
-            await _log_email(to, subject, status="sent", mailgun_id=mg_id, tags=tags)
-            return {"sent": True, "id": mg_id}
-        # Sandbox often returns 400 for unauthorised recipients — log + continue.
+            return {"sent": True, "id": mg_id, "provider": "mailgun"}
         body = (r.text or "")[:300]
         logger.warning("Mailgun ✉  rejected %s to %s: %s %s", subject, to, r.status_code, body)
-        await _log_email(to, subject, status="rejected", reason=body, mg_status=r.status_code, tags=tags)
-        return {"sent": False, "error": body, "status": r.status_code}
-    except Exception as e:  # network / DNS / timeout
-        logger.exception("Mailgun ✉  network error sending %s to %s", subject, to)
-        await _log_email(to, subject, status="error", reason=str(e)[:300], tags=tags)
-        return {"sent": False, "error": str(e)}
+        return {"sent": False, "error": body, "status": r.status_code, "provider": "mailgun"}
+    except Exception as e:
+        logger.exception("Mailgun ✉  network error to %s", to)
+        return {"sent": False, "error": str(e)[:300], "provider": "mailgun"}
+
+
+# -----------------------------------------------------------------------------
+# Public send_email — provider chain with fallback.
+# -----------------------------------------------------------------------------
+async def send_email(
+    to: str,
+    subject: str,
+    html: str,
+    text: Optional[str] = None,
+    from_addr: Optional[str] = None,
+    tags: Optional[list[str]] = None,
+) -> dict:
+    """Try Mailtrap first; fall back to Mailgun if Mailtrap is unconfigured
+    or returns a transient (5xx / network) failure. Final status is logged to
+    `email_log` with the provider field so admins can see which path delivered."""
+    # 1. Try Mailtrap (primary)
+    result = await _send_via_mailtrap(to, subject, html, text, from_addr, tags)
+
+    # 2. Mailgun fallback for: not-configured, transient network/5xx errors.
+    #    Skip fallback for 4xx (Mailgun would reject the same payload).
+    should_fallback = (
+        result.get("skipped") == "not_configured"
+        or result.get("transient") is True
+    )
+    if not result.get("sent") and should_fallback:
+        logger.info("Falling back to Mailgun for %s (mailtrap result: %s)", to,
+                    result.get("error") or result.get("skipped"))
+        mg_result = await _send_via_mailgun(to, subject, html, text, from_addr, tags)
+        # Persist a row capturing both attempts.
+        await _log_email(
+            to, subject,
+            status="sent" if mg_result.get("sent") else (
+                "skipped" if mg_result.get("skipped") else "rejected"
+            ),
+            provider=mg_result.get("provider"),
+            mailgun_id=mg_result.get("id"),
+            mg_status=mg_result.get("status"),
+            reason=mg_result.get("error") or mg_result.get("skipped"),
+            fallback_from="mailtrap",
+            primary_error=result.get("error") or result.get("skipped"),
+            tags=tags,
+        )
+        # Strip the internal transient flag from the response.
+        mg_result.pop("transient", None)
+        return mg_result
+
+    # No fallback needed — log the Mailtrap outcome (success OR 4xx rejection).
+    await _log_email(
+        to, subject,
+        status="sent" if result.get("sent") else (
+            "skipped" if result.get("skipped") else "rejected"
+        ),
+        provider=result.get("provider"),
+        mailgun_id=result.get("id"),
+        mg_status=result.get("status"),
+        reason=result.get("error") or result.get("skipped"),
+        tags=tags,
+    )
+    result.pop("transient", None)
+    return result
 
 
 async def _log_email(to: str, subject: str, **fields):

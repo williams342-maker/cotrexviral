@@ -126,31 +126,50 @@ class TestEmailHelpers:
     def test_welcome_email_produces_html_with_name(self):
         import sys
         sys.path.insert(0, "/app/backend")
-        # Stub MAILGUN_API_KEY to "" so send_email returns the "skipped" branch
-        # without hitting the network. Verifies the helper itself doesn't crash.
+        # Stub BOTH provider tokens to "" so send_email returns the "skipped"
+        # branch without hitting the network. Verifies the helper itself
+        # doesn't crash and the provider chain handles no-config gracefully.
         import routes.email as email_module
-        original_key = email_module.MAILGUN_API_KEY
+        orig_mg = email_module.MAILGUN_API_KEY
+        orig_mt = email_module.MAILTRAP_TOKEN
         email_module.MAILGUN_API_KEY = ""
+        email_module.MAILTRAP_TOKEN = ""
         try:
             res = asyncio.get_event_loop().run_until_complete(
                 email_module.send_welcome_email("test@example.com", "Michael Smith")
             )
-            assert res == {"sent": False, "skipped": "not_configured"}
+            assert res["sent"] is False
+            assert res.get("skipped") == "not_configured"
         finally:
-            email_module.MAILGUN_API_KEY = original_key
+            email_module.MAILGUN_API_KEY = orig_mg
+            email_module.MAILTRAP_TOKEN = orig_mt
 
     def test_gift_plan_email_includes_reason(self):
         import sys
         sys.path.insert(0, "/app/backend")
         import routes.email as email_module
-        original_key = email_module.MAILGUN_API_KEY
+        orig_mg = email_module.MAILGUN_API_KEY
+        orig_mt = email_module.MAILTRAP_TOKEN
         email_module.MAILGUN_API_KEY = ""
+        email_module.MAILTRAP_TOKEN = ""
         try:
             res = asyncio.get_event_loop().run_until_complete(
                 email_module.send_gift_plan_email(
                     "test@example.com", "Michael", "growth", reason="Top creator"
                 )
             )
-            assert res == {"sent": False, "skipped": "not_configured"}
+            assert res["sent"] is False
+            assert res.get("skipped") == "not_configured"
         finally:
-            email_module.MAILGUN_API_KEY = original_key
+            email_module.MAILGUN_API_KEY = orig_mg
+            email_module.MAILTRAP_TOKEN = orig_mt
+
+
+class TestProviderRouting:
+    def test_parse_from_with_display_name(self):
+        import sys
+        sys.path.insert(0, "/app/backend")
+        from routes.email import _parse_from
+        assert _parse_from("CortexViral <hello@x.com>") == {"name": "CortexViral", "email": "hello@x.com"}
+        assert _parse_from("plain@x.com") == {"email": "plain@x.com"}
+        assert _parse_from("") == {"email": ""}
