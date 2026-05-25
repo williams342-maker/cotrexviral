@@ -8,6 +8,7 @@ import Pricing from './pages/Pricing';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import SitemapPage from './pages/Sitemap';
+import DataDeletion from './pages/DataDeletion';
 import NicheToolPage from './pages/programmatic/NicheToolPage';
 import { TikTokGenerator, ViralIdeas, InstagramCaption, ShortFormVideo, ContentAutomation } from './pages/landing';
 import { BlogIndex, BlogPost } from './pages/blog/Blog';
@@ -56,6 +57,7 @@ function AppRouter() {
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/sitemap" element={<SitemapPage />} />
+      <Route path="/data-deletion" element={<DataDeletion />} />
       <Route path="/ai-tiktok-post-generator" element={<TikTokGenerator />} />
       <Route path="/viral-content-ideas-generator" element={<ViralIdeas />} />
       <Route path="/instagram-caption-ai-generator" element={<InstagramCaption />} />

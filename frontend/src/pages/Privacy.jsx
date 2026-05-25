@@ -74,7 +74,7 @@ const SECTIONS = [
     title: '7. Your Rights',
     content: (
       <>
-        <p>You can request: a copy of your data, correction of inaccurate data, or deletion of your account. Email <a href="mailto:privacy@cortexviral.com">privacy@cortexviral.com</a> and we will respond within 30 days.</p>
+        <p>You can request: a copy of your data, correction of inaccurate data, or deletion of your account. Use our dedicated <a href="/data-deletion" className="text-cyan-300 hover:text-cyan-200">Data Deletion page</a> (one-click self-serve), or email <a href="mailto:privacy@cortexviral.com">privacy@cortexviral.com</a> — we will respond within 30 days.</p>
         <p>If you are located in the EEA / UK, you have rights under GDPR including the right to lodge a complaint with your local data protection authority.</p>
       </>
     ),
