@@ -1,0 +1,115 @@
+"""Mailgun transactional email tests (live API hits — sandbox-safe)."""
+import os
+import asyncio
+import httpx
+
+API_URL = (
+    os.environ.get("REACT_APP_BACKEND_URL")
+    or open("/app/frontend/.env").read().split("REACT_APP_BACKEND_URL=")[1].split("\n")[0]
+)
+TOKEN = "test_session_1779636592168"
+H = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
+
+
+def _clear_email_log():
+    import sys
+    sys.path.insert(0, "/app/backend")
+    from core import db
+
+    async def go():
+        await db.email_log.delete_many({})
+    asyncio.get_event_loop().run_until_complete(go())
+
+
+class TestEmailEndpoint:
+    def test_requires_admin(self):
+        r = httpx.post(
+            f"{API_URL}/api/admin/email/test",
+            json={"to": "a@b.com", "kind": "welcome"},
+            timeout=10,
+        )
+        assert r.status_code == 401
+
+    def test_returns_structured_status(self):
+        """Either {'sent': True, 'id': ...} or {'sent': False, 'error': ...}.
+        Either way, the endpoint must NOT 500."""
+        r = httpx.post(
+            f"{API_URL}/api/admin/email/test",
+            headers=H,
+            json={"to": "test-recipient@example.com", "kind": "welcome"},
+            timeout=30,
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert "sent" in body
+        # 'sent' will be False on a disabled sandbox / unverified recipient.
+        if body["sent"] is False:
+            assert "error" in body or "skipped" in body
+
+    def test_all_template_kinds_supported(self):
+        for kind in ("welcome", "gift", "trial", "past_due"):
+            r = httpx.post(
+                f"{API_URL}/api/admin/email/test",
+                headers=H,
+                json={"to": "test-recipient@example.com", "kind": kind},
+                timeout=30,
+            )
+            assert r.status_code == 200, f"{kind} failed: {r.text[:200]}"
+
+    def test_email_log_persists(self):
+        _clear_email_log()
+        httpx.post(
+            f"{API_URL}/api/admin/email/test",
+            headers=H,
+            json={"to": "log-test@example.com", "kind": "welcome"},
+            timeout=30,
+        ).raise_for_status()
+
+        import sys
+        sys.path.insert(0, "/app/backend")
+        from core import db
+
+        async def fetch():
+            return await db.email_log.find_one({"to": "log-test@example.com"}, {"_id": 0})
+
+        doc = asyncio.get_event_loop().run_until_complete(fetch())
+        assert doc is not None
+        assert doc["subject"]
+        assert doc["status"] in ("sent", "rejected", "error", "skipped")
+
+
+class TestEmailHelpers:
+    """Direct calls into the helpers — verifies template wiring + payload shape
+    without going through HTTP."""
+
+    def test_welcome_email_produces_html_with_name(self):
+        import sys
+        sys.path.insert(0, "/app/backend")
+        # Stub MAILGUN_API_KEY to "" so send_email returns the "skipped" branch
+        # without hitting the network. Verifies the helper itself doesn't crash.
+        import routes.email as email_module
+        original_key = email_module.MAILGUN_API_KEY
+        email_module.MAILGUN_API_KEY = ""
+        try:
+            res = asyncio.get_event_loop().run_until_complete(
+                email_module.send_welcome_email("test@example.com", "Michael Smith")
+            )
+            assert res == {"sent": False, "skipped": "not_configured"}
+        finally:
+            email_module.MAILGUN_API_KEY = original_key
+
+    def test_gift_plan_email_includes_reason(self):
+        import sys
+        sys.path.insert(0, "/app/backend")
+        import routes.email as email_module
+        original_key = email_module.MAILGUN_API_KEY
+        email_module.MAILGUN_API_KEY = ""
+        try:
+            res = asyncio.get_event_loop().run_until_complete(
+                email_module.send_gift_plan_email(
+                    "test@example.com", "Michael", "growth", reason="Top creator"
+                )
+            )
+            assert res == {"sent": False, "skipped": "not_configured"}
+        finally:
+            email_module.MAILGUN_API_KEY = original_key

@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlencode
 
 import httpx
 
@@ -62,7 +63,16 @@ async def send_email(
             timeout=15.0,
             transport=httpx.AsyncHTTPTransport(),
         ) as cli:
-            r = await cli.post(url, data=payload, auth=httpx.BasicAuth("api", MAILGUN_API_KEY))
+            # urlencode preserves duplicate keys (multiple o:tag entries).
+            # We can't pass data=<list of tuples> because httpx 0.28's
+            # AsyncClient interprets that as a sync byte-stream and crashes.
+            body = urlencode(payload).encode("utf-8")
+            r = await cli.post(
+                url,
+                content=body,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                auth=httpx.BasicAuth("api", MAILGUN_API_KEY),
+            )
         if r.status_code == 200:
             mg_id = (r.json() or {}).get("id")
             logger.info("Mailgun ✉  sent %s to %s (id=%s)", subject, to, mg_id)
