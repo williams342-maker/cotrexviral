@@ -35,6 +35,13 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 29) **🎯 Niche-aware AI personalization**
+  - **New `_user_context_block(user_id)`** in `routes/ai.py` — reads the onboarding profile from the user doc and builds a compact system-prompt preamble: BRAND / NICHE / GOALS / PRIMARY PLATFORMS / STATED CHALLENGE. Includes an explicit instruction *"tailor your output to them. Don't restate the context back to them — just make the output reflect it. Avoid generic platitudes."* Empty profile → empty block (zero-cost fallback).
+  - **New `_llm_for_user()` helper** wraps the existing `_llm()` factory and injects the context block transparently. All 9 user-facing AI call-sites in `routes/ai.py` (`generate-post`, `generate-video-script`, `seo-audit`, `viral-ideas`, `email-campaign`, `caption`, `comment`, `seo-keyword-research`, `multipost`) switched over by a regex pass. The A/B Hook Lab (`routes/ab_lab.py`) also wired through it.
+  - **Trends Engine deliberately left untouched** — it serves a globally-cached daily feed, so injecting one user's context would poison it for everyone else.
+  - **Live verified**: with a Fitness brand profile (`Iron Pulse Coaching`, niche `Fitness`, goal `Generate leads`, platform `TikTok`), the same generic prompt *"a hook about discipline"* now produces output referencing **"Iron Pulse Drill"** with hashtags `#IronPulseCoaching #GymTok #FitnessTips` and a CTA mentioning *"coaching link in bio"*. No tuning of the user prompt — just the context preamble.
+  - **4 new pytest cases** (`test_personalization.py`): empty profile returns empty block, full profile renders all fields, long challenge truncated to 280 chars, end-to-end LLM call surfaces Fitness-niche signals. **145 backend tests pass.**
+
 - 2026-02-26 (part 28) **🚀 New-user onboarding flow**
   - **New `/onboarding` page** — dark-gradient hero, "Welcome {first_name}" badge, "Let's tailor CortexViral to your brand" headline, 6 fields total (2 required text + 1 required pill-pick + 2 optional pill-pick + 1 optional textarea). Submitting writes to the user doc, marks `onboarding_completed_at`, and fires an admin notification email.
   - **Auto-redirect**: `ProtectedRoute.jsx` now checks `user.onboarding_required` and routes to `/onboarding` on first dashboard visit. Admins bypass the redirect; users who click "Skip for now" set a session flag (`onboarding_skipped`) so the redirect doesn't keep firing on every nav within that browser tab.

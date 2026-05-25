@@ -24,6 +24,53 @@ async def _gated_user(request: Request):
     return auth_user
 
 
+# -----------------------------------------------------------------------------
+# Per-user context preamble — built from the onboarding profile so every AI
+# call is tailored to the user's niche, goals, and challenge instead of
+# returning generic marketing-slop.
+# -----------------------------------------------------------------------------
+async def _user_context_block(user_id: str) -> str:
+    doc = await db.users.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "brand_name": 1, "website": 1, "niche": 1,
+         "goals": 1, "platforms": 1, "challenge": 1},
+    ) or {}
+    parts = []
+    if doc.get("brand_name") or doc.get("website"):
+        parts.append(
+            "BRAND: "
+            + (doc.get("brand_name") or "(no name)")
+            + (f' ({doc.get("website")})' if doc.get("website") else "")
+        )
+    if doc.get("niche"):
+        parts.append(f"NICHE: {doc['niche']}")
+    if doc.get("goals"):
+        parts.append("GOALS: " + ", ".join(doc["goals"]))
+    if doc.get("platforms"):
+        parts.append("PRIMARY PLATFORMS: " + ", ".join(doc["platforms"]))
+    if doc.get("challenge"):
+        # Truncate the user's free-text challenge to keep the prompt focused.
+        ch = doc["challenge"][:280].replace("\n", " ").strip()
+        parts.append(f'STATED CHALLENGE: "{ch}"')
+    if not parts:
+        return ""
+    return (
+        "\n\nUSER CONTEXT (use this to keep advice specific, NOT generic):\n- "
+        + "\n- ".join(parts)
+        + "\n\nWhen the user's request relates to their brand/niche/goals, "
+        "tailor your output to them. Don't restate the context back to them — "
+        "just make the output reflect it. Avoid generic platitudes."
+    )
+
+
+async def _llm_for_user(user_id: str, session_id: str, system: str,
+                        model: str = "gpt-5"):
+    """Wrap _llm with the user's onboarding context block. Use this for every
+    user-facing AI generation so output is niche-aware."""
+    ctx = await _user_context_block(user_id)
+    return _llm(session_id, system + ctx, model=model)
+
+
 def _llm(session_id: str, system: str, model: str = "gpt-5"):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="LLM key not configured")
@@ -84,7 +131,7 @@ async def ai_seo_review(payload: AIRequest, request: Request):
         '{"score": int, "strengths": [str], "issues": [{"title": str, "severity": "high|medium|low", "fix": str}], '
         '"recommendations": [str], "keywords": [str]}'
     )
-    chat = _llm(f"seo-{user.user_id}", system)
+    chat = await _llm_for_user(user.user_id, f"seo-{user.user_id}", system)
     msg = UserMessage(text=f"URL: {payload.url}\n\nContent:\n{snippet}")
     raw = await chat.send_message(msg)
     data = _safe_json(raw)
@@ -120,7 +167,7 @@ async def ai_site_scan(payload: AIRequest, request: Request):
         '{"summary": str, "notable_items": [str], "post_ideas": [{"title": str, "caption": str, "platform": str}], '
         '"improvements": [str]}'
     )
-    chat = _llm(f"scan-{user.user_id}", system)
+    chat = await _llm_for_user(user.user_id, f"scan-{user.user_id}", system)
     msg = UserMessage(text=f"URL: {payload.url}\n\nContent:\n{snippet}")
     raw = await chat.send_message(msg)
     data = _safe_json(raw)
@@ -149,7 +196,7 @@ async def ai_insights(payload: AIRequest, request: Request):
         "Respond ONLY in JSON: "
         '{"insights": [str], "trends": [str], "action_plan": [str]}'
     )
-    chat = _llm(f"insights-{user.user_id}", system)
+    chat = await _llm_for_user(user.user_id, f"insights-{user.user_id}", system)
     text = payload.context or payload.prompt or "general small business marketing"
     raw = await chat.send_message(UserMessage(text=text))
     data = _safe_json(raw)
@@ -165,7 +212,7 @@ async def ai_generate_post(payload: SocialPostRequest, request: Request):
         "Respond ONLY in JSON: "
         '{"caption": str, "hashtags": [str], "hook": str, "cta": str}'
     )
-    chat = _llm(f"post-{user.user_id}", system)
+    chat = await _llm_for_user(user.user_id, f"post-{user.user_id}", system)
     prompt = (
         f"Platform: {payload.platform}\nTone: {payload.tone}\nTopic: {payload.topic}"
     )
@@ -186,7 +233,7 @@ async def ai_generate_newsletter(payload: NewsletterRequest, request: Request):
         '{"subject": str, "preheader": str, "intro": str, '
         '"sections": [{"heading": str, "body": str}], "cta": {"text": str, "url_suggestion": str}, "ps": str}'
     )
-    chat = _llm(f"newsletter-{user.user_id}", system)
+    chat = await _llm_for_user(user.user_id, f"newsletter-{user.user_id}", system)
     prompt = (
         f"Topic: {payload.topic}\nAudience: {payload.audience}\n"
         f"Tone: {payload.tone}\nSections: {payload.sections}"
@@ -217,7 +264,7 @@ async def ai_generate_content(payload: BlogRequest, request: Request):
         '"sections": [{"heading": str, "body": str}], "conclusion": str, '
         '"tags": [str], "estimated_read_minutes": int}'
     )
-    chat = _llm(f"content-{user.user_id}", system)
+    chat = await _llm_for_user(user.user_id, f"content-{user.user_id}", system)
     prompt = (
         f"Topic: {payload.topic}\nKeywords: {', '.join(payload.keywords or [])}\n"
         f"Tone: {payload.tone}\nTarget length: ~{length_words} words"
@@ -245,7 +292,7 @@ async def ai_generate_update(payload: UpdateRequest, request: Request):
         '{"headline": str, "subheadline": str, "highlights": [{"title": str, "desc": str}], '
         '"social_post": str, "email_subject": str, "email_body": str}'
     )
-    chat = _llm(f"update-{user.user_id}", system)
+    chat = await _llm_for_user(user.user_id, f"update-{user.user_id}", system)
     prompt = f"Product: {payload.product}\nTone: {payload.tone}\nWhat's new:\n{payload.changes}"
     raw = await chat.send_message(UserMessage(text=prompt))
     data = _safe_json(raw)
@@ -271,7 +318,7 @@ async def ai_generate_video_script(payload: VideoScriptRequest, request: Request
         '{"hook": str, "title": str, "scenes": [{"timestamp": str, "visual": str, "voiceover": str, "on_screen_text": str}], '
         '"caption": str, "hashtags": [str], "music_vibe": str}'
     )
-    chat = _llm(f"video-{user.user_id}", system)
+    chat = await _llm_for_user(user.user_id, f"video-{user.user_id}", system)
     prompt = (
         f"Platform: {payload.platform}\nDuration: ~{payload.duration_seconds}s\n"
         f"Tone: {payload.tone}\nTopic: {payload.topic}"
@@ -332,7 +379,7 @@ async def ai_multi_post(payload: MultiPostRequest, request: Request):
         'Respond ONLY in JSON: '
         '{"posts": [{"platform": str, "content": str, "hashtags": [str], "char_count": int}]}'
     )
-    chat = _llm(f"multipost-{user.user_id}", system)
+    chat = await _llm_for_user(user.user_id, f"multipost-{user.user_id}", system)
     prompt = (
         f"Listing/News: {payload.listing}\nTone: {payload.tone}\n"
         f"Generate posts for these platforms: {', '.join(payload.platforms)}"

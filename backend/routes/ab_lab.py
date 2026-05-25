@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from core import api, logger
 from deps import get_current_user
 from routes.plans import assert_has_feature, assert_can_generate_ai, record_ai_generation
-from routes.ai import _llm
+from routes.ai import _llm_for_user
 from emergentintegrations.llm.chat import UserMessage
 
 
@@ -119,7 +119,7 @@ async def ab_variations(payload: ABLabRequest, request: Request):
         '"why":"<1 sentence reason this scored where it did>"}]}'
     )
 
-    chat = _llm(f"ablab-{user.user_id}", system)
+    chat = await _llm_for_user(user.user_id, f"ablab-{user.user_id}", system)
     prompt = (
         f"Platform: {platform}\n"
         f"Seed idea: {seed}\n"
