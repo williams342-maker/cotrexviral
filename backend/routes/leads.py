@@ -2,7 +2,7 @@
 
 from fastapi import HTTPException, Request
 
-from core import db, api
+from core import db, api, logger, LEADS_NOTIFY_EMAILS
 from deps import get_current_user
 from models import Lead, LeadCreate
 
@@ -17,7 +17,24 @@ async def create_lead(payload: LeadCreate, request: Request):
         pass
 
     lead = Lead(user_id=user_id, **payload.model_dump())
-    await db.leads.insert_one(lead.model_dump())
+    lead_doc = lead.model_dump()
+    await db.leads.insert_one(lead_doc)
+
+    # Fire the two lifecycle emails in background. Either failure must NOT
+    # break the form submission — leads are persisted regardless.
+    try:
+        from routes.email import send_lead_admin_notification, send_lead_auto_reply, fire
+        if LEADS_NOTIFY_EMAILS:
+            fire(send_lead_admin_notification(lead_doc, LEADS_NOTIFY_EMAILS))
+        else:
+            logger.warning(
+                "New lead saved but LEADS_NOTIFY_EMAILS is empty — set it in .env "
+                "to receive new-lead alerts.",
+            )
+        fire(send_lead_auto_reply(lead_doc))
+    except Exception:
+        logger.exception("Failed to schedule lead emails (lead is still saved)")
+
     return {"ok": True, "id": lead.id}
 
 

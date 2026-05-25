@@ -35,6 +35,16 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 27) **📨 Lead-form email notifications**
+  - **Bug fixed**: when a visitor submitted the "Choose Your Specialist" form (Nova/Sam/Kai/Angela), the lead was persisted but **no one got an email** — yet the UI toast said "X will reach out within 24 hours". Misleading + caused real leads to never receive a reply.
+  - **New env var** `LEADS_NOTIFY_EMAILS` — comma-separated list of admin emails. Preview is set to `williams342@gmail.com,team@cortexviral.com`. **Production deploy must mirror this** in Emergent's environment variables panel or the admin won't get pinged.
+  - **Two new templates in `routes/email.py`**:
+    - `send_lead_admin_notification(lead, recipients)` — to every address in `LEADS_NOTIFY_EMAILS`. Subject `🔥 New lead for {agent}: {name} ({email})`. Body has a styled `<table>` with all form fields. CTA → `/admin/users`.
+    - `send_lead_auto_reply(lead)` — to the lead's own address, written in the chosen agent's voice (Nova/Sam/Kai/Angela), quotes their pain-point if provided, sets the 24h expectation, gives them a CTA to sign in. Quietly skipped if the lead has no email.
+  - **`routes/leads.py::create_lead`** now persists the lead first, then fires both emails fire-and-forget via the existing `fire()` helper. Try/except wraps the scheduling so an email outage can never block lead capture.
+  - **Live verified**: POSTing a sample lead resulted in 3 `email_log` rows all `status: sent` — 2 admin notifications + 1 auto-reply, all via Mailtrap.
+  - **3 new pytest cases**: full fan-out + auto-reply, missing-email edge case, lead always persists. **131 total backend tests pass.**
+
 - 2026-02-26 (part 26) **📣 Email blast for admin broadcasts**
   - `POST /api/admin/broadcasts/{id}/email` body `{plans?: string[], include_comped: bool, dry_run: bool}` — sends an email version of the broadcast to all matching users via Mailtrap. Throttled 50ms between sends to stay polite. Dry-run mode counts recipients without sending so admin can confirm reach before firing.
   - `send_broadcast_email()` template — colour-coded severity badge (📣 info / ⚠️ warning / 🚨 critical / 🎉 success), styled blockquote, "Open dashboard" CTA. Wrapped in the same brand layout as welcome/gift/etc.

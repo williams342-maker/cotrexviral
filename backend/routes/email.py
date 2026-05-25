@@ -383,6 +383,106 @@ async def send_broadcast_email(to: str, name: str, title: str, body: str,
 
 
 # -----------------------------------------------------------------------------
+# Lead-capture lifecycle (when a visitor submits the "Choose Your Specialist" form)
+# -----------------------------------------------------------------------------
+_AGENT_INTROS = {
+    "nova":   ("Nova",   "your SEO & content strategist"),
+    "sam":    ("Sam",    "your SEO & content marketing specialist"),
+    "kai":    ("Kai",    "your social media specialist"),
+    "angela": ("Angela", "your email marketing specialist"),
+}
+
+
+def _lead_field_row(label: str, value: Optional[str]) -> str:
+    if not value:
+        return ""
+    safe = str(value).replace("<", "&lt;").replace(">", "&gt;")
+    return (
+        f'<tr><td style="padding:6px 12px;color:#71717a;font-size:12.5px;white-space:nowrap;vertical-align:top">{label}</td>'
+        f'<td style="padding:6px 12px;color:#18181b;font-size:13.5px;font-weight:500">{safe}</td></tr>'
+    )
+
+
+async def send_lead_admin_notification(lead: dict, recipients: list[str]):
+    """Notify the CortexViral team that a new lead just submitted the form.
+    Fans out to every address in recipients (sequentially, all logged)."""
+    agent_id = lead.get("agent_id") or ""
+    agent_name, agent_role = _AGENT_INTROS.get(agent_id, ("an agent", ""))
+    lead_email = lead.get("email") or "(no email)"
+    lead_name = lead.get("name") or "(unnamed)"
+    platforms = lead.get("platforms") or []
+    platforms_str = ", ".join(platforms) if platforms else None
+
+    subj = f"🔥 New lead for {agent_name}: {lead_name} ({lead_email})"
+    table_rows = "".join([
+        _lead_field_row("Agent", f"{agent_name} — {agent_role}"),
+        _lead_field_row("Name", lead.get("name")),
+        _lead_field_row("Email", lead.get("email")),
+        _lead_field_row("Website", lead.get("website")),
+        _lead_field_row("Platforms", platforms_str),
+        _lead_field_row("Pain points", lead.get("pain_points")),
+        _lead_field_row("Competitors", lead.get("competitors")),
+        _lead_field_row("Keywords", lead.get("keywords")),
+        _lead_field_row("Email platform", lead.get("email_platform")),
+    ])
+    body = f"""
+    <p>A new lead just submitted the "Choose Your Specialist" form on cortexviral.com.</p>
+    <table cellspacing="0" cellpadding="0" border="0" style="margin:18px 0;background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;width:100%">
+      {table_rows}
+    </table>
+    <p style="color:#71717a;font-size:13px">Reply to this email or hit the button to view the full lead in your admin dashboard.</p>
+    """
+    results = []
+    for rcpt in recipients:
+        results.append(await send_email(
+            to=rcpt, subject=subj, tags=["lead_notification", f"agent:{agent_id}"],
+            html=_layout(f"🔥 New lead for {agent_name}", body,
+                         cta_label="Open admin → users",
+                         cta_url=f"{PUBLIC_SITE_URL}/admin/users"),
+        ))
+    return results
+
+
+async def send_lead_auto_reply(lead: dict):
+    """Friendly auto-reply to the lead, written as if from the chosen agent.
+    Sets expectation that a human will follow up within 24h."""
+    if not lead.get("email"):
+        return {"sent": False, "skipped": "no_email"}
+    agent_id = lead.get("agent_id") or ""
+    agent_name, agent_role = _AGENT_INTROS.get(agent_id, ("the CortexViral team", ""))
+    first = (lead.get("name") or "there").split()[0]
+    subj = f"Got your message — {agent_name} here 👋"
+
+    # Per-agent intros mirror the in-product copy so it feels consistent.
+    agent_intros = {
+        "nova":   "If you need more traffic but struggle to rank or stay consistent, I can build the engine that delivers it.",
+        "sam":    "I handle SEO and content marketing end-to-end — keyword research through AI-search-optimised publishing.",
+        "kai":    "I'll monitor your platforms, find the patterns your audience actually responds to, and turn them into shippable hooks.",
+        "angela": "I'll write, design, and schedule your email campaigns — no new dashboards, you'll manage me from your inbox.",
+    }
+    intro = agent_intros.get(agent_id, "We're excited to learn more about your business.")
+    pain = lead.get("pain_points")
+    pain_block = (
+        f'<p style="color:#404045;background:#f5f3ff;border-left:3px solid #7c3aed;padding:12px 16px;border-radius:6px;margin:18px 0"><em>"{pain}"</em></p>'
+        if pain else ""
+    )
+    body = f"""
+    <p>Hey <strong>{first}</strong>,</p>
+    <p>Thanks for reaching out — {intro}</p>
+    {pain_block}
+    <p>I've got the details you sent. I'll dig into your site, draft a quick plan, and follow up <strong>within 24 hours</strong> with the first 2-3 things I'd ship for you.</p>
+    <p>In the meantime, if you want to skip the wait and explore the platform yourself, you can sign in any time — your account is already created.</p>
+    <p style="color:#71717a;font-size:13.5px">Talk soon,<br>— {agent_name}</p>
+    """
+    return await send_email(
+        to=lead["email"], subject=subj, tags=["lead_auto_reply", f"agent:{agent_id}"],
+        html=_layout(f"{agent_name} here 👋", body,
+                     cta_label="Sign in to CortexViral",
+                     cta_url=f"{PUBLIC_SITE_URL}/"),
+    )
+
+
+# -----------------------------------------------------------------------------
 # Background-task wrappers — for fire-and-forget from sync code paths.
 # -----------------------------------------------------------------------------
 def fire(coro):

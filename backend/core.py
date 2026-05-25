@@ -55,6 +55,11 @@ MAILTRAP_TOKEN = os.environ.get("MAILTRAP_TOKEN", "")
 MAILTRAP_FROM = os.environ.get("MAILTRAP_FROM", "")
 MAILTRAP_API_URL = os.environ.get("MAILTRAP_API_URL", "https://send.api.mailtrap.io/api/send")
 
+# Lead-notification recipients (comma-separated emails)
+LEADS_NOTIFY_EMAILS = [
+    e.strip() for e in os.environ.get("LEADS_NOTIFY_EMAILS", "").split(",") if e.strip()
+]
+
 # --- Logging ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("automatex")
