@@ -35,6 +35,19 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 32) **🔁 Series-aware cancel + Shift+drag series shift**
+  - **Backend** (`routes/channels.py`):
+    - `DELETE /api/posts/scheduled/{id}?scope=only|future|all` — new optional `scope` query param. `only` (default) preserves the old behavior. `future` deletes every still-scheduled post in the same `recurrence_group_id` whose `scheduled_at` ≥ this one (past instances kept). `all` deletes the entire series. Non-recurring posts always downgrade to `only`. Returns `{ok, deleted, scope}`.
+    - `PATCH /api/posts/series/{group_id}` body `{delta_days, anchor_post_id?}` — shifts every still-scheduled post in the series by ±N days. With `anchor_post_id`, only the anchor + future are shifted. Rejects 0 delta as no-op, |delta| > 365 as 400, unknown group as 404.
+  - **Frontend** (`MarketingCalendar.jsx`):
+    - **`RecurrenceCancelModal`** — opens whenever a user clicks the X on a recurring chip (week view) OR the Cancel button on a recurring entry in the day-detail drawer (month view). Three lettered options as styled buttons: "Just this one" / "This + all upcoming" / "The entire series" (the destructive one shown in rose with the total count). Bypassed for non-recurring posts.
+    - **Shift+drag series shift** — when a user holds Shift while dragging a 🔁 weekly chip to a different day, the drop opens **`SeriesShiftPromptModal`** asking whether to move just the instance, shift this + upcoming, or shift the entire series by the date delta they just dragged. Non-recurring posts and Alt+drag (duplicate) bypass this flow. Cursor / dropEffect updates while dragging.
+    - Footer hint line updated to teach the new shortcuts: `Alt`+drag to duplicate · `Shift`+drag a 🔁 weekly post to shift the series.
+  - **10 new pytest cases** (`test_series_ops.py`):
+    - `TestSeriesCancel` (5): default scope deletes one, `scope=future` keeps past, `scope=all` deletes everything, unknown scope → 400, non-recurring posts downgrade to `only`.
+    - `TestSeriesShift` (5): full-series shift verified by recomputing the delta on every member, anchored shift skips past members, zero delta is a no-op, unknown group → 404, |delta| > 365 → 400.
+  - Cleaner mental model than per-row edit menus: same drag/click affordances the user already knows, recurrence options surface only when they're meaningful (= the post is part of a series).
+
 - 2026-02-26 (part 31) **🔁 Repeat-weekly + 📅 Month grid + 🖱️ Alt-drag duplicate + 🪄 Lead-form auto-account**
   - **Repeat weekly toggle** (Compose & Publish):
     - New `repeat_weeks: Optional[int]` field on `PublishRequest` (2–12 enforced by Pydantic `ge`/`le`).

@@ -38,6 +38,8 @@ const MarketingCalendar = () => {
   const [dragging, setDragging] = useState(null);
   const [altMode, setAltMode] = useState(false); // tracks if Alt key is held during drag
   const [monthDayDetail, setMonthDayDetail] = useState(null); // {date, posts}
+  const [recurrenceConfirm, setRecurrenceConfirm] = useState(null); // {post, intent: 'cancel'|'shift', ...}
+  const [seriesPrompt, setSeriesPrompt] = useState(null); // After Shift+drag: ask whether to shift series
 
   // Lasso / multi-select state
   const [selectMode, setSelectMode] = useState(false);
@@ -162,12 +164,38 @@ const MarketingCalendar = () => {
     setCursor(d);
   };
 
-  const cancelPost = async (id) => {
+  const cancelPost = async (id, scope = 'only') => {
     try {
-      await axios.delete(`${API}/posts/scheduled/${id}`, { withCredentials: true });
-      toast({ title: 'Scheduled post cancelled' });
+      await axios.delete(`${API}/posts/scheduled/${id}?scope=${scope}`, { withCredentials: true });
+      toast({ title: scope === 'only' ? 'Scheduled post cancelled' : scope === 'future' ? 'This + future occurrences cancelled' : 'Series cancelled' });
       load();
     } catch (e) {}
+  };
+
+  // Series-aware cancel: if the post belongs to a recurrence, open a confirm modal.
+  const requestCancel = (post) => {
+    if (post.recurrence_group_id) {
+      setRecurrenceConfirm({ post, intent: 'cancel' });
+    } else {
+      cancelPost(post.id);
+    }
+  };
+
+  const shiftSeries = async (groupId, anchorPostId, deltaDays) => {
+    try {
+      const r = await axios.patch(
+        `${API}/posts/series/${groupId}`,
+        { delta_days: deltaDays, anchor_post_id: anchorPostId },
+        { withCredentials: true },
+      );
+      toast({
+        title: `Series shifted by ${deltaDays > 0 ? '+' : ''}${deltaDays} day${Math.abs(deltaDays) === 1 ? '' : 's'}`,
+        description: `${r.data.updated} post${r.data.updated === 1 ? '' : 's'} updated`,
+      });
+      load();
+    } catch (e) {
+      toast({ title: 'Could not shift series', description: e.response?.data?.detail });
+    }
   };
 
   // --- Lasso multi-select handlers (active only in selectMode) ---
@@ -292,6 +320,7 @@ const MarketingCalendar = () => {
     e.preventDefault();
     setDropTarget(null);
     const isDuplicate = e.altKey;
+    const wantsSeriesShift = e.shiftKey && !selectMode;
     setAltMode(false);
     if (!dragging) return;
     const { post, fromPlatform } = dragging;
@@ -299,6 +328,21 @@ const MarketingCalendar = () => {
     if (date < today) {
       toast({ title: "Can't reschedule into the past" });
       return;
+    }
+
+    // Shift+drag on a recurring post → prompt to shift the entire series by
+    // the date delta (matching what the user dragged). The single-instance
+    // move is the implicit "no" answer.
+    if (wantsSeriesShift && post.recurrence_group_id) {
+      const origDate = new Date(post.scheduled_at);
+      origDate.setHours(0, 0, 0, 0);
+      const dropDate = new Date(date);
+      dropDate.setHours(0, 0, 0, 0);
+      const delta = Math.round((dropDate - origDate) / (1000 * 60 * 60 * 24));
+      if (delta !== 0) {
+        setSeriesPrompt({ post, delta });
+        return;
+      }
     }
 
     const newAt = new Date(post.scheduled_at);
@@ -492,7 +536,7 @@ const MarketingCalendar = () => {
                               )}
                               <span className={`line-clamp-2 flex-1 font-medium ${isSelected ? 'text-amber-900' : 'text-[#1B7BFF]'}`}>{post.content.slice(0, 40)}</span>
                               {!selectMode && (
-                                <button onClick={(e) => { e.stopPropagation(); cancelPost(post.id); }} className="opacity-0 group-hover/post:opacity-100 text-rose-500"><XIcon size={10} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); requestCancel(post); }} className="opacity-0 group-hover/post:opacity-100 text-rose-500"><XIcon size={10} /></button>
                               )}
                             </div>
                             <span className={`inline-block mt-0.5 text-[9px] uppercase tracking-wider font-semibold ${isSelected ? 'text-amber-700' : 'text-[#1B7BFF]/70'}`}>
@@ -570,6 +614,7 @@ const MarketingCalendar = () => {
 
       <div className="mt-4 flex flex-wrap items-center gap-4 text-[12px] text-neutral-500">
         <div className="flex items-center gap-1.5"><GripVertical size={12} /> Drag a post to a new day or channel to reschedule</div>
+        <div className="flex items-center gap-1.5"><span className="font-mono text-[10px] px-1 bg-neutral-100 rounded">Alt</span>+drag to duplicate · <span className="font-mono text-[10px] px-1 bg-violet-100 text-violet-700 rounded">Shift</span>+drag a 🔁 weekly post to shift the series</div>
         <div className="flex items-center gap-1.5"><MousePointerSquareDashed size={12} className="text-amber-600" /> Toggle "Bulk select" then lasso-drag to pick multiple posts for shift/cancel</div>
         {showOptimal && <div className="flex items-center gap-1.5"><Sparkles size={12} className="text-violet-600" /> Violet badges show AI-recommended posting hours</div>}
       </div>
@@ -649,7 +694,54 @@ const MarketingCalendar = () => {
           date={monthDayDetail.date}
           posts={monthDayDetail.posts}
           onClose={() => setMonthDayDetail(null)}
-          onCancel={async (id) => { await cancelPost(id); setMonthDayDetail(null); }}
+          onCancel={(post) => { requestCancel(post); }}
+        />
+      )}
+
+      {recurrenceConfirm && (
+        <RecurrenceCancelModal
+          post={recurrenceConfirm.post}
+          onClose={() => setRecurrenceConfirm(null)}
+          onConfirm={async (scope) => {
+            await cancelPost(recurrenceConfirm.post.id, scope);
+            setRecurrenceConfirm(null);
+            setMonthDayDetail(null);
+          }}
+        />
+      )}
+
+      {seriesPrompt && (
+        <SeriesShiftPromptModal
+          post={seriesPrompt.post}
+          delta={seriesPrompt.delta}
+          onClose={() => setSeriesPrompt(null)}
+          onMoveOne={async () => {
+            const { post, delta } = seriesPrompt;
+            const newAt = new Date(post.scheduled_at);
+            newAt.setDate(newAt.getDate() + delta);
+            try {
+              await axios.patch(
+                `${API}/posts/scheduled/${post.id}`,
+                { scheduled_at: newAt.toISOString() },
+                { withCredentials: true },
+              );
+              toast({ title: 'Moved this instance only' });
+              load();
+            } catch (e) {
+              toast({ title: 'Could not move post' });
+            }
+            setSeriesPrompt(null);
+          }}
+          onShiftFuture={async () => {
+            const { post, delta } = seriesPrompt;
+            await shiftSeries(post.recurrence_group_id, post.id, delta);
+            setSeriesPrompt(null);
+          }}
+          onShiftAll={async () => {
+            const { post, delta } = seriesPrompt;
+            await shiftSeries(post.recurrence_group_id, null, delta);
+            setSeriesPrompt(null);
+          }}
         />
       )}
     </DashboardLayout>
@@ -854,7 +946,7 @@ const DayDetailDrawer = ({ date, posts, onClose, onCancel }) => (
                 {new Date(post.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
               <button
-                onClick={() => onCancel(post.id)}
+                onClick={() => onCancel(post)}
                 className="text-rose-500 hover:text-rose-700 text-[11px] font-medium inline-flex items-center gap-1"
                 data-testid={`drawer-cancel-${post.id}`}
               >
@@ -881,3 +973,126 @@ const DayDetailDrawer = ({ date, posts, onClose, onCancel }) => (
     </div>
   </div>
 );
+
+// -----------------------------------------------------------------------------
+// RecurrenceCancelModal — asked when a user cancels a chip belonging to a
+// recurrence series. Three scopes: only / future / all (+ "never mind").
+// -----------------------------------------------------------------------------
+const RecurrenceCancelModal = ({ post, onClose, onConfirm }) => {
+  const total = post.recurrence_total || '?';
+  const idx = post.recurrence_index != null ? post.recurrence_index + 1 : '?';
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose} data-testid="recurrence-cancel-modal">
+      <div className="bg-white rounded-3xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 text-violet-600 mb-1">
+          <span className="text-lg">🔁</span>
+          <h3 className="text-lg font-semibold text-neutral-900">Cancel which posts?</h3>
+        </div>
+        <p className="text-[13px] text-neutral-500 mb-5 leading-relaxed">
+          This is post <strong>{idx} of {total}</strong> in a weekly series. Pick what to cancel:
+        </p>
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => onConfirm('only')}
+            data-testid="recurrence-scope-only"
+            className="w-full text-left p-3 rounded-2xl border border-neutral-200 hover:border-rose-300 hover:bg-rose-50/40 transition-colors group"
+          >
+            <div className="text-[13.5px] font-semibold text-neutral-800 group-hover:text-rose-700">Just this one</div>
+            <div className="text-[12px] text-neutral-500 mt-0.5">Keeps every other instance in the series.</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm('future')}
+            data-testid="recurrence-scope-future"
+            className="w-full text-left p-3 rounded-2xl border border-neutral-200 hover:border-rose-300 hover:bg-rose-50/40 transition-colors group"
+          >
+            <div className="text-[13.5px] font-semibold text-neutral-800 group-hover:text-rose-700">This + all upcoming</div>
+            <div className="text-[12px] text-neutral-500 mt-0.5">Keeps any past instances, cancels everything from this one onward.</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm('all')}
+            data-testid="recurrence-scope-all"
+            className="w-full text-left p-3 rounded-2xl border border-rose-200 bg-rose-50/40 hover:bg-rose-50 hover:border-rose-400 transition-colors group"
+          >
+            <div className="text-[13.5px] font-semibold text-rose-700">The entire series</div>
+            <div className="text-[12px] text-rose-600/80 mt-0.5">All {total} instances, including past unsent ones.</div>
+          </button>
+        </div>
+        <div className="flex justify-end mt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            data-testid="recurrence-cancel-dismiss"
+            className="text-[13px] font-medium text-neutral-600 px-4 h-10 rounded-xl hover:bg-neutral-100"
+          >
+            Never mind
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// -----------------------------------------------------------------------------
+// SeriesShiftPromptModal — opens after Shift+drag on a recurrence chip. Asks
+// whether to move just the instance, the rest of the series, or the entire
+// series by the date delta the user just dragged.
+// -----------------------------------------------------------------------------
+const SeriesShiftPromptModal = ({ post, delta, onClose, onMoveOne, onShiftFuture, onShiftAll }) => {
+  const sign = delta > 0 ? '+' : '';
+  const label = `${sign}${delta} day${Math.abs(delta) === 1 ? '' : 's'}`;
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose} data-testid="series-shift-modal">
+      <div className="bg-white rounded-3xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 text-violet-600 mb-1">
+          <span className="text-lg">🔁</span>
+          <h3 className="text-lg font-semibold text-neutral-900">Shift the series?</h3>
+        </div>
+        <p className="text-[13px] text-neutral-500 mb-5 leading-relaxed">
+          You moved a recurring post by <strong>{label}</strong>. Apply this shift to:
+        </p>
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={onMoveOne}
+            data-testid="series-move-one"
+            className="w-full text-left p-3 rounded-2xl border border-neutral-200 hover:border-[#1B7BFF]/40 hover:bg-blue-50/40 transition-colors group"
+          >
+            <div className="text-[13.5px] font-semibold text-neutral-800 group-hover:text-[#1668e0]">Just this instance</div>
+            <div className="text-[12px] text-neutral-500 mt-0.5">Move only the post you dragged.</div>
+          </button>
+          <button
+            type="button"
+            onClick={onShiftFuture}
+            data-testid="series-shift-future"
+            className="w-full text-left p-3 rounded-2xl border border-violet-200 bg-violet-50/40 hover:bg-violet-50 hover:border-violet-400 transition-colors group"
+          >
+            <div className="text-[13.5px] font-semibold text-violet-700">This + all upcoming</div>
+            <div className="text-[12px] text-violet-600/80 mt-0.5">Shift this post and every still-scheduled future instance by {label}.</div>
+          </button>
+          <button
+            type="button"
+            onClick={onShiftAll}
+            data-testid="series-shift-all"
+            className="w-full text-left p-3 rounded-2xl border border-neutral-200 hover:border-violet-300 hover:bg-violet-50/40 transition-colors group"
+          >
+            <div className="text-[13.5px] font-semibold text-neutral-800 group-hover:text-violet-700">Entire series</div>
+            <div className="text-[12px] text-neutral-500 mt-0.5">All {post.recurrence_total || ''} instances, past and future, shifted by {label}.</div>
+          </button>
+        </div>
+        <div className="flex justify-end mt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            data-testid="series-shift-dismiss"
+            className="text-[13px] font-medium text-neutral-600 px-4 h-10 rounded-xl hover:bg-neutral-100"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

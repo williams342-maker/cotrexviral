@@ -195,12 +195,89 @@ async def list_scheduled(request: Request, start: Optional[str] = None, end: Opt
 
 
 @api.delete("/posts/scheduled/{post_id}")
-async def cancel_scheduled(post_id: str, request: Request):
+async def cancel_scheduled(post_id: str, request: Request, scope: str = "only"):
+    """Cancel a scheduled post.
+    scope:
+      - "only"   (default): just this post. Preserves existing behavior.
+      - "future": this post + every post in the same recurrence_group_id whose
+                  scheduled_at is >= this one. Past instances are kept.
+      - "all":    every post in the same recurrence_group_id, including past.
+    For non-recurring posts, any scope behaves like "only".
+    """
     user = await get_current_user(request)
-    res = await db.posts.delete_one({"id": post_id, "user_id": user.user_id, "status": "scheduled"})
-    if not res.deleted_count:
+    target = await db.posts.find_one(
+        {"id": post_id, "user_id": user.user_id, "status": "scheduled"},
+        {"_id": 0},
+    )
+    if not target:
         raise HTTPException(status_code=404, detail="Scheduled post not found")
-    return {"ok": True}
+
+    group_id = target.get("recurrence_group_id")
+    if scope == "only" or not group_id:
+        await db.posts.delete_one({"id": post_id, "user_id": user.user_id, "status": "scheduled"})
+        return {"ok": True, "deleted": 1, "scope": "only"}
+
+    if scope not in {"future", "all"}:
+        raise HTTPException(status_code=400, detail="scope must be one of: only, future, all")
+
+    query = {
+        "user_id": user.user_id,
+        "status": "scheduled",
+        "recurrence_group_id": group_id,
+    }
+    if scope == "future":
+        query["scheduled_at"] = {"$gte": target["scheduled_at"]}
+    res = await db.posts.delete_many(query)
+    return {"ok": True, "deleted": res.deleted_count, "scope": scope}
+
+
+from pydantic import BaseModel as _BaseModel  # local import to avoid pydantic deps at top
+
+
+class _SeriesShift(_BaseModel):
+    delta_days: int
+    anchor_post_id: Optional[str] = None  # if set, only shift this + future
+
+
+@api.patch("/posts/series/{group_id}")
+async def shift_series(group_id: str, payload: _SeriesShift, request: Request):
+    """Shift every still-scheduled post in a recurrence series by N days.
+    If `anchor_post_id` is provided, only shift posts whose scheduled_at is
+    >= the anchor's scheduled_at (i.e. "this and future").
+    """
+    user = await get_current_user(request)
+    if payload.delta_days == 0:
+        return {"ok": True, "updated": 0}
+    if abs(payload.delta_days) > 365:
+        raise HTTPException(status_code=400, detail="delta_days out of range")
+
+    query = {
+        "user_id": user.user_id,
+        "status": "scheduled",
+        "recurrence_group_id": group_id,
+    }
+    if payload.anchor_post_id:
+        anchor = await db.posts.find_one(
+            {"id": payload.anchor_post_id, "user_id": user.user_id},
+            {"scheduled_at": 1, "_id": 0},
+        )
+        if not anchor:
+            raise HTTPException(status_code=404, detail="Anchor post not found")
+        query["scheduled_at"] = {"$gte": anchor["scheduled_at"]}
+
+    members = await db.posts.find(query, {"_id": 0, "id": 1, "scheduled_at": 1}).to_list(500)
+    if not members:
+        raise HTTPException(status_code=404, detail="Series has no members in scope")
+
+    updated = 0
+    for m in members:
+        new_at = m["scheduled_at"] + timedelta(days=payload.delta_days)
+        await db.posts.update_one(
+            {"id": m["id"], "user_id": user.user_id},
+            {"$set": {"scheduled_at": new_at}},
+        )
+        updated += 1
+    return {"ok": True, "updated": updated, "delta_days": payload.delta_days}
 
 
 @api.patch("/posts/scheduled/{post_id}")
