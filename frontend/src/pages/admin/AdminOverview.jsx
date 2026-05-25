@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { API } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
-import { Users, Shield, ShieldCheck, FileText, Send, Inbox, BarChart3, Ticket as TicketIcon, Loader2, Sparkles, Crown, Zap, TrendingUp, Eye, UserPlus, Wand2, CreditCard } from 'lucide-react';
+import { Users, Shield, ShieldCheck, FileText, Send, Inbox, BarChart3, Ticket as TicketIcon, Loader2, Sparkles, Crown, Zap, TrendingUp, Eye, UserPlus, Wand2, CreditCard, Mail, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const AdminOverview = () => {
@@ -10,6 +10,7 @@ const AdminOverview = () => {
   const [aiUsage, setAiUsage] = useState(null);
   const [funnel, setFunnel] = useState(null);
   const [funnelDays, setFunnelDays] = useState(30);
+  const [emailHealth, setEmailHealth] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -17,6 +18,7 @@ const AdminOverview = () => {
       axios.get(`${API}/admin/stats`, { withCredentials: true }).then((r) => setStats(r.data)).catch(() => {}),
       axios.get(`${API}/admin/ai-usage?months=6`, { withCredentials: true }).then((r) => setAiUsage(r.data)).catch(() => {}),
       axios.get(`${API}/admin/funnel?days=30`, { withCredentials: true }).then((r) => setFunnel(r.data)).catch(() => {}),
+      axios.get(`${API}/admin/email/health?hours=24`, { withCredentials: true }).then((r) => setEmailHealth(r.data)).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, []);
 
@@ -120,6 +122,10 @@ const AdminOverview = () => {
           </div>
           <FunnelStages funnel={funnel} />
         </div>
+      </Section>
+
+      <Section title="Email health (last 24h)">
+        <EmailHealthCard health={emailHealth} />
       </Section>
 
       <Section title="AI generation analytics">
@@ -324,6 +330,79 @@ const FunnelStages = ({ funnel }) => {
 const pct = (n) => {
   if (typeof n !== 'number' || !isFinite(n)) return '0%';
   return `${(n * 100).toFixed(n < 0.001 && n > 0 ? 3 : 1)}%`;
+};
+
+const EmailHealthCard = ({ health }) => {
+  if (!health) {
+    return (
+      <div className="bg-white rounded-2xl p-6 border border-neutral-200/70 text-[12.5px] text-neutral-500 italic">
+        Loading email health…
+      </div>
+    );
+  }
+  const { total, sent, rejected, errored, skipped, delivery_rate, last_problem } = health;
+  // Health state — gives the headline pill its color/copy.
+  let state = { color: 'bg-neutral-50 text-neutral-600 border-neutral-200', label: 'No sends in the last 24h', icon: Mail };
+  if (total > 0) {
+    if (delivery_rate >= 0.95) state = { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Healthy', icon: ShieldCheck };
+    else if (delivery_rate >= 0.7) state = { color: 'bg-amber-50 text-amber-700 border-amber-200', label: 'Degraded', icon: AlertCircle };
+    else state = { color: 'bg-rose-50 text-rose-700 border-rose-200', label: 'Failing', icon: AlertCircle };
+  }
+  const tiles = [
+    { label: 'Sent', value: sent, tone: 'text-emerald-700' },
+    { label: 'Rejected', value: rejected, tone: rejected > 0 ? 'text-rose-700' : 'text-neutral-700' },
+    { label: 'Errored', value: errored, tone: errored > 0 ? 'text-rose-700' : 'text-neutral-700' },
+    { label: 'Skipped', value: skipped, tone: 'text-neutral-500' },
+  ];
+
+  return (
+    <div className="bg-white rounded-2xl p-6 border border-neutral-200/70" data-testid="admin-email-health">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
+        <div className="flex items-center gap-3">
+          <div className={`w-9 h-9 rounded-lg border ${state.color} flex items-center justify-center`}>
+            <state.icon size={16} />
+          </div>
+          <div>
+            <div className="text-[13px] text-neutral-500 font-medium">Mailgun delivery</div>
+            <div className="text-[15px] font-semibold text-neutral-900 mt-0.5">
+              {state.label}
+              {total > 0 && (
+                <span className="ml-2 text-[12.5px] font-normal text-neutral-500 tabular-nums">
+                  {pct(delivery_rate)} delivered · {total.toLocaleString()} sends
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        {tiles.map((t) => (
+          <div key={t.label} className="rounded-xl border border-neutral-200/70 p-3" data-testid={`email-tile-${t.label.toLowerCase()}`}>
+            <div className={`text-2xl font-medium tabular-nums ${t.tone}`}>{t.value || 0}</div>
+            <div className="text-[12px] text-neutral-500 mt-0.5">{t.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {last_problem && (
+        <div className="rounded-lg border border-amber-200/70 bg-amber-50/40 px-3 py-2.5 text-[12.5px]" data-testid="email-last-problem">
+          <div className="flex items-center gap-2 text-amber-800 font-semibold mb-1">
+            <AlertCircle size={12} /> Most recent issue
+          </div>
+          <div className="text-neutral-700 leading-snug">
+            <span className="font-semibold capitalize">{last_problem.status}</span>
+            {last_problem.mg_status && <span className="text-neutral-500"> · HTTP {last_problem.mg_status}</span>}
+            <span className="text-neutral-500"> · </span>
+            <span className="text-neutral-500">{last_problem.subject}</span>
+          </div>
+          {last_problem.reason && (
+            <div className="text-neutral-500 mt-1 line-clamp-2 italic">{String(last_problem.reason).slice(0, 220)}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default AdminOverview;

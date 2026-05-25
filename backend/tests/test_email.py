@@ -78,6 +78,47 @@ class TestEmailEndpoint:
         assert doc["status"] in ("sent", "rejected", "error", "skipped")
 
 
+class TestEmailHealth:
+    def test_requires_admin(self):
+        r = httpx.get(f"{API_URL}/api/admin/email/health", timeout=10)
+        assert r.status_code == 401
+
+    def test_returns_full_shape(self):
+        _clear_email_log()
+        # Seed one rejected
+        httpx.post(
+            f"{API_URL}/api/admin/email/test",
+            headers=H, json={"to": "shape-test@example.com", "kind": "welcome"}, timeout=30,
+        ).raise_for_status()
+        r = httpx.get(f"{API_URL}/api/admin/email/health?hours=24", headers=H, timeout=10)
+        r.raise_for_status()
+        body = r.json()
+        for key in ("hours", "total", "sent", "rejected", "errored", "skipped", "delivery_rate", "last_problem"):
+            assert key in body, f"missing key: {key}"
+        assert body["total"] >= 1
+
+    def test_hours_clamped(self):
+        r = httpx.get(f"{API_URL}/api/admin/email/health?hours=99999", headers=H, timeout=10)
+        r.raise_for_status()
+        assert r.json()["hours"] == 24 * 30  # clamped to 30 days
+        r2 = httpx.get(f"{API_URL}/api/admin/email/health?hours=0", headers=H, timeout=10)
+        r2.raise_for_status()
+        assert r2.json()["hours"] == 1
+
+    def test_surfaces_last_problem_with_reason(self):
+        _clear_email_log()
+        httpx.post(
+            f"{API_URL}/api/admin/email/test",
+            headers=H, json={"to": "problem-test@example.com", "kind": "welcome"}, timeout=30,
+        ).raise_for_status()
+        r = httpx.get(f"{API_URL}/api/admin/email/health", headers=H, timeout=10)
+        body = r.json()
+        # When the only send rejected, last_problem must be populated.
+        if body["sent"] == 0 and body["total"] > 0:
+            assert body["last_problem"] is not None
+            assert body["last_problem"]["status"] in ("rejected", "error", "skipped")
+
+
 class TestEmailHelpers:
     """Direct calls into the helpers — verifies template wiring + payload shape
     without going through HTTP."""

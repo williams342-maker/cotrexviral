@@ -120,5 +120,8 @@
       "collapseWhitespace": true,
       "removeComments": true
     }
+  },
+  "resolutions": {
+    "cookie": "^1.0.1"
   }
 }

@@ -10,7 +10,7 @@ unauthorised recipients return 400. We log the recipient + reason and move on.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlencode
 
@@ -267,3 +267,43 @@ async def admin_email_test(payload: _TestEmail, request: Request):
     if payload.kind == "past_due":
         return await send_past_due_email(payload.to, name, "growth")
     return await send_welcome_email(payload.to, name)
+
+
+@api.get("/admin/email/health")
+async def admin_email_health(request: Request, hours: int = 24):
+    """Email delivery health for the last `hours` (default 24).
+
+    Returns per-status counts + the most recent error reason so a glance at
+    /admin/overview tells you if Mailgun has stopped delivering."""
+    from deps import require_admin
+    await require_admin(request)
+    hours = max(1, min(hours, 24 * 30))
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+
+    pipe = [
+        {"$match": {"created_at": {"$gte": since}}},
+        {"$group": {"_id": "$status", "n": {"$sum": 1}}},
+    ]
+    by_status = {row["_id"]: row["n"] async for row in db.email_log.aggregate(pipe)}
+
+    # Most recent non-success row (rejected / errored / skipped) for an at-a-glance reason.
+    last_problem = await db.email_log.find_one(
+        {"status": {"$ne": "sent"}, "created_at": {"$gte": since}},
+        {"_id": 0, "status": 1, "reason": 1, "to": 1, "subject": 1, "created_at": 1, "mg_status": 1},
+        sort=[("created_at", -1)],
+    )
+    if last_problem and isinstance(last_problem.get("created_at"), datetime):
+        last_problem["created_at"] = last_problem["created_at"].isoformat()
+
+    total = sum(by_status.values())
+    sent = by_status.get("sent", 0)
+    return {
+        "hours": hours,
+        "total": total,
+        "sent": sent,
+        "rejected": by_status.get("rejected", 0),
+        "errored": by_status.get("error", 0),
+        "skipped": by_status.get("skipped", 0),
+        "delivery_rate": round(sent / total, 4) if total else None,
+        "last_problem": last_problem,
+    }
