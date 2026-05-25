@@ -77,8 +77,11 @@ async def claim_magic_link(token: str, request: Request, response: Response):
     if doc.get("used_at"):
         raise HTTPException(status_code=400, detail="This link has already been used")
     expires = doc.get("expires_at")
-    if isinstance(expires, datetime) and expires < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="This link has expired")
+    if isinstance(expires, datetime):
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        if expires < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="This link has expired")
 
     user = await db.users.find_one({"user_id": doc["user_id"]}, {"_id": 0})
     if not user:

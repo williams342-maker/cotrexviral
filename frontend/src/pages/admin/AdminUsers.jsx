@@ -104,6 +104,30 @@ const AdminUsers = () => {
     }
   };
 
+  const resendInvite = async (u) => {
+    setResendingFor(u.user_id);
+    try {
+      const r = await axios.post(
+        `${API}/admin/users/${u.user_id}/resend-invite`, {},
+        { withCredentials: true },
+      );
+      if (r.data?.email_sent) {
+        toast({
+          title: `Magic link emailed to ${u.email}`,
+          description: 'They have 7 days to claim their account.',
+        });
+      } else {
+        toast({
+          title: 'Generated link — email failed to send',
+          description: 'Copy the link from the browser network tab or try again.',
+        });
+      }
+    } catch (e) {
+      toast({ title: 'Could not generate link', description: e.response?.data?.detail });
+    }
+    setResendingFor(null);
+  };
+
   return (
     <DashboardLayout title="Users" subtitle="Manage all accounts on Automatex.">
       <form
@@ -219,6 +243,15 @@ const AdminUsers = () => {
                     <td className="p-4">
                       <div className="flex items-center justify-end gap-1">
                         <IconBtn title="Impersonate" disabled={isSelf} onClick={() => impersonate(u.user_id, u.name, u.email)}><UserCog size={14} /></IconBtn>
+                        <IconBtn
+                          title="Resend sign-in link"
+                          onClick={() => resendInvite(u)}
+                          variant="violet"
+                          disabled={resendingFor === u.user_id}
+                          data-testid={`admin-resend-invite-${u.user_id}`}
+                        >
+                          {resendingFor === u.user_id ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+                        </IconBtn>
                         {u.status === 'suspended' ? (
                           <IconBtn title="Unsuspend" onClick={() => action(u.user_id, 'unsuspend')} variant="green"><Play size={14} /></IconBtn>
                         ) : (
@@ -256,9 +289,228 @@ const AdminUsers = () => {
           </div>
         </div>
       )}
+
+      {createOpen && (
+        <CreateUserModal
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => { setCreateOpen(false); load(q); }}
+        />
+      )}
     </DashboardLayout>
   );
 };
+
+const CreateUserModal = ({ onClose, onCreated }) => {
+  const { toast } = useToast();
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [plan, setPlan] = useState('free');
+  const [comped, setComped] = useState(false);
+  const [sendEmail, setSendEmail] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState(null); // { magic_link, email_sent, new_user }
+
+  const submit = async (e) => {
+    e?.preventDefault?.();
+    if (!email.trim() || !name.trim()) {
+      toast({ title: 'Email and name are required' });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const r = await axios.post(
+        `${API}/admin/users/create`,
+        {
+          email: email.trim(),
+          name: name.trim(),
+          plan,
+          comped,
+          send_email: sendEmail,
+        },
+        { withCredentials: true },
+      );
+      setResult(r.data);
+      if (r.data?.email_sent) {
+        toast({
+          title: r.data.new_user ? 'Account created' : 'User already existed — fresh link sent',
+          description: `Magic link emailed to ${r.data.email}`,
+        });
+      } else if (sendEmail) {
+        toast({
+          title: 'Account created — email failed',
+          description: 'Copy the magic link below and send it manually.',
+        });
+      } else {
+        toast({ title: r.data.new_user ? 'Account created' : 'Magic link refreshed' });
+      }
+    } catch (err) {
+      toast({
+        title: 'Could not create user',
+        description: err.response?.data?.detail || err.message,
+      });
+    }
+    setSubmitting(false);
+  };
+
+  const copy = () => {
+    if (!result?.magic_link) return;
+    navigator.clipboard?.writeText(result.magic_link);
+    toast({ title: 'Link copied to clipboard' });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      onClick={() => { if (!submitting) onClose(); }}
+      data-testid="admin-create-user-modal"
+    >
+      <div
+        className="bg-white rounded-3xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 text-emerald-600 mb-1">
+          <UserPlus size={20} />
+          <h3 className="text-lg font-semibold text-neutral-900">Create user manually</h3>
+        </div>
+        <p className="text-[13px] text-neutral-500 mb-5 leading-relaxed">
+          For inbound leads who don't use Google Auth. We'll email them a single-use sign-in link — no password required.
+        </p>
+
+        {!result ? (
+          <form onSubmit={submit} className="space-y-4">
+            <Field label="Email *">
+              <Input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="creator@example.com"
+                data-testid="admin-create-user-email"
+                className="h-10 rounded-xl border-neutral-300"
+              />
+            </Field>
+            <Field label="Name *">
+              <Input
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Alex Rivera"
+                data-testid="admin-create-user-name"
+                className="h-10 rounded-xl border-neutral-300"
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Plan">
+                <select
+                  value={plan}
+                  onChange={(e) => setPlan(e.target.value)}
+                  data-testid="admin-create-user-plan"
+                  className="w-full h-10 rounded-xl border border-neutral-300 px-3 text-[14px] bg-white capitalize"
+                >
+                  {PLAN_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Comped">
+                <button
+                  type="button"
+                  onClick={() => setComped((c) => !c)}
+                  data-testid="admin-create-user-comped"
+                  className={`w-full h-10 rounded-xl border text-[13px] font-medium inline-flex items-center justify-center gap-1.5 transition-colors ${
+                    comped
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                      : 'bg-white border-neutral-300 text-neutral-600 hover:bg-neutral-50'
+                  }`}
+                >
+                  <Gift size={14} /> {comped ? 'Yes — comped' : 'No'}
+                </button>
+              </Field>
+            </div>
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={sendEmail}
+                onChange={(e) => setSendEmail(e.target.checked)}
+                data-testid="admin-create-user-send-email"
+                className="w-4 h-4 rounded border-neutral-300 text-violet-600 focus:ring-violet-500"
+              />
+              <span className="text-[13px] text-neutral-700">
+                Email them the magic sign-in link now
+              </span>
+            </label>
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={submitting}
+                className="text-[13px] font-medium text-neutral-600 px-4 h-10 rounded-xl hover:bg-neutral-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                data-testid="admin-create-user-submit"
+                className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[13px] font-medium px-5 h-10 rounded-xl disabled:opacity-50"
+              >
+                {submitting ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+                {submitting ? 'Creating…' : 'Create + email link'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="space-y-4" data-testid="admin-create-user-result">
+            <div className={`rounded-2xl border p-4 ${result.email_sent ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+              <div className={`flex items-center gap-2 text-[13.5px] font-semibold ${result.email_sent ? 'text-emerald-800' : 'text-amber-800'}`}>
+                {result.email_sent ? '✓ Magic link emailed' : '⚠ Email failed — copy the link below'}
+              </div>
+              <p className="text-[12.5px] text-neutral-600 mt-1">
+                {result.new_user ? 'New user created.' : 'User already existed — issued a fresh link.'} Link expires in 7 days, single-use.
+              </p>
+            </div>
+            <Field label="Sign-in link (single-use, 7-day expiry)">
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={result.magic_link}
+                  data-testid="admin-create-user-link"
+                  className="h-10 rounded-xl border-neutral-300 text-[12px] font-mono"
+                  onFocus={(e) => e.target.select()}
+                />
+                <button
+                  type="button"
+                  onClick={copy}
+                  data-testid="admin-create-user-copy"
+                  className="inline-flex items-center gap-1.5 bg-neutral-900 hover:bg-neutral-800 text-white text-[13px] font-medium px-4 h-10 rounded-xl"
+                >
+                  <Copy size={13} /> Copy
+                </button>
+              </div>
+            </Field>
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={onCreated}
+                data-testid="admin-create-user-done"
+                className="text-[13px] font-medium bg-[#1B7BFF] hover:bg-[#1668e0] text-white px-5 h-10 rounded-xl"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const Field = ({ label, children }) => (
+  <label className="block">
+    <span className="text-[12px] uppercase tracking-wider text-neutral-500 font-medium mb-1.5 block">{label}</span>
+    {children}
+  </label>
+);
 
 const StatusBadge = ({ status }) => {
   const map = {
@@ -272,7 +524,7 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-const IconBtn = ({ children, onClick, disabled, title, variant = 'gray' }) => {
+const IconBtn = ({ children, onClick, disabled, title, variant = 'gray', 'data-testid': testId }) => {
   const colors = {
     gray: 'text-neutral-600 hover:bg-neutral-100',
     red: 'text-rose-600 hover:bg-rose-50',
@@ -281,7 +533,7 @@ const IconBtn = ({ children, onClick, disabled, title, variant = 'gray' }) => {
     violet: 'text-violet-600 hover:bg-violet-50',
   };
   return (
-    <button title={title} onClick={onClick} disabled={disabled} className={`w-8 h-8 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center transition-colors ${colors[variant]}`}>
+    <button title={title} onClick={onClick} disabled={disabled} data-testid={testId} className={`w-8 h-8 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center transition-colors ${colors[variant]}`}>
       {children}
     </button>
   );
