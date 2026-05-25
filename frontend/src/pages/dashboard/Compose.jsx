@@ -6,7 +6,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import { Textarea } from '../../components/ui/textarea';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Sparkles, Send, Loader2, AlertTriangle, Wand2 } from 'lucide-react';
+import { Sparkles, Send, Loader2, AlertTriangle, Wand2, Repeat } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 
 const PLATFORM_LIMITS = {
@@ -30,6 +30,8 @@ const Compose = () => {
   const [scheduleAt, setScheduleAt] = useState('');
   const [suggestingTime, setSuggestingTime] = useState(false);
   const [aiTimeMeta, setAiTimeMeta] = useState(null); // { platform, day, hour }
+  const [repeatWeekly, setRepeatWeekly] = useState(false);
+  const [repeatWeeks, setRepeatWeeks] = useState(4);
 
   useEffect(() => {
     axios.get(`${API}/channels`, { withCredentials: true })
@@ -110,13 +112,19 @@ const Compose = () => {
       const payload = { content: fullContent, platforms };
       if (scheduleAt) {
         payload.scheduled_at = new Date(scheduleAt).toISOString();
+        if (repeatWeekly && repeatWeeks > 1) {
+          payload.repeat_weeks = Math.min(12, Math.max(2, parseInt(repeatWeeks, 10) || 2));
+        }
       }
       const r = await axios.post(`${API}/channels/publish`, payload, { withCredentials: true });
       const isScheduled = r.data.status === 'scheduled';
+      const wasSeries = Array.isArray(r.data.ids) && r.data.ids.length > 1;
       toast({
-        title: isScheduled
-          ? `Scheduled for ${new Date(scheduleAt).toLocaleString()}`
-          : `Published to ${platforms.length} channel${platforms.length > 1 ? 's' : ''}!`,
+        title: wasSeries
+          ? `Scheduled ${r.data.ids.length} weekly posts starting ${new Date(scheduleAt).toLocaleDateString()}`
+          : isScheduled
+            ? `Scheduled for ${new Date(scheduleAt).toLocaleString()}`
+            : `Published to ${platforms.length} channel${platforms.length > 1 ? 's' : ''}!`,
         description: 'MOCKED — stored in your feed/calendar.',
       });
       setContent('');
@@ -124,6 +132,7 @@ const Compose = () => {
       setHashtags([]);
       setScheduleAt('');
       setAiTimeMeta(null);
+      setRepeatWeekly(false);
     } catch (e) {
       toast({ title: 'Publishing failed' });
     } finally {
@@ -248,6 +257,36 @@ const Compose = () => {
             {aiTimeMeta && (
               <div className="mt-1 inline-flex items-center gap-1 text-[10.5px] text-violet-700 font-medium" data-testid="compose-ai-time-meta">
                 <Sparkles size={9} /> Picked by AI · {aiTimeMeta.day} {aiTimeMeta.hour}:00 (best for {aiTimeMeta.platform})
+              </div>
+            )}
+            {scheduleAt && (
+              <div className="mt-3 rounded-xl border border-violet-100 bg-violet-50/60 p-3" data-testid="compose-repeat-block">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={repeatWeekly}
+                    onChange={(e) => setRepeatWeekly(e.target.checked)}
+                    data-testid="compose-repeat-toggle"
+                    className="w-4 h-4 rounded border-violet-300 text-violet-600 focus:ring-violet-500"
+                  />
+                  <Repeat size={12} className="text-violet-600 shrink-0" />
+                  <span className="text-[12.5px] text-violet-900 font-medium leading-snug">Repeat weekly</span>
+                </label>
+                {repeatWeekly && (
+                  <div className="mt-2 flex items-center gap-2 pl-6.5">
+                    <span className="text-[11.5px] text-violet-800">for</span>
+                    <Input
+                      type="number"
+                      min={2}
+                      max={12}
+                      value={repeatWeeks}
+                      onChange={(e) => setRepeatWeeks(e.target.value)}
+                      data-testid="compose-repeat-weeks"
+                      className="h-7 w-16 rounded-lg border-violet-200 text-[12.5px] text-center bg-white"
+                    />
+                    <span className="text-[11.5px] text-violet-800">weeks (max 12). Each instance posts at the same time, +7 days apart.</span>
+                  </div>
+                )}
               </div>
             )}
           </div>

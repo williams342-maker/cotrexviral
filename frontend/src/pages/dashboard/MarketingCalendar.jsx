@@ -36,6 +36,8 @@ const MarketingCalendar = () => {
   const [niche, setNiche] = useState('');
   const [dropTarget, setDropTarget] = useState(null);
   const [dragging, setDragging] = useState(null);
+  const [altMode, setAltMode] = useState(false); // tracks if Alt key is held during drag
+  const [monthDayDetail, setMonthDayDetail] = useState(null); // {date, posts}
 
   // Lasso / multi-select state
   const [selectMode, setSelectMode] = useState(false);
@@ -53,11 +55,18 @@ const MarketingCalendar = () => {
       end.setDate(end.getDate() + 7);
       return { start, end, days: 7 };
     }
+    // Month view: pad to full weeks so the grid is always 7×N (typically 7×5
+    // or 7×6). Start of month, then back up to the previous Sunday.
     start.setDate(1);
     start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setMonth(end.getMonth() + 1);
-    return { start, end, days: Math.round((end - start) / (1000 * 60 * 60 * 24)) };
+    start.setDate(start.getDate() - start.getDay()); // back up to Sunday
+    const monthEnd = new Date(cursor);
+    monthEnd.setMonth(monthEnd.getMonth() + 1, 0); // last day of current month
+    const end = new Date(monthEnd);
+    end.setDate(end.getDate() + (6 - end.getDay()) + 1); // forward to next Saturday +1
+    end.setHours(0, 0, 0, 0);
+    const days = Math.round((end - start) / (1000 * 60 * 60 * 24));
+    return { start, end, days };
   }, [cursor, view]);
 
   const load = async () => {
@@ -115,6 +124,19 @@ const MarketingCalendar = () => {
         if (!map[k]) map[k] = [];
         map[k].push(p);
       });
+    });
+    return map;
+  }, [posts]);
+
+  // Month view groups posts by day (regardless of platform), so we can show
+  // a single row-per-day with stacked platform dots.
+  const postsByDay = useMemo(() => {
+    const map = {};
+    posts.forEach((p) => {
+      const d = new Date(p.scheduled_at);
+      const dKey = d.toISOString().slice(0, 10);
+      if (!map[dKey]) map[dKey] = [];
+      map[dKey].push(p);
     });
     return map;
   }, [posts]);
@@ -251,13 +273,16 @@ const MarketingCalendar = () => {
 
   const onDragStart = (post, fromPlatform) => (e) => {
     setDragging({ post, fromPlatform });
-    e.dataTransfer.effectAllowed = 'move';
+    // altKey at drag-start is when most browsers reliably expose it on dataTransfer
+    e.dataTransfer.effectAllowed = e.altKey ? 'copy' : 'move';
     e.dataTransfer.setData('text/plain', post.id);
   };
 
   const onDragOver = (platform, date) => (e) => {
     if (date < today) return;
     e.preventDefault();
+    setAltMode(e.altKey);
+    e.dataTransfer.dropEffect = e.altKey ? 'copy' : 'move';
     setDropTarget(`${platform}-${date.toISOString().slice(0, 10)}`);
   };
 
@@ -266,6 +291,8 @@ const MarketingCalendar = () => {
   const onDrop = (platform, date) => async (e) => {
     e.preventDefault();
     setDropTarget(null);
+    const isDuplicate = e.altKey;
+    setAltMode(false);
     if (!dragging) return;
     const { post, fromPlatform } = dragging;
     setDragging(null);
@@ -281,15 +308,24 @@ const MarketingCalendar = () => {
     const newPlatforms = post.platforms.map((p) => (p === fromPlatform ? platform : p));
 
     try {
-      await axios.patch(
-        `${API}/posts/scheduled/${post.id}`,
-        { scheduled_at: newAt.toISOString(), platforms: newPlatforms },
-        { withCredentials: true }
-      );
-      toast({ title: 'Rescheduled', description: `Moved to ${platform} on ${date.toLocaleDateString()}` });
+      if (isDuplicate) {
+        await axios.post(
+          `${API}/channels/publish`,
+          { content: post.content, platforms: newPlatforms, media_url: post.media_url, scheduled_at: newAt.toISOString() },
+          { withCredentials: true },
+        );
+        toast({ title: 'Duplicated', description: `New copy on ${platform} · ${date.toLocaleDateString()}` });
+      } else {
+        await axios.patch(
+          `${API}/posts/scheduled/${post.id}`,
+          { scheduled_at: newAt.toISOString(), platforms: newPlatforms },
+          { withCredentials: true },
+        );
+        toast({ title: 'Rescheduled', description: `Moved to ${platform} on ${date.toLocaleDateString()}` });
+      }
       load();
     } catch (e) {
-      toast({ title: 'Could not move post' });
+      toast({ title: isDuplicate ? 'Could not duplicate post' : 'Could not move post' });
     }
   };
 
@@ -363,23 +399,25 @@ const MarketingCalendar = () => {
             />
           )}
           <div className="min-w-[900px]">
-            {/* Header row */}
-            <div className="grid border-b border-neutral-200/70" style={{ gridTemplateColumns: `120px repeat(${days.length}, minmax(0, 1fr))` }}>
-              <div className="p-3 text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Channel</div>
-              {days.map((d) => {
-                const isToday = d.getTime() === today.getTime();
-                const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                return (
-                  <div key={d.toISOString()} className={`p-3 text-center ${isToday ? 'bg-emerald-50/50' : isWeekend ? 'bg-rose-50/20' : ''}`}>
-                    <div className={`text-2xl font-medium tracking-tight ${isToday ? 'text-emerald-700' : isWeekend && d.getDay() === 0 ? 'text-rose-500' : 'text-neutral-900'}`}>{d.getDate()}</div>
-                    <div className={`text-[10.5px] uppercase tracking-wider mt-0.5 ${isToday ? 'text-emerald-700 font-semibold' : 'text-neutral-500'}`}>{d.toLocaleDateString(undefined, { weekday: 'short' })}</div>
-                  </div>
-                );
-              })}
-            </div>
+            {view === 'week' ? (
+              <>
+                {/* Header row */}
+                <div className="grid border-b border-neutral-200/70" style={{ gridTemplateColumns: `120px repeat(${days.length}, minmax(0, 1fr))` }}>
+                  <div className="p-3 text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Channel</div>
+                  {days.map((d) => {
+                    const isToday = d.getTime() === today.getTime();
+                    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                    return (
+                      <div key={d.toISOString()} className={`p-3 text-center ${isToday ? 'bg-emerald-50/50' : isWeekend ? 'bg-rose-50/20' : ''}`}>
+                        <div className={`text-2xl font-medium tracking-tight ${isToday ? 'text-emerald-700' : isWeekend && d.getDay() === 0 ? 'text-rose-500' : 'text-neutral-900'}`}>{d.getDate()}</div>
+                        <div className={`text-[10.5px] uppercase tracking-wider mt-0.5 ${isToday ? 'text-emerald-700 font-semibold' : 'text-neutral-500'}`}>{d.toLocaleDateString(undefined, { weekday: 'short' })}</div>
+                      </div>
+                    );
+                  })}
+                </div>
 
-            {/* Platform rows */}
-            {PLATFORM_ROWS.map((p) => {
+                {/* Platform rows */}
+                {PLATFORM_ROWS.map((p) => {
               const PIcon = p.icon;
               return (
                 <div key={p.id} className="grid border-b border-neutral-100 last:border-0" style={{ gridTemplateColumns: `120px repeat(${days.length}, minmax(0, 1fr))` }}>
@@ -479,6 +517,53 @@ const MarketingCalendar = () => {
                 </div>
               );
             })}
+              </>
+            ) : (
+              <MonthGrid
+                days={days}
+                cursor={cursor}
+                today={today}
+                postsByDay={postsByDay}
+                onDayClick={(d) => setMonthDayDetail({ date: d, posts: postsByDay[d.toISOString().slice(0, 10)] || [] })}
+                dragging={dragging}
+                onDragOver={(d) => (e) => { if (d < today) return; e.preventDefault(); setAltMode(e.altKey); e.dataTransfer.dropEffect = e.altKey ? 'copy' : 'move'; setDropTarget(`day-${d.toISOString().slice(0, 10)}`); }}
+                onDragLeave={() => setDropTarget(null)}
+                onDrop={(d) => async (e) => {
+                  e.preventDefault();
+                  setDropTarget(null);
+                  const isDup = e.altKey;
+                  if (!dragging) return;
+                  const { post } = dragging;
+                  setDragging(null);
+                  if (d < today) { toast({ title: "Can't reschedule into the past" }); return; }
+                  const newAt = new Date(post.scheduled_at);
+                  newAt.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
+                  try {
+                    if (isDup) {
+                      await axios.post(`${API}/channels/publish`,
+                        { content: post.content, platforms: post.platforms, media_url: post.media_url, scheduled_at: newAt.toISOString() },
+                        { withCredentials: true });
+                      toast({ title: 'Duplicated', description: d.toLocaleDateString() });
+                    } else {
+                      await axios.patch(`${API}/posts/scheduled/${post.id}`,
+                        { scheduled_at: newAt.toISOString() }, { withCredentials: true });
+                      toast({ title: 'Rescheduled', description: d.toLocaleDateString() });
+                    }
+                    load();
+                  } catch (err) {
+                    toast({ title: isDup ? 'Could not duplicate' : 'Could not move' });
+                  }
+                }}
+                onDragStart={(post) => (e) => {
+                  setDragging({ post, fromPlatform: post.platforms[0] });
+                  e.dataTransfer.effectAllowed = 'copyMove';
+                  e.dataTransfer.setData('text/plain', post.id);
+                }}
+                onAddClick={(d) => setComposing({ platform: 'instagram', date: d })}
+                dropTarget={dropTarget}
+                cursorMonth={cursor.getMonth()}
+              />
+            )}
           </div>
         </div>
       )}
@@ -559,6 +644,14 @@ const MarketingCalendar = () => {
           </button>
         </div>
       )}
+      {monthDayDetail && (
+        <DayDetailDrawer
+          date={monthDayDetail.date}
+          posts={monthDayDetail.posts}
+          onClose={() => setMonthDayDetail(null)}
+          onCancel={async (id) => { await cancelPost(id); setMonthDayDetail(null); }}
+        />
+      )}
     </DashboardLayout>
   );
 };
@@ -616,3 +709,175 @@ const ScheduleModal = ({ platform, date, suggestedTime, onClose, onCreated }) =>
 };
 
 export default MarketingCalendar;
+
+// -----------------------------------------------------------------------------
+// MonthGrid — 7×N day cells. Each cell shows date + up to 3 platform dots +
+// "+N more" overflow. Click a day to open the side drawer with all posts.
+// -----------------------------------------------------------------------------
+const PLATFORM_DOT_COLOR = {
+  instagram: 'bg-pink-500',
+  tiktok: 'bg-neutral-900',
+  x: 'bg-neutral-700',
+  facebook: 'bg-blue-600',
+  linkedin: 'bg-sky-700',
+  youtube: 'bg-red-600',
+  pinterest: 'bg-red-500',
+  threads: 'bg-neutral-800',
+  reddit: 'bg-orange-600',
+};
+const MAX_DOTS = 3;
+
+const MonthGrid = ({
+  days, today, postsByDay, onDayClick, dropTarget, cursorMonth,
+  onDragOver, onDragLeave, onDrop, onDragStart,
+}) => {
+  return (
+    <div data-testid="calendar-month-grid">
+      <div className="grid grid-cols-7 border-b border-neutral-200/70">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((dow) => (
+          <div key={dow} className="p-2.5 text-center text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">
+            {dow}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7">
+        {days.map((d) => {
+          const dKey = d.toISOString().slice(0, 10);
+          const dayPosts = postsByDay[dKey] || [];
+          const isToday = d.getTime() === today.getTime();
+          const isPast = d < today;
+          const isCurrentMonth = d.getMonth() === cursorMonth;
+          // Build a unique platform set in stable order so dots are consistent.
+          const platformsSet = Array.from(new Set(dayPosts.flatMap((p) => p.platforms || [])));
+          const shownPlatforms = platformsSet.slice(0, MAX_DOTS);
+          const extraCount = Math.max(0, platformsSet.length - MAX_DOTS);
+          const isDropTarget = dropTarget === `day-${dKey}`;
+          return (
+            <button
+              key={dKey}
+              type="button"
+              data-testid={`month-cell-${dKey}`}
+              onClick={() => onDayClick(d)}
+              onDragOver={onDragOver(d)}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop(d)}
+              className={`min-h-[110px] p-2 border-r border-b border-neutral-100 last:border-r-0 text-left transition-colors relative group ${
+                isCurrentMonth ? 'bg-white' : 'bg-neutral-50/50'
+              } ${isToday ? 'ring-2 ring-inset ring-emerald-300' : ''} ${
+                isDropTarget ? 'bg-blue-100/70 ring-2 ring-inset ring-[#1B7BFF]' : ''
+              } hover:bg-violet-50/40`}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className={`text-[13px] font-semibold ${
+                  isToday ? 'text-emerald-700'
+                    : !isCurrentMonth ? 'text-neutral-300'
+                    : isPast ? 'text-neutral-400'
+                    : 'text-neutral-800'
+                }`}>
+                  {d.getDate()}
+                </span>
+                {dayPosts.length > 0 && (
+                  <span className="text-[10px] font-semibold text-neutral-500 bg-neutral-100 rounded-full px-1.5 py-0.5" data-testid={`month-cell-count-${dKey}`}>
+                    {dayPosts.length}
+                  </span>
+                )}
+              </div>
+              {dayPosts.length > 0 && (
+                <div className="space-y-1">
+                  {dayPosts.slice(0, 2).map((post) => (
+                    <div
+                      key={post.id}
+                      data-post-chip
+                      data-post-id={post.id}
+                      draggable
+                      onDragStart={onDragStart(post)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="px-1.5 py-1 rounded-md bg-[#1B7BFF]/10 border border-[#1B7BFF]/20 text-[10.5px] text-[#1B7BFF] font-medium truncate cursor-move hover:bg-[#1B7BFF]/15"
+                      title={post.content}
+                    >
+                      {new Date(post.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {post.content.slice(0, 22)}
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {shownPlatforms.map((pl) => (
+                      <span
+                        key={pl}
+                        className={`w-2 h-2 rounded-full ${PLATFORM_DOT_COLOR[pl] || 'bg-neutral-500'}`}
+                        title={pl}
+                      />
+                    ))}
+                    {extraCount > 0 && (
+                      <span className="text-[9.5px] font-semibold text-neutral-500">+{extraCount}</span>
+                    )}
+                    {dayPosts.length > 2 && (
+                      <span className="text-[9.5px] text-neutral-500 ml-1">+{dayPosts.length - 2} more</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const DayDetailDrawer = ({ date, posts, onClose, onCancel }) => (
+  <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose} data-testid="month-day-drawer">
+    <div className="bg-black/40 flex-1" />
+    <div
+      className="w-[420px] max-w-full bg-white h-full overflow-y-auto p-6 shadow-2xl"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center justify-between mb-1">
+        <div>
+          <div className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">
+            {date.toLocaleDateString(undefined, { weekday: 'long' })}
+          </div>
+          <h3 className="text-2xl font-semibold tracking-tight">
+            {date.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}
+          </h3>
+        </div>
+        <button onClick={onClose} className="w-9 h-9 rounded-lg hover:bg-neutral-100 flex items-center justify-center" data-testid="month-day-drawer-close">
+          <XIcon size={16} />
+        </button>
+      </div>
+      <p className="text-[13px] text-neutral-500 mb-5">
+        {posts.length === 0 ? 'Nothing scheduled.' : `${posts.length} scheduled post${posts.length === 1 ? '' : 's'}`}
+      </p>
+      <div className="space-y-3">
+        {posts.map((post) => (
+          <div key={post.id} className="border border-neutral-200 rounded-2xl p-3 bg-white">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[12px] font-semibold text-neutral-600">
+                {new Date(post.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+              <button
+                onClick={() => onCancel(post.id)}
+                className="text-rose-500 hover:text-rose-700 text-[11px] font-medium inline-flex items-center gap-1"
+                data-testid={`drawer-cancel-${post.id}`}
+              >
+                <Trash2 size={11} /> Cancel
+              </button>
+            </div>
+            <p className="text-[13px] text-neutral-800 leading-snug line-clamp-3">{post.content}</p>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {post.platforms.map((pl) => (
+                <span key={pl} className="inline-flex items-center gap-1 text-[10.5px] capitalize text-neutral-700 bg-neutral-100 rounded-full px-2 py-0.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${PLATFORM_DOT_COLOR[pl] || 'bg-neutral-500'}`} />
+                  {pl}
+                </span>
+              ))}
+              {post.recurrence_group_id && (
+                <span className="inline-flex items-center gap-1 text-[10.5px] text-violet-700 bg-violet-50 border border-violet-100 rounded-full px-2 py-0.5">
+                  🔁 weekly {post.recurrence_index != null ? `(${post.recurrence_index + 1}/${post.recurrence_total})` : ''}
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);

@@ -109,6 +109,41 @@ async def disconnect_channel(payload: ChannelConnectRequest, request: Request):
 async def publish(payload: PublishRequest, request: Request):
     user = await get_current_user(request)
     is_scheduled = payload.scheduled_at and payload.scheduled_at > datetime.now(timezone.utc)
+
+    # --- Weekly recurrence: only valid for scheduled posts. ---
+    # When `repeat_weeks` is set (and the post is scheduled into the future),
+    # we materialise N instances of the same content at +0w, +1w, ..., +(N-1)w.
+    # Each shares a `recurrence_group_id` so future edits/deletes can operate
+    # on the whole series.
+    if payload.repeat_weeks and is_scheduled:
+        group_id = str(uuid.uuid4())
+        created_posts = []
+        for week_offset in range(payload.repeat_weeks):
+            sched_at = payload.scheduled_at + timedelta(weeks=week_offset)
+            post = {
+                "id": str(uuid.uuid4()),
+                "user_id": user.user_id,
+                "content": payload.content,
+                "platforms": payload.platforms,
+                "media_url": payload.media_url,
+                "status": "scheduled",
+                "scheduled_at": sched_at,
+                "recurrence_group_id": group_id,
+                "recurrence_index": week_offset,
+                "recurrence_total": payload.repeat_weeks,
+                "created_at": datetime.now(timezone.utc),
+            }
+            await db.posts.insert_one(post)
+            created_posts.append(post["id"])
+        return {
+            "ok": True,
+            "ids": created_posts,
+            "recurrence_group_id": group_id,
+            "repeat_weeks": payload.repeat_weeks,
+            "platforms": payload.platforms,
+            "status": "scheduled",
+        }
+
     post = {
         "id": str(uuid.uuid4()),
         "user_id": user.user_id,

@@ -35,6 +35,27 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 31) **🔁 Repeat-weekly + 📅 Month grid + 🖱️ Alt-drag duplicate + 🪄 Lead-form auto-account**
+  - **Repeat weekly toggle** (Compose & Publish):
+    - New `repeat_weeks: Optional[int]` field on `PublishRequest` (2–12 enforced by Pydantic `ge`/`le`).
+    - Backend `/api/channels/publish` — when `repeat_weeks` is set AND the post is scheduled into the future, materialises N posts at +0w, +1w, …, +(N-1)w. Each shares a `recurrence_group_id` (uuid4) + `recurrence_index` + `recurrence_total` for future series-aware operations. Returns `{ok, ids, recurrence_group_id, repeat_weeks}` instead of the single-post shape.
+    - Frontend `Compose.jsx` — violet "Repeat weekly" panel appears underneath the schedule input the moment a date is picked. Toggle + number input (2–12, default 4) + helper copy.
+  - **Month view — single row per day with stacked dots** (`MarketingCalendar.jsx`):
+    - When `view === 'month'`, the range pads to full weeks (back to previous Sunday, forward to next Saturday) so the grid is always 7×N (typically 7×5 or 7×6).
+    - New `<MonthGrid>` component: 7-col day grid, each cell shows date number + 2 compact post chips (time + truncated content) + per-platform colored dots (max 3 + "+N" overflow) + total post count pill.
+    - Posts within a cell are draggable (same logic as week view) so rescheduling works from either view.
+    - Out-of-month dates dimmed; today highlighted with emerald ring; past days greyed out.
+    - Click any cell → opens a right-anchored side drawer (`<DayDetailDrawer>`) listing every post that day with full content, platform pills, recurrence badge (🔁 weekly · N/M), and inline cancel button.
+  - **Alt+drag duplicate** (week + month view):
+    - `onDragStart` / `onDragOver` / `onDrop` now check `e.altKey`. When held, cursor switches to `copy` and the drop POSTs a new scheduled post instead of PATCHing the existing one. Toast distinguishes "Duplicated" vs "Rescheduled". Lets a user clone the same Monday post to Wednesday and Friday in two drags.
+  - **Lead-form auto-account + magic link**:
+    - `routes/leads.py` already detects an anonymous lead, auto-creates a `user` doc (plan: free, `created_via: lead_form`), issues a magic link via `routes/magic_link.issue_magic_link`, and passes it to `send_lead_auto_reply` so the agent's auto-reply email includes a one-click sign-in button. Idempotent: if the email already has an account, we reuse it and just issue a fresh link.
+    - **End-to-end verified**: POSTing a lead now creates the user, persists a `magic_links` row tagged `purpose=lead_claim`, and the auto-reply email body includes the sign-in CTA. Duplicate-email lead does NOT create a second user (verified by test).
+  - **12 new pytest cases** (`test_recurrence_and_lead_claim.py`):
+    - `TestRepeatWeekly` (5): N-instance creation, immediate-post bypass when not scheduled, 422 on `repeat_weeks<2`, 422 on `>12`, 12-week max accepted.
+    - `TestLeadAutoCreate` (2): user + magic link created from anonymous lead, duplicate-email lead is idempotent.
+    - Combined with the existing magic-link suite (12 cases), the new admin-create + magic-link + recurrence + lead-auto-create feature set has **19 dedicated tests** with full coverage. **All affected existing suites still pass.**
+
 - 2026-02-26 (part 30) **🔐 Admin-create user + magic-link auth**
   - **New `routes/magic_link.py`** — `secrets.token_urlsafe(32)` tokens persisted in `magic_links` collection with a 7-day TTL index (Mongo auto-purges). **`GET /api/auth/claim?token=...`** validates the token (single-use, expiry, suspended-account checks), mints a fresh `session_token` and sets the same cookie shape Emergent Google Auth produces — so the rest of the app (deps.get_current_user, ProtectedRoute, billing, etc.) sees zero difference between Google-auth users and magic-link users.
   - **`POST /api/admin/users/create`** — body `{email, name, plan, comped, send_email, brand_name?, website?, niche?}`. Idempotent: if the email already exists, we update the doc and re-issue a fresh link instead of erroring (so admins can recover from "did the email get lost?" without manual DB ops). Returns `{user_id, magic_link, email_sent, new_user}` — admin can copy the link directly if email delivery fails.

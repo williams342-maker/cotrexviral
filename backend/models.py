@@ -177,6 +177,7 @@ class PublishRequest(BaseModel):
     platforms: List[str]
     media_url: Optional[str] = None
     scheduled_at: Optional[datetime] = None
+    repeat_weeks: Optional[int] = Field(None, ge=2, le=12)
 
 
 class ScheduledUpdate(BaseModel):
