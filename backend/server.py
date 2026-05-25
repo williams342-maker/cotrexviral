@@ -33,6 +33,7 @@ from routes import (  # noqa: F401
     trends,          # Live TikTok trending hashtag feed
     ab_lab,          # A/B Hook Lab — variant generation + scoring
     funnel,          # Marketing funnel analytics
+    email,           # Mailgun transactional emails
 )
 
 

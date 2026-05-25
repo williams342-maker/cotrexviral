@@ -33,6 +33,7 @@ async def create_session(request: Request, response: Response):
     # Upsert user
     existing = await db.users.find_one({"email": email}, {"_id": 0})
     is_admin_flag = email.lower() in ADMIN_EMAILS
+    is_new_user = existing is None
     if existing:
         user_id = existing["user_id"]
         await db.users.update_one(
@@ -52,6 +53,11 @@ async def create_session(request: Request, response: Response):
                 "created_at": datetime.now(timezone.utc),
             }
         )
+
+    # Fire welcome email for new users (background — never blocks login).
+    if is_new_user:
+        from routes.email import send_welcome_email, fire
+        fire(send_welcome_email(to=email, name=name))
 
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
     await db.user_sessions.insert_one(

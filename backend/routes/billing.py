@@ -442,6 +442,24 @@ async def stripe_webhook(request: Request):
                 }},
             )
 
+    elif etype == "customer.subscription.trial_will_end":
+        # Fires ~3 days before trial ends. We email the user a heads-up.
+        sub = data
+        user_doc = await db.users.find_one({"stripe_customer_id": sub.get("customer")})
+        if user_doc and user_doc.get("email"):
+            trial_end_ts = sub.get("trial_end")
+            days_left = 3
+            if trial_end_ts:
+                delta = datetime.fromtimestamp(trial_end_ts, tz=timezone.utc) - datetime.now(timezone.utc)
+                days_left = max(1, delta.days)
+            from routes.email import send_trial_ending_email, fire
+            fire(send_trial_ending_email(
+                to=user_doc["email"],
+                name=user_doc.get("name") or "",
+                plan=user_doc.get("plan", "growth"),
+                days_left=days_left,
+            ))
+
     elif etype == "invoice.payment_failed":
         invoice = data
         user_doc = await db.users.find_one({"stripe_customer_id": invoice.get("customer")})
@@ -451,6 +469,13 @@ async def stripe_webhook(request: Request):
                 {"$set": {"subscription_status": "past_due",
                           "updated_at": datetime.now(timezone.utc)}},
             )
+            if user_doc.get("email") and not user_doc.get("comped"):
+                from routes.email import send_past_due_email, fire
+                fire(send_past_due_email(
+                    to=user_doc["email"],
+                    name=user_doc.get("name") or "",
+                    plan=user_doc.get("plan", "growth"),
+                ))
 
     return {"received": True}
 

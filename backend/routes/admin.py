@@ -252,6 +252,22 @@ async def admin_set_plan(user_id: str, payload: AdminSetPlanRequest, request: Re
         admin, "set_user_plan", user_id, target.get("email"),
         {"from": prev_plan, "to": payload.plan, "comped": payload.comped, "reason": payload.reason},
     )
+
+    # Fire gift-plan email when newly comping a user to a paid tier.
+    if (
+        payload.comped
+        and payload.plan != "free"
+        and (prev_plan != payload.plan or not target.get("comped"))
+        and target.get("email")
+    ):
+        from routes.email import send_gift_plan_email, fire
+        fire(send_gift_plan_email(
+            to=target["email"],
+            name=target.get("name") or "",
+            plan=payload.plan,
+            reason=payload.reason,
+        ))
+
     return {"ok": True, "plan": payload.plan, "comped": payload.comped}
 
 
