@@ -36,6 +36,16 @@ TIKTOK_CLIENT_SECRET = os.environ.get("TIKTOK_CLIENT_SECRET", "")
 # TikTok app. When empty, we derive it from PUBLIC_SITE_URL.
 TIKTOK_REDIRECT_URI_OVERRIDE = os.environ.get("TIKTOK_REDIRECT_URI", "")
 
+# Meta OAuth (shared app for Facebook Pages + Instagram Graph API).
+# Register at https://developers.facebook.com → "Add Facebook Login" + "Add
+# Instagram Platform". Use the SAME app for both (Instagram Business Login
+# is layered on top of Facebook Login).
+META_APP_ID = os.environ.get("META_APP_ID", "")
+META_APP_SECRET = os.environ.get("META_APP_SECRET", "")
+META_GRAPH_VERSION = os.environ.get("META_GRAPH_VERSION", "v22.0")
+# Optional override (same purpose as the TikTok one — useful for preview pods).
+META_REDIRECT_URI_OVERRIDE = os.environ.get("META_REDIRECT_URI", "")
+
 # Stripe billing
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")

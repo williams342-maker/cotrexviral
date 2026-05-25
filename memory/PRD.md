@@ -35,6 +35,46 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 35) **📘 Facebook + 📸 Instagram OAuth scaffold (shared Meta app)**
+  - **New `routes/oauth_meta.py`** — single module handling BOTH providers because they share the same Meta developer app and the same `/dialog/oauth` authorize endpoint. Only the scope set differs.
+    - **Facebook scopes**: `public_profile`, `email`, `pages_show_list`, `pages_manage_posts`, `pages_read_engagement` — minimum to publish to a user's Facebook Page feed.
+    - **Instagram scopes**: `public_profile`, `pages_show_list`, `pages_read_engagement`, `instagram_basic`, `instagram_content_publish` — IG Business publishing layered on Facebook Login (Meta's recommended modern flow, not the old `api.instagram.com/oauth/authorize` basic-display flow).
+  - **8 new endpoints** matching the existing TikTok/LinkedIn shape (4 per provider): `/api/oauth/{facebook|instagram}/{start,callback,status}` + `DELETE /api/oauth/{facebook|instagram}`.
+  - **Token cascade** (callback flow):
+    1. Short-lived user token via `GET /oauth/access_token?code=...`
+    2. Long-lived user token (~60d) via `grant_type=fb_exchange_token`
+    3. List of Pages the user manages via `GET /me/accounts` — each Page has its own non-expiring Page access token.
+    4. **Instagram only**: for each Page, query `instagram_business_account{id,username}` to resolve the linked IG professional account. If none found → redirect with `instagram=no_business_account` + friendly toast explaining how to convert their personal IG to a Business/Creator account.
+  - **MongoDB collections**: `facebook_connections` (user_token + pages[]) and `instagram_connections` (user_token + pages[] + ig_accounts[]). Both mirror into the existing `channels` collection so the dashboard "connected" badge works for free.
+  - **Reachability probe**: `/callback` accepts `HEAD` and returns 200 — required for Meta's "Verify Redirect URI" check during app review.
+  - **HTTP-level error handling**: friendly redirects on `error=access_denied` (user cancelled), 503 on missing `META_APP_ID`/`META_APP_SECRET`, 400 on missing/invalid state, never leaks tokens.
+  - **Channels page** auto-routes Connect clicks for Facebook/Instagram to the OAuth flow when `configured=true`, otherwise falls through to the existing mocked `/channels/connect` (so we keep a working demo until creds are pasted). Query-string toasts wired for all four success/denied paths + the IG no-business-account edge case.
+  - **16 new pytest cases** (`test_oauth_meta.py`):
+    - Status endpoints: anon → 401, authed → `{configured:false, connected:false}`.
+    - `/start` 503s loudly when unconfigured (so users don't hit Meta with a broken `client_id`); if configured, validates URL shape + scope contents.
+    - Callback HEAD probe returns 200 (Meta app-review prerequisite).
+    - Callback with `error=access_denied` redirects with friendly query, not 500.
+    - Callback without code/state → 400. Invalid state → 400.
+    - Disconnect is idempotent (200 even with no existing connection).
+    - **Scope-minimality assertions** that fail if anyone adds excess permissions (Meta reviewers reject apps requesting more than needed).
+    - Redirect URI shape regression test.
+  - **App-review compliance** now complete: `/privacy`, `/terms`, `/data-deletion` all live; both callback URLs return 200 on Meta's reachability probe; only minimal scopes requested.
+
+  **URLs to paste into the Meta developer portal**:
+  - Valid OAuth redirect URIs (paste both):
+    - `https://cortexviral.com/api/oauth/facebook/callback`
+    - `https://cortexviral.com/api/oauth/instagram/callback`
+  - Privacy Policy URL: `https://cortexviral.com/privacy`
+  - Terms of Service URL: `https://cortexviral.com/terms`
+  - Data Deletion URL: `https://cortexviral.com/data-deletion`
+  - App Domains: `cortexviral.com`
+
+  **Pending — what we need from the user to go live**:
+  - `META_APP_ID` (from Meta developer portal)
+  - `META_APP_SECRET`
+  - Once added to `/app/backend/.env` and the user redeploys to production, both Connect buttons flip from mocked → real OAuth automatically. **No code change needed.**
+  - **Publishing endpoints** (POST to FB Page feed / IG container+publish) not yet implemented — those are a separate ~30-min job after OAuth is live and tested with real credentials.
+
 - 2026-02-26 (part 33) **⚙️ Admin system settings — signup pause + per-platform kill-switches**
   - **New `routes/admin_settings.py`** — single-doc settings collection `system_settings` with two switches:
     - `signups_enabled: bool` (default True) — when False, brand-new Google signups return 503 from `/api/auth/session` so the marketing landing's "Start Growing" CTA stops creating accounts. Existing users + email-allowlisted admins always log in (so the admin can never lock themselves out of the panel). Admin-create + lead-form auto-create both bypass the pause so warm leads aren't lost.

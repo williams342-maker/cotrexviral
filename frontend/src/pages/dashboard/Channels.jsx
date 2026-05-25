@@ -82,6 +82,8 @@ const Channels = () => {
   const [busy, setBusy] = useState(null);
   const [linkedInOAuth, setLinkedInOAuth] = useState({ configured: false, connected: false });
   const [tiktokOAuth, setTiktokOAuth] = useState({ configured: false, connected: false });
+  const [facebookOAuth, setFacebookOAuth] = useState({ configured: false, connected: false });
+  const [instagramOAuth, setInstagramOAuth] = useState({ configured: false, connected: false });
   const [disabledPlatforms, setDisabledPlatforms] = useState([]);
   const { toast } = useToast();
   const paywall = usePaywallHandler();
@@ -89,11 +91,13 @@ const Channels = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const [cat, list, li, tt, sys] = await Promise.all([
+      const [cat, list, li, tt, fb, ig, sys] = await Promise.all([
         axios.get(`${API}/channels/catalog`, { withCredentials: true }),
         axios.get(`${API}/channels`, { withCredentials: true }),
         axios.get(`${API}/oauth/linkedin/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
         axios.get(`${API}/oauth/tiktok/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
+        axios.get(`${API}/oauth/facebook/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
+        axios.get(`${API}/oauth/instagram/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
         axios.get(`${API}/system/settings`).catch(() => ({ data: { disabled_platforms: [] } })),
       ]);
       setCatalog(cat.data);
@@ -102,6 +106,8 @@ const Channels = () => {
       setStatusMap(map);
       setLinkedInOAuth(li.data);
       setTiktokOAuth(tt.data);
+      setFacebookOAuth(fb.data);
+      setInstagramOAuth(ig.data);
       setDisabledPlatforms(sys.data.disabled_platforms || []);
     } catch (e) {}
     setLoading(false);
@@ -114,14 +120,23 @@ const Channels = () => {
     const params = new URLSearchParams(window.location.search);
     const li = params.get('linkedin');
     const tt = params.get('tiktok');
+    const fb = params.get('facebook');
+    const ig = params.get('instagram');
     if (li === 'connected') toast({ title: 'LinkedIn connected!', description: 'Future posts to LinkedIn will publish live.' });
     if (li === 'denied') toast({ title: 'LinkedIn connection cancelled' });
     if (tt === 'connected') toast({ title: 'TikTok connected!', description: 'Add a video URL to your posts to publish live.' });
     if (tt === 'denied') toast({ title: 'TikTok connection cancelled' });
-    if (li || tt) {
+    if (fb === 'connected') toast({ title: 'Facebook connected!', description: 'Future posts to Facebook will publish to your Page.' });
+    if (fb === 'denied') toast({ title: 'Facebook connection cancelled' });
+    if (ig === 'connected') toast({ title: 'Instagram connected!', description: 'Posts with an image URL will publish to your IG Business account.' });
+    if (ig === 'denied') toast({ title: 'Instagram connection cancelled' });
+    if (ig === 'no_business_account') toast({
+      title: 'No Instagram Business account found',
+      description: 'Your Instagram must be a Business or Creator account, linked to one of your Facebook Pages. Convert it in the IG app → Settings → Account → Switch to Professional, then reconnect.',
+    });
+    if (li || tt || fb || ig) {
       const url = new URL(window.location.href);
-      url.searchParams.delete('linkedin');
-      url.searchParams.delete('tiktok');
+      ['linkedin', 'tiktok', 'facebook', 'instagram'].forEach((k) => url.searchParams.delete(k));
       window.history.replaceState({}, '', url.toString());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -153,6 +168,26 @@ const Channels = () => {
           window.location.href = r.data.authorize_url;
           return; // navigation in progress
         }
+      } else if (platform === 'facebook' && facebookOAuth.configured) {
+        if (facebookOAuth.connected) {
+          await axios.delete(`${API}/oauth/facebook`, { withCredentials: true });
+          toast({ title: 'Disconnected Facebook' });
+          await load();
+        } else {
+          const r = await axios.get(`${API}/oauth/facebook/start`, { withCredentials: true });
+          window.location.href = r.data.authorize_url;
+          return;
+        }
+      } else if (platform === 'instagram' && instagramOAuth.configured) {
+        if (instagramOAuth.connected) {
+          await axios.delete(`${API}/oauth/instagram`, { withCredentials: true });
+          toast({ title: 'Disconnected Instagram' });
+          await load();
+        } else {
+          const r = await axios.get(`${API}/oauth/instagram/start`, { withCredentials: true });
+          window.location.href = r.data.authorize_url;
+          return;
+        }
       } else if (ch?.connected) {
         await axios.post(`${API}/channels/disconnect`, { platform }, { withCredentials: true });
         toast({ title: `Disconnected from ${meta?.label || platform}` });
@@ -164,6 +199,8 @@ const Channels = () => {
             ? 'MOCKED — admin: set LINKEDIN_CLIENT_ID + LINKEDIN_CLIENT_SECRET in .env to enable real OAuth.'
             : platform === 'tiktok'
             ? 'MOCKED — admin: set TIKTOK_CLIENT_KEY + TIKTOK_CLIENT_SECRET in .env to enable real OAuth.'
+            : (platform === 'facebook' || platform === 'instagram')
+            ? 'MOCKED — admin: set META_APP_ID + META_APP_SECRET in .env to enable real OAuth.'
             : 'MOCKED — no real OAuth in this demo.',
         });
       }

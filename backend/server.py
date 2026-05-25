@@ -38,6 +38,7 @@ from routes import (  # noqa: F401
     magic_link,      # Admin-create user + passwordless claim flow
     admin_settings,  # Master signup toggle + per-platform on/off
     account,         # User self-serve account deletion (GDPR / Meta review)
+    oauth_meta,      # Facebook + Instagram OAuth (shared Meta app)
 )
 
 
