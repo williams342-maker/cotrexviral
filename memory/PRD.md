@@ -35,6 +35,15 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 25) **✉️ Mailtrap integration (Mailgun → fallback)**
+  - **Mailtrap** is now the primary transactional-email provider. Endpoint: `https://send.api.mailtrap.io/api/send`. Sender verified at `hello@cortexviral.com` (DKIM/DMARC/CNAME all pass; account `team@cortexviral.com`).
+  - **Provider chain in `routes/email.py`**: tries `_send_via_mailtrap` first → falls back to `_send_via_mailgun` ONLY when Mailtrap is unconfigured or returns a 5xx/network error. 4xx responses (bad sender, invalid payload, etc.) deliberately don't trigger fallback because Mailgun would reject the same payload. `email_log` rows now carry a `provider` field and (when fallback fired) `fallback_from` + `primary_error` so admins can see exactly which path delivered.
+  - **`/admin/email/health` card** label updated from "Mailgun delivery" → "Transactional email" so it's provider-agnostic now that two providers are in play.
+  - **`_parse_from()`** helper splits `"Name <email@host>"` into Mailtrap's required `{name, email}` shape; also handles bare addresses and empty strings.
+  - **4 live test sends to williams342@gmail.com** — Welcome / Gift / Trial / Past-due all returned `{sent: true, provider: "mailtrap", id: <uuid>}` ✅ Real email delivered through Mailtrap's verified `cortexviral.com` domain.
+  - **Test added** (`TestProviderRouting::test_parse_from_with_display_name`). Existing helper tests updated to clear BOTH provider tokens. **11/11 email tests pass, 122 total backend tests.**
+  - **Diagnostics done**: Mailtrap's first 401 was caused by `hello@demomailtrap.com` not being authorised for this account — Mailtrap requires the sender's domain to match a verified domain on the account. After swapping to `hello@cortexviral.com` (which has full DKIM+DMARC+CNAME pass), sends succeed.
+
 - 2026-02-26 (part 24) **🪝 Admin "Webhook Events" page**
   - New `GET /api/admin/webhook-events?limit=50` reads the `stripe_events` collection. Returns `{total, items[], top_event_types[]}` — items include `event_id`, `type`, `received_at`, and a new `redeliveries` counter.
   - **Stripe webhook upgrade**: when a duplicate `event_id` hits the receiver, instead of silently short-circuiting we now `$inc redeliveries` and `$set last_redelivery_at` on the existing row — gives admins visibility into how often Stripe is re-delivering each event (signals downstream processing issues or network flakes).

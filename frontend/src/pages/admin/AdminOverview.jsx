@@ -363,7 +363,7 @@ const EmailHealthCard = ({ health }) => {
             <state.icon size={16} />
           </div>
           <div>
-            <div className="text-[13px] text-neutral-500 font-medium">Mailgun delivery</div>
+            <div className="text-[13px] text-neutral-500 font-medium">Transactional email</div>
             <div className="text-[15px] font-semibold text-neutral-900 mt-0.5">
               {state.label}
               {total > 0 && (
