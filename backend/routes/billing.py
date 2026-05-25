@@ -35,6 +35,7 @@ from core import (
     STRIPE_SECRET_KEY,
     STRIPE_PUBLISHABLE_KEY,
     STRIPE_WEBHOOK_SECRET,
+    STRIPE_WEBHOOK_STRICT,
 )
 from deps import get_current_user
 
@@ -352,11 +353,31 @@ async def _apply_plan_to_user(user_id: str, plan: str, interval: str,
 # -----------------------------------------------------------------------------
 # Webhook
 # -----------------------------------------------------------------------------
+# Idempotency: every Stripe event has a stable `id` (e.g. "evt_abc"). Stripe
+# retries delivery until it gets a 2xx, so we MUST dedupe — re-applying a plan
+# change twice can race with customer-portal events and produce flapping.
+# We insert into `stripe_events` with a unique index on `event_id`; a duplicate
+# is detected via a `DuplicateKeyError`.
+_STRIPE_EVENTS_INDEX_BUILT = False
+
+
+async def _ensure_stripe_events_index():
+    global _STRIPE_EVENTS_INDEX_BUILT
+    if _STRIPE_EVENTS_INDEX_BUILT:
+        return
+    try:
+        await db.stripe_events.create_index("event_id", unique=True)
+        _STRIPE_EVENTS_INDEX_BUILT = True
+    except Exception:
+        logger.exception("Failed to create stripe_events unique index (continuing)")
+
+
 @app.post("/api/webhook/stripe")
 async def stripe_webhook(request: Request):
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature", "")
 
+    # 1. Signature verification — strict in production.
     event = None
     if STRIPE_WEBHOOK_SECRET:
         try:
@@ -364,26 +385,56 @@ async def stripe_webhook(request: Request):
                 payload, sig_header, STRIPE_WEBHOOK_SECRET,
             )
         except stripe.error.SignatureVerificationError:
+            logger.warning("Stripe webhook: BAD signature from %s", request.client.host if request.client else "?")
             raise HTTPException(status_code=400, detail="Bad signature")
         except Exception:
             logger.exception("Stripe webhook verification failed")
             raise HTTPException(status_code=400, detail="Invalid payload")
     else:
-        # Dev mode — no signing secret yet. Parse but warn loudly.
+        # No secret configured. Refuse to accept unsigned events in strict mode
+        # (default + production safety). Local dev / Stripe CLI without signing
+        # can set STRIPE_WEBHOOK_STRICT=false to bypass.
+        if STRIPE_WEBHOOK_STRICT:
+            logger.error(
+                "Stripe webhook REJECTED — STRIPE_WEBHOOK_SECRET is empty and "
+                "STRIPE_WEBHOOK_STRICT=true. Set the signing secret in .env.",
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Webhook signature verification is required",
+            )
         import json
         try:
             event = json.loads(payload)
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid JSON")
         logger.warning(
-            "Stripe webhook received without STRIPE_WEBHOOK_SECRET — "
-            "do NOT use this in production. Set the secret to enable signature verification.",
+            "Stripe webhook accepted UNSIGNED (STRIPE_WEBHOOK_STRICT=false). "
+            "Set STRIPE_WEBHOOK_SECRET + STRIPE_WEBHOOK_STRICT=true for prod.",
         )
 
     etype = event["type"] if isinstance(event, dict) else event.type
     data = event["data"]["object"] if isinstance(event, dict) else event.data.object
+    event_id = event["id"] if isinstance(event, dict) else event.id
 
-    logger.info("Stripe webhook: %s", etype)
+    # 2. Idempotency — refuse duplicate event IDs.
+    await _ensure_stripe_events_index()
+    try:
+        await db.stripe_events.insert_one({
+            "event_id": event_id,
+            "type": etype,
+            "received_at": datetime.now(timezone.utc),
+        })
+    except Exception as e:
+        # DuplicateKeyError → already processed. Pymongo raises this with
+        # `code=11000`; we check the str representation to keep the import light.
+        if "duplicate key" in str(e).lower() or "E11000" in str(e):
+            logger.info("Stripe webhook: duplicate event_id=%s type=%s — skipping", event_id, etype)
+            return {"received": True, "duplicate": True, "event_id": event_id}
+        logger.exception("Failed to record stripe_event")
+        # Don't fail the webhook — better to process than to make Stripe retry.
+
+    logger.info("Stripe webhook: %s (event_id=%s)", etype, event_id)
 
     if etype == "checkout.session.completed":
         session = data

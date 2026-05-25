@@ -40,6 +40,9 @@ TIKTOK_REDIRECT_URI_OVERRIDE = os.environ.get("TIKTOK_REDIRECT_URI", "")
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+# When True (default), the webhook REQUIRES a valid signature. Set to "false"
+# only in local dev where you're using the Stripe CLI without signing.
+STRIPE_WEBHOOK_STRICT = os.environ.get("STRIPE_WEBHOOK_STRICT", "true").lower() != "false"
 
 # Mailgun transactional email
 MAILGUN_API_KEY = os.environ.get("MAILGUN_API_KEY", "")

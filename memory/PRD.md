@@ -35,6 +35,11 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 22) **🔒 Stripe webhook hardening**
+  - **Signature enforcement** — new env flag `STRIPE_WEBHOOK_STRICT` (default `true` for safety). When strict + no secret → returns `503 "Webhook signature verification is required"`. When strict + secret → signatures verified as before (400 on tampered events). When `false` + no secret → falls back to the dev-mode parser (with a loud log warning). The preview environment uses `STRIPE_WEBHOOK_STRICT=false` so local testing without `stripe listen` continues to work; production should leave it at the default and supply `STRIPE_WEBHOOK_SECRET` from the Stripe dashboard.
+  - **Idempotency** — every Stripe event has a stable `event.id` (e.g. `evt_abc`). Stripe retries delivery until it gets a 2xx, so duplicate deliveries are common in real traffic. We now insert every event_id into a new `stripe_events` collection with a unique index. Duplicates short-circuit with `{"received": true, "duplicate": true, "event_id": ...}` and **never re-apply plan changes** — avoiding the race where two `customer.subscription.updated` events flip a comped user's plan back and forth.
+  - **4 new pytest cases** (`tests/test_stripe_webhook.py`): strict-mode rejection, idempotent dedupe of identical event_id, distinct event_ids both processed, bad-signature fallback. Verified live via curl: 503 when strict, 200 first time, 200 + `duplicate:true` on replay. **114 backend tests pass.**
+
 - 2026-02-26 (part 21) **📧 Mailgun transactional emails**
   - `routes/email.py` — `send_email()` async helper using httpx + Mailgun HTTP API. Failures never raise — they log to a new `email_log` collection and return a structured `{sent, error/skipped, status?}` dict so callers can decide whether to retry.
   - **Lifecycle templates** (all use a shared dark-gradient header / light body brand layout):
