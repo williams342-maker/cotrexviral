@@ -347,6 +347,52 @@ async def send_past_due_email(to: str, name: str, plan: str):
     )
 
 
+async def send_onboarding_admin_notification(
+    user_email: str, user_name: str, profile: dict, recipients: list,
+):
+    """Heads-up email to the support team when a new user finishes onboarding.
+    Sent only on FIRST completion (re-edits don't fire)."""
+    first = (user_name or "they").split()[0]
+    goals = ", ".join(profile.get("goals") or []) or "—"
+    platforms = ", ".join(profile.get("platforms") or []) or "—"
+    challenge = profile.get("challenge") or ""
+    challenge_block = (
+        f'<tr><td style="padding:6px 12px;color:#71717a;font-size:12.5px;vertical-align:top">Challenge</td>'
+        f'<td style="padding:6px 12px;color:#18181b;font-size:13.5px;font-style:italic">"{challenge.replace("<","&lt;")}"</td></tr>'
+        if challenge else ""
+    )
+
+    rows = f"""
+      <tr><td style="padding:6px 12px;color:#71717a;font-size:12.5px">Name</td><td style="padding:6px 12px;font-size:13.5px;font-weight:600">{user_name or "(unnamed)"}</td></tr>
+      <tr><td style="padding:6px 12px;color:#71717a;font-size:12.5px">Email</td><td style="padding:6px 12px;font-size:13.5px"><a href="mailto:{user_email}" style="color:#7c3aed">{user_email}</a></td></tr>
+      <tr><td style="padding:6px 12px;color:#71717a;font-size:12.5px">Website</td><td style="padding:6px 12px;font-size:13.5px"><a href="{profile.get('website','')}" style="color:#7c3aed">{profile.get('website','')}</a></td></tr>
+      <tr><td style="padding:6px 12px;color:#71717a;font-size:12.5px">Brand</td><td style="padding:6px 12px;font-size:13.5px;font-weight:500">{profile.get('brand_name','')}</td></tr>
+      <tr><td style="padding:6px 12px;color:#71717a;font-size:12.5px">Niche</td><td style="padding:6px 12px;font-size:13.5px;font-weight:500">{profile.get('niche','')}</td></tr>
+      <tr><td style="padding:6px 12px;color:#71717a;font-size:12.5px">Goals</td><td style="padding:6px 12px;font-size:13.5px">{goals}</td></tr>
+      <tr><td style="padding:6px 12px;color:#71717a;font-size:12.5px">Platforms</td><td style="padding:6px 12px;font-size:13.5px">{platforms}</td></tr>
+      {challenge_block}
+    """
+    body = f"""
+    <p>{first} just completed onboarding on CortexViral. Here's their context — good time to reach out with niche-specific help.</p>
+    <table cellspacing="0" cellpadding="0" border="0" style="margin:18px 0;background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;width:100%">
+      {rows}
+    </table>
+    """
+    results = []
+    for rcpt in recipients:
+        results.append(await send_email(
+            to=rcpt,
+            subject=f"✨ New onboarding: {user_name or user_email} ({profile.get('brand_name','')})",
+            tags=["onboarding_complete", f"niche:{profile.get('niche','').lower()}"],
+            html=_layout(f"✨ New onboarding: {profile.get('brand_name') or user_name}", body,
+                         cta_label="Open admin → users",
+                         cta_url=f"{PUBLIC_SITE_URL}/admin/users"),
+        ))
+    return results
+
+
+
+
 _SEVERITY_STYLES = {
     "info": ("📣", "#6366f1", "#eef2ff"),
     "warning": ("⚠️", "#d97706", "#fffbeb"),

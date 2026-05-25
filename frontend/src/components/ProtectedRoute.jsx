@@ -18,6 +18,20 @@ const ProtectedRoute = ({ children, admin }) => {
   const effectiveUser = user || location.state?.user;
   if (!effectiveUser) return <Navigate to="/" replace />;
 
+  // Redirect to /onboarding when required fields are missing — unless the user
+  // is already on /onboarding, has clicked "Skip for now" this session, or is
+  // an admin (admins land in admin tools, not the onboarding funnel).
+  const skipped = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('onboarding_skipped') === '1';
+  if (
+    effectiveUser.onboarding_required
+    && !effectiveUser.is_admin
+    && !skipped
+    && location.pathname !== '/onboarding'
+    && !location.pathname.startsWith('/auth-callback')
+  ) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
   if (admin && !effectiveUser.is_admin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F6F4ED] p-6">

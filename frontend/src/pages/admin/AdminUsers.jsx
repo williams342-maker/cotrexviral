@@ -152,6 +152,17 @@ const AdminUsers = () => {
                             {u.name} {isSelf && <span className="text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">(you)</span>}
                           </div>
                           <div className="text-[12px] text-neutral-500 truncate">{u.email}</div>
+                          {(u.brand_name || u.website || u.niche) && (
+                            <div className="text-[11px] text-neutral-500 mt-0.5 flex items-center gap-1.5 flex-wrap" data-testid={`admin-user-profile-${u.user_id}`}>
+                              {u.brand_name && <span className="font-medium text-neutral-700">{u.brand_name}</span>}
+                              {u.website && (
+                                <a href={u.website} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-violet-700 hover:underline truncate max-w-[160px]">
+                                  {u.website.replace(/^https?:\/\//, '')}
+                                </a>
+                              )}
+                              {u.niche && <span className="px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-600">{u.niche}</span>}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>

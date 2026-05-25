@@ -32,6 +32,7 @@ import AdminTickets from './pages/admin/AdminTickets';
 import AdminAudit from './pages/admin/AdminAudit';
 import AdminBroadcasts from './pages/admin/AdminBroadcasts';
 import AdminWebhookEvents from './pages/admin/AdminWebhookEvents';
+import Onboarding from './pages/Onboarding';
 import { Toaster } from './components/ui/toaster';
 import { AuthProvider } from './context/AuthContext';
 import VisitTracker from './components/VisitTracker';
@@ -62,6 +63,7 @@ function AppRouter() {
       <Route path="/blog" element={<BlogIndex />} />
       <Route path="/blog/:slug" element={<BlogPost />} />
       <Route path="/dashboard" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
+      <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
       <Route path="/dashboard/main" element={<ProtectedRoute><Main /></ProtectedRoute>} />
       <Route path="/dashboard/performance" element={<ProtectedRoute><Performance /></ProtectedRoute>} />
       <Route path="/dashboard/calendar" element={<ProtectedRoute><MarketingCalendar /></ProtectedRoute>} />

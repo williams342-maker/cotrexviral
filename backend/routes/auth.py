@@ -84,7 +84,12 @@ async def create_session(request: Request, response: Response):
 @api.get("/auth/me")
 async def auth_me(request: Request):
     user = await get_current_user(request)
-    return user.model_dump()
+    # Augment with onboarding status so the frontend can route accordingly.
+    from routes.onboarding import _onboarding_required
+    doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0}) or {}
+    payload = user.model_dump()
+    payload["onboarding_required"] = _onboarding_required(doc)
+    return payload
 
 
 @api.post("/auth/logout")

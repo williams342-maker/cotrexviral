@@ -96,6 +96,29 @@ const Overview = () => {
         <p className="text-neutral-600 mt-1">Here's what's running across your marketing today.</p>
       </div>
 
+      {/* Onboarding reminder for users who skipped */}
+      {user?.onboarding_required && (
+        <Link
+          to="/onboarding"
+          onClick={() => sessionStorage.removeItem('onboarding_skipped')}
+          data-testid="onboarding-banner"
+          className="mb-6 flex items-center justify-between gap-4 rounded-2xl bg-gradient-to-r from-violet-50 via-fuchsia-50 to-cyan-50 border border-violet-200/70 px-5 py-4 hover:border-violet-300 transition-colors group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center shrink-0">
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <div className="text-[14px] font-semibold text-neutral-900">Finish setting up your account</div>
+              <div className="text-[12.5px] text-neutral-600">Tell us about your website + niche so we can tailor advice + reach out with niche-specific tips. ~2 minutes.</div>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-violet-700 group-hover:translate-x-0.5 transition-transform shrink-0 whitespace-nowrap pr-2">
+            Finish setup <ArrowRight size={14} />
+          </span>
+        </Link>
+      )}
+
       {/* Billing strip */}
       <div className="mb-7 flex items-center justify-between gap-4 flex-wrap rounded-2xl border border-neutral-200/70 bg-white px-5 py-4" data-testid="dashboard-billing-strip">
         <div className="flex items-center gap-3">

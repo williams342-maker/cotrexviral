@@ -139,6 +139,9 @@ async def admin_list_users(request: Request, q: Optional[str] = None):
         u.setdefault("status", "active")
         u.setdefault("plan", "free")
         u.setdefault("comped", False)
+        u.setdefault("website", "")
+        u.setdefault("brand_name", "")
+        u.setdefault("niche", "")
         uid = u["user_id"]
         u["stats"] = {
             "posts": await db.posts.count_documents({"user_id": uid}),

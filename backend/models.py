@@ -54,6 +54,30 @@ class AdminSetPlanRequest(BaseModel):
     reason: Optional[str] = None
 
 
+# ---------- Onboarding ----------
+ONBOARDING_NICHES = [
+    "Fitness", "SaaS", "eCommerce", "Creator/Influencer",
+    "Agency", "Coaching/Course", "Local business", "Other",
+]
+ONBOARDING_GOALS = [
+    "Grow followers", "Drive traffic", "Generate leads",
+    "Sell products", "Build authority",
+]
+ONBOARDING_PLATFORMS = ["TikTok", "Instagram", "YouTube", "LinkedIn", "X"]
+
+
+class OnboardingPayload(BaseModel):
+    website: str = Field(..., min_length=3, max_length=300)
+    brand_name: str = Field(..., min_length=1, max_length=120)
+    niche: Literal[
+        "Fitness", "SaaS", "eCommerce", "Creator/Influencer",
+        "Agency", "Coaching/Course", "Local business", "Other",
+    ]
+    goals: List[str] = Field(default_factory=list)
+    platforms: List[str] = Field(default_factory=list)
+    challenge: Optional[str] = Field(None, max_length=1000)
+
+
 class BroadcastCreate(BaseModel):
     title: str
     body: str

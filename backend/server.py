@@ -34,6 +34,7 @@ from routes import (  # noqa: F401
     ab_lab,          # A/B Hook Lab — variant generation + scoring
     funnel,          # Marketing funnel analytics
     email,           # Mailgun transactional emails
+    onboarding,      # New-user onboarding profile capture
 )
 
 

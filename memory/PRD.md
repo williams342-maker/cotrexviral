@@ -35,6 +35,16 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 28) **🚀 New-user onboarding flow**
+  - **New `/onboarding` page** — dark-gradient hero, "Welcome {first_name}" badge, "Let's tailor CortexViral to your brand" headline, 6 fields total (2 required text + 1 required pill-pick + 2 optional pill-pick + 1 optional textarea). Submitting writes to the user doc, marks `onboarding_completed_at`, and fires an admin notification email.
+  - **Auto-redirect**: `ProtectedRoute.jsx` now checks `user.onboarding_required` and routes to `/onboarding` on first dashboard visit. Admins bypass the redirect; users who click "Skip for now" set a session flag (`onboarding_skipped`) so the redirect doesn't keep firing on every nav within that browser tab.
+  - **Reminder banner** on `/dashboard/overview` — gradient violet→cyan strip with "Finish setting up your account · ~2 minutes" + arrow CTA. Persists across sessions for skippers until they complete.
+  - **Backend**: new `routes/onboarding.py` exposing `GET /onboarding/options`, `GET /onboarding/me`, `POST /onboarding`. `/auth/me` now augmented with `onboarding_required: bool` so the SPA can route synchronously without an extra round-trip. Website URLs auto-normalised to add `https://` when user types a bare domain. Goal + platform values validated against the canonical lists (returns 400 on unknown values).
+  - **Admin notification template** — `send_onboarding_admin_notification` fires only on FIRST completion (re-edits don't re-spam admins). Emails the addresses in `LEADS_NOTIFY_EMAILS` with a styled table: name, email, website (clickable), brand, niche, goals, platforms, optional challenge in italics. Gives the support team enough context to reach out with niche-specific playbooks.
+  - **AdminUsers page** now shows `brand_name • website • niche` directly under each user's email, with clickable website link in violet. Backend `/admin/users` injects these fields with sensible defaults.
+  - **AuthContext** exposes a new `refresh()` alias (= `checkAuth`) so the onboarding page can repopulate the user object post-submission.
+  - **10 new pytest cases** in `test_onboarding.py` covering: auth, options shape, `required` flag, full submit roundtrip, invalid niche/goal rejection, `first_completion` semantics, AdminUsers profile fields, admin notification wiring. **141 backend tests pass.**
+
 - 2026-02-26 (part 27) **📨 Lead-form email notifications**
   - **Bug fixed**: when a visitor submitted the "Choose Your Specialist" form (Nova/Sam/Kai/Angela), the lead was persisted but **no one got an email** — yet the UI toast said "X will reach out within 24 hours". Misleading + caused real leads to never receive a reply.
   - **New env var** `LEADS_NOTIFY_EMAILS` — comma-separated list of admin emails. Preview is set to `williams342@gmail.com,team@cortexviral.com`. **Production deploy must mirror this** in Emergent's environment variables panel or the admin won't get pinged.
