@@ -3,6 +3,8 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, Request
+from pydantic import BaseModel
+from typing import List, Optional
 
 from core import db, api, logger, EMERGENT_LLM_KEY
 from deps import get_current_user
@@ -201,7 +203,72 @@ async def ai_insights(payload: AIRequest, request: Request):
     raw = await chat.send_message(UserMessage(text=text))
     data = _safe_json(raw)
     await record_ai_generation(user.user_id, "insights")
-    return {"insights": data}
+    # Pre-canned follow-up actions the SPA renders as quick-action chips so the
+    # conversation has a clear "what's next?" entry point even before the user
+    # types anything. The followup endpoint accepts these prompts verbatim.
+    follow_ups = [
+        "Turn the 1-week action plan into a content calendar with specific post ideas for each day.",
+        "Draft 3 ready-to-publish posts for the highest-impact item in the action plan.",
+        "What KPIs should I track to know if this plan is working?",
+        "Which trend should I act on first, and why?",
+    ]
+    return {"insights": data, "follow_ups": follow_ups}
+
+
+class _FollowupRequest(BaseModel):
+    """Follow-up question in an existing insights conversation."""
+    message: str
+    history: Optional[List[dict]] = None  # SPA-side conversation log, not used
+                                          # for memory (the LLM session already
+                                          # keeps it) — included for debugging.
+
+
+@api.post("/ai/insights/followup")
+async def ai_insights_followup(payload: _FollowupRequest, request: Request):
+    """Continue an insights conversation. Reuses the same session_id as
+    /ai/insights so the LLM keeps full context (the user's original brief +
+    every previous turn). Returns Markdown-flavoured text (NOT JSON) plus
+    fresh follow-up suggestions tailored to what was just answered."""
+    user = await _gated_user(request)
+    if not payload.message or not payload.message.strip():
+        raise HTTPException(status_code=400, detail="message is required")
+
+    # Two-stage prompt: first, answer the user's question conversationally.
+    # Then in a separate quick call, generate 3 contextual next-step prompts.
+    answer_system = (
+        "You are an AI marketing advisor continuing a planning conversation with "
+        "the user. Stay specific and actionable. Use short headers and bullet "
+        "lists where helpful. Reference earlier parts of OUR conversation by their "
+        "actual content, not by index numbers. Keep responses under 350 words "
+        "unless the user explicitly asks for more depth."
+    )
+    chat = await _llm_for_user(user.user_id, f"insights-{user.user_id}", answer_system)
+    answer = await chat.send_message(UserMessage(text=payload.message))
+
+    # Lightweight second call for follow-ups. Use a separate session so this
+    # meta-question doesn't pollute the planning conversation memory.
+    meta_system = (
+        "You suggest the next 3 questions a user would naturally ask after the "
+        "AI answer below. Return ONLY a JSON array of 3 strings (each <= 120 "
+        "chars). Each suggestion should be phrased as a FIRST-PERSON request "
+        "(e.g. 'Draft me a post about X', 'Build me a calendar for Y'). No "
+        "duplicates of obvious next questions."
+    )
+    meta = await _llm_for_user(
+        user.user_id,
+        f"insights-meta-{user.user_id}-{int(datetime.now(timezone.utc).timestamp())}",
+        meta_system,
+    )
+    raw_meta = await meta.send_message(UserMessage(
+        text=f"USER QUESTION:\n{payload.message}\n\nAI ANSWER:\n{answer[:1500]}",
+    ))
+    follow_ups = _safe_json(raw_meta)
+    if not isinstance(follow_ups, list):
+        follow_ups = []
+    follow_ups = [str(f).strip() for f in follow_ups if f][:3]
+
+    await record_ai_generation(user.user_id, "insights_followup")
+    return {"answer": answer, "follow_ups": follow_ups}
 
 
 @api.post("/ai/generate-post")
