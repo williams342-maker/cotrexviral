@@ -103,6 +103,16 @@
     </image:image>
   </url>
   <url>
+    <loc>https://cortexviral.com/data-deletion</loc>
+    <lastmod>2026-05-25</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <image:image>
+      <image:loc>https://cortexviral.com/cortex-logo.png</image:loc>
+      <image:title>CortexViral — AI viral content generator</image:title>
+    </image:image>
+  </url>
+  <url>
     <loc>https://cortexviral.com/sitemap</loc>
     <lastmod>2026-05-25</lastmod>
     <changefreq>monthly</changefreq>

@@ -84,6 +84,7 @@ const Channels = () => {
   const [tiktokOAuth, setTiktokOAuth] = useState({ configured: false, connected: false });
   const [facebookOAuth, setFacebookOAuth] = useState({ configured: false, connected: false });
   const [instagramOAuth, setInstagramOAuth] = useState({ configured: false, connected: false });
+  const [pinterestOAuth, setPinterestOAuth] = useState({ configured: false, connected: false });
   const [disabledPlatforms, setDisabledPlatforms] = useState([]);
   const { toast } = useToast();
   const paywall = usePaywallHandler();
@@ -91,13 +92,14 @@ const Channels = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const [cat, list, li, tt, fb, ig, sys] = await Promise.all([
+      const [cat, list, li, tt, fb, ig, pn, sys] = await Promise.all([
         axios.get(`${API}/channels/catalog`, { withCredentials: true }),
         axios.get(`${API}/channels`, { withCredentials: true }),
         axios.get(`${API}/oauth/linkedin/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
         axios.get(`${API}/oauth/tiktok/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
         axios.get(`${API}/oauth/facebook/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
         axios.get(`${API}/oauth/instagram/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
+        axios.get(`${API}/oauth/pinterest/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
         axios.get(`${API}/system/settings`).catch(() => ({ data: { disabled_platforms: [] } })),
       ]);
       setCatalog(cat.data);
@@ -108,6 +110,7 @@ const Channels = () => {
       setTiktokOAuth(tt.data);
       setFacebookOAuth(fb.data);
       setInstagramOAuth(ig.data);
+      setPinterestOAuth(pn.data);
       setDisabledPlatforms(sys.data.disabled_platforms || []);
     } catch (e) {}
     setLoading(false);
@@ -122,6 +125,7 @@ const Channels = () => {
     const tt = params.get('tiktok');
     const fb = params.get('facebook');
     const ig = params.get('instagram');
+    const pn = params.get('pinterest');
     if (li === 'connected') toast({ title: 'LinkedIn connected!', description: 'Future posts to LinkedIn will publish live.' });
     if (li === 'denied') toast({ title: 'LinkedIn connection cancelled' });
     if (tt === 'connected') toast({ title: 'TikTok connected!', description: 'Add a video URL to your posts to publish live.' });
@@ -134,9 +138,11 @@ const Channels = () => {
       title: 'No Instagram Business account found',
       description: 'Your Instagram must be a Business or Creator account, linked to one of your Facebook Pages. Convert it in the IG app → Settings → Account → Switch to Professional, then reconnect.',
     });
-    if (li || tt || fb || ig) {
+    if (pn === 'connected') toast({ title: 'Pinterest connected!', description: 'Pick a board on Compose to publish a Pin.' });
+    if (pn === 'denied') toast({ title: 'Pinterest connection cancelled' });
+    if (li || tt || fb || ig || pn) {
       const url = new URL(window.location.href);
-      ['linkedin', 'tiktok', 'facebook', 'instagram'].forEach((k) => url.searchParams.delete(k));
+      ['linkedin', 'tiktok', 'facebook', 'instagram', 'pinterest'].forEach((k) => url.searchParams.delete(k));
       window.history.replaceState({}, '', url.toString());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -188,6 +194,16 @@ const Channels = () => {
           window.location.href = r.data.authorize_url;
           return;
         }
+      } else if (platform === 'pinterest' && pinterestOAuth.configured) {
+        if (pinterestOAuth.connected) {
+          await axios.delete(`${API}/oauth/pinterest`, { withCredentials: true });
+          toast({ title: 'Disconnected Pinterest' });
+          await load();
+        } else {
+          const r = await axios.get(`${API}/oauth/pinterest/start`, { withCredentials: true });
+          window.location.href = r.data.authorize_url;
+          return;
+        }
       } else if (ch?.connected) {
         await axios.post(`${API}/channels/disconnect`, { platform }, { withCredentials: true });
         toast({ title: `Disconnected from ${meta?.label || platform}` });
@@ -201,6 +217,8 @@ const Channels = () => {
             ? 'MOCKED — admin: set TIKTOK_CLIENT_KEY + TIKTOK_CLIENT_SECRET in .env to enable real OAuth.'
             : (platform === 'facebook' || platform === 'instagram')
             ? 'MOCKED — admin: set META_APP_ID + META_APP_SECRET in .env to enable real OAuth.'
+            : platform === 'pinterest'
+            ? 'MOCKED — admin: set PINTEREST_APP_ID + PINTEREST_APP_SECRET in .env to enable real OAuth.'
             : 'MOCKED — no real OAuth in this demo.',
         });
       }

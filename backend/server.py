@@ -39,6 +39,7 @@ from routes import (  # noqa: F401
     admin_settings,  # Master signup toggle + per-platform on/off
     account,         # User self-serve account deletion (GDPR / Meta review)
     oauth_meta,      # Facebook + Instagram OAuth (shared Meta app)
+    oauth_pinterest, # Pinterest API v5 OAuth + publish
 )
 
 

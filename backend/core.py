@@ -46,6 +46,16 @@ META_GRAPH_VERSION = os.environ.get("META_GRAPH_VERSION", "v22.0")
 # Optional override (same purpose as the TikTok one — useful for preview pods).
 META_REDIRECT_URI_OVERRIDE = os.environ.get("META_REDIRECT_URI", "")
 
+# Pinterest OAuth (v5 API). Register at https://developers.pinterest.com.
+# Trial access works for OAuth + reading boards; Pin creation may be
+# rate-limited until you upgrade to Standard access (free, manual review).
+PINTEREST_APP_ID = os.environ.get("PINTEREST_APP_ID", "")
+PINTEREST_APP_SECRET = os.environ.get("PINTEREST_APP_SECRET", "")
+PINTEREST_REDIRECT_URI_OVERRIDE = os.environ.get("PINTEREST_REDIRECT_URI", "")
+# Set to https://api-sandbox.pinterest.com to test against Pinterest's sandbox
+# without affecting real boards. Defaults to production v5 API.
+PINTEREST_API_BASE = os.environ.get("PINTEREST_API_BASE", "https://api.pinterest.com")
+
 # Stripe billing
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
