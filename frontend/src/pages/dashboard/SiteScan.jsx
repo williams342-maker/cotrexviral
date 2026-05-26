@@ -65,11 +65,11 @@ const SiteScan = () => {
       {report && !report.raw && (
         <div className="space-y-5">
           {report.summary && (
-            <div className="bg-gradient-to-br from-blue-50 to-white rounded-3xl p-6 border border-blue-100">
-              <div className="flex items-center gap-2 text-[12px] uppercase tracking-wider text-[#1B7BFF] font-semibold mb-2">
+            <div className="rounded-3xl p-6 border border-blue-500/30" style={{ background: 'rgba(37, 99, 235, 0.12)' }}>
+              <div className="flex items-center gap-2 text-[12px] uppercase tracking-wider font-semibold mb-2" style={{ color: '#93C5FD' }}>
                 <Lightbulb size={14} /> Summary
               </div>
-              <p className="text-[15px] text-neutral-800 leading-relaxed">{report.summary}</p>
+              <p className="text-[15px] leading-relaxed" style={{ color: '#F4F4F5' }}>{report.summary}</p>
             </div>
           )}
 
@@ -96,11 +96,11 @@ const SiteScan = () => {
               </div>
               <div className="grid md:grid-cols-3 gap-3">
                 {report.post_ideas.map((p, i) => (
-                  <div key={i} className="bg-gradient-to-br from-violet-50 to-white rounded-2xl p-4 border border-violet-100">
-                    <div className="text-[11px] uppercase tracking-wider text-violet-600 font-semibold mb-1">{p.platform}</div>
-                    <div className="text-[14px] font-semibold mb-2">{p.title}</div>
-                    <p className="text-[13px] text-neutral-700 leading-relaxed mb-3">{p.caption}</p>
-                    <button onClick={() => pushToCompose(p)} className="w-full text-[12px] font-medium bg-white hover:bg-violet-100 text-violet-700 border border-violet-200 px-3 py-2 rounded-lg inline-flex items-center justify-center gap-1.5 transition-colors">
+                  <div key={i} className="rounded-2xl p-4 border border-violet-500/30" style={{ background: 'rgba(124, 58, 237, 0.12)' }}>
+                    <div className="text-[11px] uppercase tracking-wider font-semibold mb-1" style={{ color: '#C4B5FD' }}>{p.platform}</div>
+                    <div className="text-[14px] font-semibold mb-2" style={{ color: '#F4F4F5' }}>{p.title}</div>
+                    <p className="text-[13px] leading-relaxed mb-3" style={{ color: '#D4D4D8' }}>{p.caption}</p>
+                    <button onClick={() => pushToCompose(p)} className="w-full text-[12px] font-medium border border-violet-400/40 hover:border-violet-300/60 px-3 py-2 rounded-lg inline-flex items-center justify-center gap-1.5 transition-colors" style={{ background: 'rgba(124, 58, 237, 0.15)', color: '#DDD6FE' }}>
                       <Copy size={12} /> Use this draft
                     </button>
                   </div>
