@@ -6,8 +6,8 @@ import ImpersonateBanner from './ImpersonateBanner';
 import BroadcastBanner from './BroadcastBanner';
 
 const items = [
-  { to: '/dashboard', label: 'Overview', icon: LayoutDashboard, exact: true },
-  { to: '/dashboard/agent', label: 'Agents', icon: Bot },
+  { to: '/dashboard/agent', label: 'Agents', icon: Bot, exact: true },
+  { to: '/dashboard/overview', label: 'Overview', icon: LayoutDashboard },
   { to: '/dashboard/main', label: 'Activity', icon: Activity },
   { to: '/dashboard/performance', label: 'Performance', icon: TrendingUp },
   { to: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
@@ -34,7 +34,7 @@ const adminItems = [
   { to: '/admin/roadmap', label: 'Roadmap', icon: MapIcon },
 ];
 
-const DashboardLayout = ({ children, title, subtitle }) => {
+const DashboardLayout = ({ children, title, subtitle, headerExtra }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -148,9 +148,12 @@ const DashboardLayout = ({ children, title, subtitle }) => {
                 </div>
               )}
               {title && (
-                <div className="mb-8">
-                  <h1 className="cv-display text-3xl font-semibold tracking-tight text-white">{title}</h1>
-                  {subtitle && <p className="text-zinc-400 mt-1">{subtitle}</p>}
+                <div className="mb-8 flex items-start gap-4">
+                  <div className="flex-1 min-w-0">
+                    <h1 className="cv-display text-3xl font-semibold tracking-tight text-white">{title}</h1>
+                    {subtitle && <p className="text-zinc-400 mt-1">{subtitle}</p>}
+                  </div>
+                  {headerExtra && <div className="shrink-0">{headerExtra}</div>}
                 </div>
               )}
               {children}

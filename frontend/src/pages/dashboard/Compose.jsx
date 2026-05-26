@@ -37,6 +37,9 @@ const Compose = () => {
   const [boardsLoading, setBoardsLoading] = useState(false);
   const [pinBoardId, setPinBoardId] = useState('');
   const [pinImageUrl, setPinImageUrl] = useState('');
+  // Carousel pins: additional images beyond `pinImageUrl`. Pinterest caps
+  // a carousel at 5 total images, so we allow up to 4 extras here.
+  const [pinExtraImages, setPinExtraImages] = useState([]);
   const [pinLink, setPinLink] = useState('');
   const [pinTitle, setPinTitle] = useState('');
 
@@ -160,6 +163,11 @@ const Compose = () => {
         payload.pinterest_board_id = pinBoardId;
         if (pinLink.trim()) payload.pinterest_link = pinLink.trim();
         if (pinTitle.trim()) payload.pinterest_title = pinTitle.trim();
+        // Carousel: send the full array when the user added extras.
+        const allImages = [pinImageUrl.trim(), ...pinExtraImages.map((s) => s.trim()).filter(Boolean)];
+        if (allImages.length > 1) {
+          payload.pinterest_images = allImages.slice(0, 5);
+        }
       }
       const r = await axios.post(`${API}/channels/publish`, payload, { withCredentials: true });
       const isScheduled = r.data.status === 'scheduled';
@@ -178,6 +186,7 @@ const Compose = () => {
       setScheduleAt('');
       setAiTimeMeta(null);
       setRepeatWeekly(false);
+      setPinExtraImages([]);
     } catch (e) {
       toast({ title: 'Publishing failed' });
     } finally {
@@ -311,6 +320,42 @@ const Compose = () => {
                   className="h-9 rounded-lg border-neutral-300 text-[12.5px]"
                 />
                 <div className="text-[10.5px] text-neutral-500 mt-1">Required by Pinterest. Direct URL to a JPG/PNG.</div>
+
+                {/* Carousel pin support — up to 5 images total (1 main + 4 extras) */}
+                {pinExtraImages.map((url, i) => (
+                  <div key={i} className="mt-2 flex gap-2 items-center" data-testid={`compose-pin-extra-image-${i}`}>
+                    <Input
+                      type="url"
+                      value={url}
+                      onChange={(e) => {
+                        const next = [...pinExtraImages];
+                        next[i] = e.target.value;
+                        setPinExtraImages(next);
+                      }}
+                      placeholder={`https://…/slide-${i + 2}.jpg`}
+                      className="h-9 rounded-lg border-neutral-300 text-[12.5px] flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPinExtraImages(pinExtraImages.filter((_, idx) => idx !== i))}
+                      className="text-[11px] font-medium text-neutral-500 hover:text-rose-600 px-2 h-9 rounded-lg border border-neutral-200 bg-white"
+                      data-testid={`compose-pin-extra-remove-${i}`}
+                      title="Remove this carousel slide"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {pinExtraImages.length < 4 && (
+                  <button
+                    type="button"
+                    onClick={() => setPinExtraImages([...pinExtraImages, ''])}
+                    data-testid="compose-pin-add-carousel-image"
+                    className="mt-2 text-[11.5px] font-semibold text-rose-700 hover:text-rose-900 inline-flex items-center gap-1"
+                  >
+                    + Add carousel slide ({pinExtraImages.length + 1} / 5)
+                  </button>
+                )}
               </div>
               <div>
                 <label className="text-[11px] font-medium text-neutral-600 mb-1 block">Destination link <span className="text-neutral-400">(optional)</span></label>

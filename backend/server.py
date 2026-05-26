@@ -42,6 +42,7 @@ from routes import (  # noqa: F401
     oauth_pinterest, # Pinterest API v5 OAuth + publish
     password_auth,   # Email + password login + reset (alongside Google Auth)
     agent_chat,      # In-dashboard per-agent chat (Nova/Sam/Kai/Angela)
+    analytics,       # Per-post metrics refresh (Pinterest live; others TODO)
 )
 
 

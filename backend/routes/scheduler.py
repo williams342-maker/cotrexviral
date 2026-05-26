@@ -89,6 +89,7 @@ async def _publish_due_posts_now() -> dict:
             res = await publish_to_pinterest(
                 post["user_id"], post["content"],
                 image_url=post.get("media_url") or post.get("pinterest_image_url"),
+                images=post.get("pinterest_images"),
                 board_id=post.get("pinterest_board_id"),
                 link=post.get("pinterest_link"),
                 title=post.get("pinterest_title"),
@@ -133,6 +134,22 @@ async def start_scheduler():
         coalesce=True,
         next_run_time=datetime.now(timezone.utc) + timedelta(seconds=10),
     )
+
+    # Per-post analytics refresh — every 6h. Lazy import so the module isn't
+    # required at scheduler boot time (and to avoid a circular import).
+    try:
+        from routes.analytics import refresh_post_metrics
+        scheduler.add_job(
+            refresh_post_metrics,
+            trigger=IntervalTrigger(hours=6),
+            id="refresh_post_metrics",
+            max_instances=1,
+            coalesce=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2),
+        )
+    except Exception:
+        logger.exception("scheduler: failed to register refresh_post_metrics")
+
     scheduler.start()
     logger.info("scheduler: started (worker=%s, every 60s)", WORKER_ID)
 

@@ -172,6 +172,8 @@ async def publish(payload: PublishRequest, request: Request):
         post["pinterest_board_id"] = payload.pinterest_board_id
         post["pinterest_link"] = payload.pinterest_link
         post["pinterest_title"] = payload.pinterest_title
+        if payload.pinterest_images:
+            post["pinterest_images"] = payload.pinterest_images
     await db.posts.insert_one(post)
 
     # Immediate dispatch to live APIs (currently: LinkedIn + TikTok + Pinterest).
@@ -190,6 +192,7 @@ async def publish(payload: PublishRequest, request: Request):
         dispatch["pinterest"] = await publish_to_pinterest(
             user.user_id, payload.content,
             image_url=payload.media_url,
+            images=payload.pinterest_images,
             board_id=payload.pinterest_board_id,
             link=payload.pinterest_link,
             title=payload.pinterest_title,

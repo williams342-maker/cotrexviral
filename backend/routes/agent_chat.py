@@ -5,10 +5,18 @@ dedicated system prompt + an isolated, persistent LLM session keyed by
 `agent-{agent_id}-{user_id}` so the conversation memory survives across
 page reloads.
 
+Follow-up chips are extracted via an inline format trick: every agent
+prompt instructs the model to append `<<FUPS>>["q1","q2","q3"]<<END>>`
+after its answer. We parse that out server-side and return a clean answer
++ chips array — so the SPA gets both in a single LLM call (~6s instead of
+the ~100s a separate meta call would take).
+
 Endpoints:
   POST /api/ai/agent/chat  body {agent_id, message}  → {answer, follow_ups}
   GET  /api/ai/agent/profile?agent_id=...            → {agent} static metadata
 """
+import json
+import re
 from typing import Optional
 
 from fastapi import HTTPException, Request
@@ -19,6 +27,49 @@ from deps import get_current_user
 from routes.ai import _llm_for_user, _gated_user
 from routes.plans import record_ai_generation
 from emergentintegrations.llm.chat import UserMessage
+
+
+# ---------------------------------------------------------------------------
+# Follow-up parsing
+# ---------------------------------------------------------------------------
+# Match either:
+#   <<FUPS>>["..."]<<END>>          — preferred sentinel form
+#   <<FUPS>>["..."]                 — graceful fallback if <<END>> was dropped
+_FUPS_RE = re.compile(
+    r"<<\s*FUPS\s*>>\s*(\[.*?\])\s*(?:<<\s*END\s*>>)?\s*$",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def _extract_followups(raw: str) -> tuple[str, list[str]]:
+    """Strip the trailing follow-up sentinel from the model's reply and
+    return (clean_answer, [fup1, fup2, fup3]).  Tolerant of malformed JSON —
+    on any parse failure we return the raw text unchanged and empty chips."""
+    if not raw:
+        return "", []
+    m = _FUPS_RE.search(raw)
+    if not m:
+        return raw.strip(), []
+    json_blob = m.group(1)
+    try:
+        chips = json.loads(json_blob)
+    except Exception:
+        return raw.strip(), []
+    if not isinstance(chips, list):
+        return raw.strip(), []
+    chips = [str(c).strip() for c in chips if str(c).strip()][:3]
+    cleaned = raw[: m.start()].rstrip()
+    return cleaned, chips
+
+
+_FUPS_INSTRUCTION = (
+    "\n\nAT THE END of every reply, on the very last line, append EXACTLY this "
+    "format (no backticks, no prose around it):\n"
+    '<<FUPS>>["next question 1","next question 2","next question 3"]<<END>>\n'
+    "Each follow-up should be phrased as a first-person request to you "
+    "(<=110 chars each), naturally extending the conversation. Never repeat a "
+    "follow-up the user already asked. Always include exactly 3."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -134,23 +185,24 @@ async def list_agents(request: Request):
 
 @api.post("/ai/agent/chat")
 async def agent_chat(payload: _ChatRequest, request: Request):
-    """Send a message to the selected agent. Returns the reply only — kept
-    to a SINGLE LLM call so we stay well inside the ingress timeout. The SPA
-    falls back to static per-agent starter prompts for follow-up chips."""
+    """Send a message to the selected agent. Single LLM call — the agent
+    appends an inline `<<FUPS>>[...]<<END>>` block which we strip + parse
+    server-side. Keeps total latency ~6s vs ~100s for a separate meta call."""
     user = await _gated_user(request)
     agent = AGENTS.get(payload.agent_id.lower())
     if not agent:
         raise HTTPException(status_code=404, detail="Unknown agent")
 
-    # Stable per-user, per-agent session id so memory persists across page
-    # reloads. The LLM provider keeps the conversation history.
     session_id = f"agent-{agent['id']}-{user.user_id}"
-    chat = await _llm_for_user(user.user_id, session_id, agent["system"])
-    answer = await chat.send_message(UserMessage(text=payload.message))
+    chat = await _llm_for_user(
+        user.user_id, session_id, agent["system"] + _FUPS_INSTRUCTION,
+    )
+    raw = await chat.send_message(UserMessage(text=payload.message))
+    answer, follow_ups = _extract_followups(raw)
 
     await record_ai_generation(user.user_id, f"agent_chat:{agent['id']}")
     return {
         "agent_id": agent["id"],
         "answer": answer,
-        "follow_ups": [],   # reserved for a future "fast follow-up" model
+        "follow_ups": follow_ups,
     }

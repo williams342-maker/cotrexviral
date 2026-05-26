@@ -1,7 +1,7 @@
 import React from 'react';
 import './App.css';
 import { HelmetProvider } from 'react-helmet-async';
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import Marketing from './pages/Marketing';
 import Agents from './pages/Agents';
 import Pricing from './pages/Pricing';
@@ -71,7 +71,8 @@ function AppRouter() {
       <Route path="/tools/:slug" element={<NicheToolPage />} />
       <Route path="/blog" element={<BlogIndex />} />
       <Route path="/blog/:slug" element={<BlogPost />} />
-      <Route path="/dashboard" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
+      <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/dashboard/agent" replace /></ProtectedRoute>} />
+      <Route path="/dashboard/overview" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
       <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
       <Route path="/auth/claim" element={<AuthClaim />} />
       <Route path="/dashboard/main" element={<ProtectedRoute><Main /></ProtectedRoute>} />

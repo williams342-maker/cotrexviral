@@ -182,6 +182,9 @@ class PublishRequest(BaseModel):
     pinterest_board_id: Optional[str] = None
     pinterest_link: Optional[str] = None
     pinterest_title: Optional[str] = None
+    # Optional carousel — Pinterest accepts up to 5 image URLs. If set,
+    # supersedes `media_url` for the Pinterest dispatcher.
+    pinterest_images: Optional[List[str]] = Field(default=None, max_length=5)
 
 
 class ScheduledUpdate(BaseModel):

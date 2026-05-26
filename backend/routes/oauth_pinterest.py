@@ -312,13 +312,26 @@ PIN_DESCRIPTION_LIMIT = 500
 
 async def publish_to_pinterest(user_id: str, text: str, *,
                                image_url: str | None = None,
+                               images: list[str] | None = None,
                                board_id: str | None = None,
                                link: str | None = None,
                                title: str | None = None) -> dict:
     """Create a Pin on the user's behalf. Returns {ok, ...} shape matching
     the other publish_to_* helpers so the scheduler dispatcher can record the
-    outcome uniformly."""
-    if not image_url:
+    outcome uniformly.
+
+    Two media modes:
+      • Single image  → media_source.source_type = "image_url"
+      • Carousel pin  → media_source.source_type = "multiple_image_urls"
+        with `items: [{url}, ...]` (Pinterest allows up to 5 carousel slides).
+    """
+    # Normalise to a single `urls` list so the downstream branching is clean.
+    urls: list[str] = []
+    if images:
+        urls = [u for u in images if u][:5]
+    if not urls and image_url:
+        urls = [image_url]
+    if not urls:
         return {"ok": False, "reason": "pinterest_requires_image_url"}
     if not board_id:
         return {"ok": False, "reason": "pinterest_requires_board_id"}
@@ -327,16 +340,22 @@ async def publish_to_pinterest(user_id: str, text: str, *,
     if not token:
         return {"ok": False, "reason": "not_connected"}
 
-    # Pinterest's description cap is 500 chars — truncate gracefully so a
-    # long AI-generated caption doesn't 400 the whole publish.
     description = (text or "")[:PIN_DESCRIPTION_LIMIT]
     pin_title = (title or text or "Pin")[:100] if text else "Pin"
+
+    if len(urls) > 1:
+        media_source = {
+            "source_type": "multiple_image_urls",
+            "items": [{"url": u} for u in urls],
+        }
+    else:
+        media_source = {"source_type": "image_url", "url": urls[0]}
 
     body = {
         "board_id": board_id,
         "title": pin_title,
         "description": description,
-        "media_source": {"source_type": "image_url", "url": image_url},
+        "media_source": media_source,
     }
     if link:
         body["link"] = link
@@ -364,4 +383,44 @@ async def publish_to_pinterest(user_id: str, text: str, *,
         "ok": True,
         "pin_id": pin.get("id"),
         "permalink": pin.get("link") or f"https://www.pinterest.com/pin/{pin.get('id')}",
+        "carousel_slides": len(urls) if len(urls) > 1 else None,
+    }
+
+
+# --- Pinterest analytics ----------------------------------------------------
+
+async def fetch_pinterest_pin_metrics(user_id: str, pin_id: str) -> dict | None:
+    """Fetch per-pin analytics. Returns
+        {impressions, saves, clicks, outbound_clicks, fetched_at}
+    or None if the call fails. Used by the analytics scheduler to keep
+    metric snapshots fresh on the Posts page."""
+    token = await get_fresh_pinterest_token(user_id)
+    if not token:
+        return None
+    end = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    start = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
+    params = {
+        "start_date": start,
+        "end_date": end,
+        "metric_types": "IMPRESSION,SAVE,PIN_CLICK,OUTBOUND_CLICK",
+    }
+    async with httpx.AsyncClient(timeout=20) as cli:
+        r = await cli.get(
+            f"{PINTEREST_API_BASE}/v5/pins/{pin_id}/analytics",
+            headers={"Authorization": f"Bearer {token}"},
+            params=params,
+        )
+    if r.status_code != 200:
+        logger.info("Pinterest analytics %s for pin %s: %s",
+                    r.status_code, pin_id, r.text[:200])
+        return None
+    data = r.json() or {}
+    # API returns {"all": {"summary_metrics": {"IMPRESSION":..., ...}}}
+    summary = ((data.get("all") or {}).get("summary_metrics")) or {}
+    return {
+        "impressions": int(summary.get("IMPRESSION") or 0),
+        "saves": int(summary.get("SAVE") or 0),
+        "clicks": int(summary.get("PIN_CLICK") or 0),
+        "outbound_clicks": int(summary.get("OUTBOUND_CLICK") or 0),
+        "fetched_at": datetime.now(timezone.utc),
     }
