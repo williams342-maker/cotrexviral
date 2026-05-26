@@ -1,12 +1,13 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Sparkles, Search, Radar, Share2, Send, Inbox, FileText, LogOut, ChevronRight, Wand2, LifeBuoy, ShieldCheck, Users as UsersIcon, Ticket as TicketIcon, History, Megaphone, Activity, TrendingUp, Calendar, Webhook, Settings as SettingsIcon, User as UserIcon, Map as MapIcon } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Search, Radar, Share2, Send, Inbox, FileText, LogOut, ChevronRight, Wand2, LifeBuoy, ShieldCheck, Users as UsersIcon, Ticket as TicketIcon, History, Megaphone, Activity, TrendingUp, Calendar, Webhook, Settings as SettingsIcon, User as UserIcon, Map as MapIcon, Bot } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ImpersonateBanner from './ImpersonateBanner';
 import BroadcastBanner from './BroadcastBanner';
 
 const items = [
   { to: '/dashboard', label: 'Overview', icon: LayoutDashboard, exact: true },
+  { to: '/dashboard/agent', label: 'Agents', icon: Bot },
   { to: '/dashboard/main', label: 'Activity', icon: Activity },
   { to: '/dashboard/performance', label: 'Performance', icon: TrendingUp },
   { to: '/dashboard/calendar', label: 'Calendar', icon: Calendar },

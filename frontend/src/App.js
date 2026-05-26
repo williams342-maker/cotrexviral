@@ -26,6 +26,7 @@ import Leads from './pages/dashboard/Leads';
 import Studio from './pages/dashboard/Studio';
 import Help from './pages/dashboard/Help';
 import AccountSettings from './pages/dashboard/AccountSettings';
+import AgentWorkspace from './pages/dashboard/AgentWorkspace';
 import Main from './pages/dashboard/Main';
 import Performance from './pages/dashboard/Performance';
 import MarketingCalendar from './pages/dashboard/MarketingCalendar';
@@ -85,6 +86,8 @@ function AppRouter() {
       <Route path="/dashboard/posts" element={<ProtectedRoute><Posts /></ProtectedRoute>} />
       <Route path="/dashboard/leads" element={<ProtectedRoute><Leads /></ProtectedRoute>} />
       <Route path="/dashboard/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
+      <Route path="/dashboard/agent" element={<ProtectedRoute><AgentWorkspace /></ProtectedRoute>} />
+      <Route path="/dashboard/agent/:agentId" element={<ProtectedRoute><AgentWorkspace /></ProtectedRoute>} />
       <Route path="/dashboard/settings/account" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute admin><AdminOverview /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute admin><AdminUsers /></ProtectedRoute>} />

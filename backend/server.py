@@ -41,6 +41,7 @@ from routes import (  # noqa: F401
     oauth_meta,      # Facebook + Instagram OAuth (shared Meta app)
     oauth_pinterest, # Pinterest API v5 OAuth + publish
     password_auth,   # Email + password login + reset (alongside Google Auth)
+    agent_chat,      # In-dashboard per-agent chat (Nova/Sam/Kai/Angela)
 )
 
 
