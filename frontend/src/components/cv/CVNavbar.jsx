@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Menu, X, ArrowUpRight, LayoutDashboard } from 'lucide-react';
 import CVLogo from './CVLogo';
+import AuthModal from '../AuthModal';
 import { useAuth } from '../../context/AuthContext';
 
 const links = [
@@ -16,18 +17,21 @@ const links = [
 const CVNavbar = ({ onGetStarted }) => {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
   const navigate = useNavigate();
   const { user, login } = useAuth();
 
+  const openAuth = () => setAuthOpen(true);
+
   // If parent didn't wire a real handler, fall back to auth-aware default:
-  // logged-in users → /dashboard, logged-out → Emergent Google Auth.
+  // logged-in users → /dashboard, logged-out → auth modal.
   const handleCTA = () => {
     if (typeof onGetStarted === 'function') {
       onGetStarted();
       return;
     }
     if (user) navigate('/dashboard');
-    else login();
+    else openAuth();
   };
 
   useEffect(() => {
@@ -98,7 +102,7 @@ const CVNavbar = ({ onGetStarted }) => {
               </button>
             ) : (
               <button
-                onClick={login}
+                onClick={openAuth}
                 className="hidden sm:inline-flex text-[13px] font-medium text-zinc-300 hover:text-white px-3 h-9 rounded-lg transition-colors"
                 data-testid="cv-nav-login"
               >
@@ -141,7 +145,7 @@ const CVNavbar = ({ onGetStarted }) => {
               </a>
             ))}
             <button
-              onClick={() => { setOpen(false); user ? navigate('/dashboard') : login(); }}
+              onClick={() => { setOpen(false); user ? navigate('/dashboard') : openAuth(); }}
               className="px-3 py-3 rounded-xl text-[14px] font-medium text-zinc-300 hover:bg-white/5 hover:text-white text-left"
             >
               {user ? 'Dashboard' : 'Login'}
@@ -149,6 +153,7 @@ const CVNavbar = ({ onGetStarted }) => {
           </motion.div>
         )}
       </div>
+      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
     </motion.header>
   );
 };

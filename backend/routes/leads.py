@@ -22,9 +22,10 @@ async def create_lead(payload: LeadCreate, request: Request):
     await db.leads.insert_one(lead_doc)
 
     # Auto-create a user account for this lead (if email provided and not
-    # already a registered user) — so they can claim it via the magic link
-    # in their auto-reply email without ever needing Google Auth.
+    # already a registered user) — so they can sign in with email + temp
+    # password OR via the magic link in their auto-reply email.
     magic_link_url = None
+    temp_password = None
     if lead.email and not user_id:
         try:
             existing = await db.users.find_one({"email": lead.email.lower()}, {"_id": 0})
@@ -46,7 +47,14 @@ async def create_lead(payload: LeadCreate, request: Request):
                     "created_via": "lead_form",
                     "lead_agent": lead.agent_id,
                 })
-            # Issue a single-use magic link the auto-reply email can include.
+            # Generate a temp password — emailed separately (see send_temp_password_email
+            # below). The user can sign in with email + temp pw and will be
+            # forced to set their own password on first login.
+            from routes.password_auth import generate_temp_password, _set_user_password
+            temp_password = generate_temp_password()
+            await _set_user_password(new_user_id, temp_password,
+                                     require_change_on_next_login=True)
+            # Also issue a magic link as a backup (one-click option in the email).
             from routes.magic_link import issue_magic_link
             magic_link_url = await issue_magic_link(new_user_id, lead.email, purpose="lead_claim")
         except Exception:
@@ -55,7 +63,10 @@ async def create_lead(payload: LeadCreate, request: Request):
     # Fire the two lifecycle emails in background. Either failure must NOT
     # break the form submission — leads are persisted regardless.
     try:
-        from routes.email import send_lead_admin_notification, send_lead_auto_reply, fire
+        from routes.email import (
+            send_lead_admin_notification, send_lead_auto_reply,
+            send_temp_password_email, fire,
+        )
         if LEADS_NOTIFY_EMAILS:
             fire(send_lead_admin_notification(lead_doc, LEADS_NOTIFY_EMAILS))
         else:
@@ -64,6 +75,15 @@ async def create_lead(payload: LeadCreate, request: Request):
                 "to receive new-lead alerts.",
             )
         fire(send_lead_auto_reply(lead_doc, magic_link=magic_link_url))
+        # Temp password sent as a SEPARATE email so the welcome message stays
+        # personable and the credentials email is a clear "save this" signal.
+        if temp_password and lead.email:
+            fire(send_temp_password_email(
+                to=lead.email,
+                name=lead.name or lead.email.split("@")[0],
+                temp_password=temp_password,
+                reason="lead_form",
+            ))
     except Exception:
         logger.exception("Failed to schedule lead emails (lead is still saved)")
 

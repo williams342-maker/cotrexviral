@@ -560,6 +560,56 @@ async def send_lead_auto_reply(lead: dict, magic_link: Optional[str] = None):
                      cta_url=magic_link or None),
     )
 
+async def send_temp_password_email(to: str, name: str, temp_password: str,
+                                   reason: str = "lead_form"):
+    """Sent when a user is auto-created from the lead form (or requests a
+    password reset). Contains the plaintext temp password + a CTA to /login.
+
+    The `reason` parameter controls the headline copy:
+      • "lead_form" → "Welcome to CortexViral — your account is ready"
+      • "reset"     → "Your CortexViral password has been reset"
+      • "admin"     → "Your CortexViral account has been created by an admin"
+    """
+    first = (name or "there").split()[0]
+    login_url = f"{PUBLIC_SITE_URL}/login"
+    is_reset = reason == "reset"
+    headline = (
+        "Your CortexViral password has been reset"
+        if is_reset
+        else "Welcome to CortexViral — your account is ready"
+    )
+    subj = headline
+    body = f"""
+    <p>Hey <strong>{first}</strong>,</p>
+    <p>{
+        'You requested a password reset. Use the temporary credentials below to sign in.'
+        if is_reset
+        else "Thanks for reaching out — we've set up your CortexViral account so you can dive right in."
+    }</p>
+    <table style="margin:18px 0;border-collapse:collapse;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:14px;font-size:13.5px">
+      <tr><td style="padding:8px 14px;color:#52525b">Username (email):</td>
+          <td style="padding:8px 14px;color:#18181b;font-family:monospace"><strong>{to}</strong></td></tr>
+      <tr><td style="padding:8px 14px;color:#52525b">Temporary password:</td>
+          <td style="padding:8px 14px;color:#7c3aed;font-family:monospace;font-size:15px"><strong>{temp_password}</strong></td></tr>
+    </table>
+    <p style="background:#fff7ed;border:1px solid #fed7aa;padding:12px 16px;border-radius:8px;color:#9a3412;font-size:13px">
+      🔒 <strong>For security</strong>, you'll be asked to set your own password the first time you log in. This temporary password works only for that initial sign-in.
+    </p>
+    <p style="color:#71717a;font-size:13.5px">Prefer one-click sign-in? You can use your Google account with the same email from the login page.</p>
+    <p style="color:#71717a;font-size:13.5px">— The CortexViral team</p>
+    """
+    return await send_email(
+        to=to, subject=subj, tags=["temp_password", reason],
+        html=_layout(
+            "Sign in to your account",
+            body,
+            cta_label="Sign in to CortexViral",
+            cta_url=login_url,
+        ),
+    )
+
+
+
 
 # -----------------------------------------------------------------------------
 # Background-task wrappers — for fire-and-forget from sync code paths.
