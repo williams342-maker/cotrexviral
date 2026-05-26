@@ -48,10 +48,15 @@ async def create_session(request: Request, response: Response):
 
     if existing:
         user_id = existing["user_id"]
-        await db.users.update_one(
-            {"user_id": user_id},
-            {"$set": {"name": name, "picture": picture, "is_admin": is_admin_flag or existing.get("is_admin", False)}},
-        )
+        was_paused = existing.get("status") == "paused"
+        update_set = {"name": name, "picture": picture,
+                      "is_admin": is_admin_flag or existing.get("is_admin", False)}
+        update_doc = {"$set": update_set}
+        if was_paused:
+            update_set["status"] = "active"
+            update_set["reactivated_at"] = datetime.now(timezone.utc)
+            update_doc["$unset"] = {"paused_at": "", "pause_reason": ""}
+        await db.users.update_one({"user_id": user_id}, update_doc)
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
         await db.users.insert_one(

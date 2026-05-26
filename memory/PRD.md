@@ -35,6 +35,32 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 36) **🔐 Sign-out-everywhere + ⏸️ Pause account + 📧 Password-changed email**
+  - **Sessions management** — three new endpoints on `routes/account.py`:
+    - `GET /api/account/sessions` returns `{total, others, current:{created_at,expires_at}}` so the dashboard can show "You're signed in on N other devices".
+    - `POST /api/account/sessions/revoke-others` deletes every `user_sessions` doc for the user EXCEPT the one matching the calling cookie/bearer — keeps the current device alive after a stolen-laptop scare.
+    - `POST /api/account/sessions/revoke-all` deletes all sessions including the caller's and clears the cookie. SPA redirects to `/` on success.
+  - **Pause account (soft-delete)** — `POST /api/account/pause` body `{reason?}`:
+    - Sets `users.status = "paused"` + persists `paused_at` and (optional) `pause_reason`. **No data is deleted.**
+    - Deletes every active session for the user → all devices are signed out.
+    - Fires `send_account_paused_email` (fire-and-forget) explaining "sign in any time to come back".
+    - **Auto-reactivation** wired into all three login paths (`routes/auth.create_session`, `routes/password_auth.password_login`, `routes/magic_link.claim_magic_link`): if `status == "paused"` at login time, we flip it back to `"active"`, persist `reactivated_at`, and `$unset` the pause fields. The password-login response includes `reactivated: true` so the frontend can show a "Welcome back" toast.
+    - `suspended` status remains a hard block (admin action) — only `paused` self-reactivates.
+  - **Password-changed security email** — new `send_password_changed_email` template:
+    - Fired from `_notify_password_changed()` after **every** successful `password/change` or `password/set-initial` call (NOT on `request-reset` since that flow already emails the new temp password).
+    - Includes the timestamp, IP, and truncated User-Agent so the user can verify it was them.
+    - Bold orange callout: *"If this wasn't you, your account may be compromised — reset your password immediately."*
+    - CTA → `/dashboard/settings/account` for a quick lockdown.
+  - **Frontend (`AccountSettings.jsx`)**:
+    - New **Active sessions** card under Password — cyan monitor icon, dynamic "N active session" label, "Sign out other devices" (disabled when others=0) + "Sign out everywhere" rose button (with a `window.confirm` since it logs out the current tab).
+    - New **Pause my account** amber card in Danger zone, above Delete account — opens `ConfirmPauseModal` with optional reason textarea. On confirm: pause API call → toast → redirect to `/`.
+  - **8 new pytest cases** (`test_account_sessions_and_pause.py`):
+    - `TestSessionsManagement` (4): auth required · list returns counts · revoke-others kills only extras + keeps current · revoke-all kills every session.
+    - `TestPauseAccount` (3): auth required · pause flips status + clears sessions + preserves data · password login auto-reactivates a paused user (sets `reactivated: true` flag, clears `paused_at`).
+    - `TestPasswordChangedEmail` (1): full change-password roundtrip writes a `password_changed`-tagged row into `email_log`.
+  - **All 35 related-area tests still pass** (password_auth, account_delete, magic_link).
+  - Screenshot-verified end-to-end on `/dashboard/settings/account`.
+
 - 2026-02-26 (part 35) **📘 Facebook + 📸 Instagram OAuth scaffold (shared Meta app)**
   - **New `routes/oauth_meta.py`** — single module handling BOTH providers because they share the same Meta developer app and the same `/dialog/oauth` authorize endpoint. Only the scope set differs.
     - **Facebook scopes**: `public_profile`, `email`, `pages_show_list`, `pages_manage_posts`, `pages_read_engagement` — minimum to publish to a user's Facebook Page feed.

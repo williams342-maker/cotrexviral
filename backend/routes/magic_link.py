@@ -89,6 +89,15 @@ async def claim_magic_link(token: str, request: Request, response: Response):
     if user.get("status") == "suspended":
         raise HTTPException(status_code=403, detail="Account is suspended")
 
+    # Magic-link claim also reactivates a paused account.
+    if user.get("status") == "paused":
+        await db.users.update_one(
+            {"user_id": user["user_id"]},
+            {"$set": {"status": "active",
+                      "reactivated_at": datetime.now(timezone.utc)},
+             "$unset": {"paused_at": "", "pause_reason": ""}},
+        )
+
     # Mint a session_token shaped identically to the Emergent Google Auth one
     # so the rest of the app (deps.get_current_user, etc.) sees no difference.
     session_token = secrets.token_urlsafe(48)

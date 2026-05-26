@@ -103,6 +103,28 @@ async def _set_user_password(user_id: str, new_plain: str, *,
     )
 
 
+async def _notify_password_changed(user_id: str, request: Request):
+    """Fire-and-forget security email after a successful in-dashboard password
+    change. Skipped silently if the user doc / email can't be found."""
+    try:
+        from routes.email import send_password_changed_email, fire
+        u = await db.users.find_one(
+            {"user_id": user_id},
+            {"_id": 0, "email": 1, "name": 1},
+        )
+        if not u or not u.get("email"):
+            return
+        ua = request.headers.get("user-agent", "")
+        fire(send_password_changed_email(
+            to=u["email"],
+            name=u.get("name") or u["email"].split("@")[0],
+            ip=_client_ip(request),
+            user_agent=ua,
+        ))
+    except Exception:
+        logger.exception("Failed to schedule password-changed email")
+
+
 async def issue_password_session(user_id: str, response: Response) -> str:
     """Mint a session_token + set the cookie. Mirrors what
     routes.magic_link.exchange_magic_link does so the rest of the app
@@ -159,7 +181,15 @@ async def password_login(payload: _LoginRequest, request: Request, response: Res
         await _record_failed_attempt(ip, email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    # Success
+    # Success — auto-reactivate paused accounts on successful login.
+    was_paused = user.get("status") == "paused"
+    if was_paused:
+        await db.users.update_one(
+            {"user_id": user["user_id"]},
+            {"$set": {"status": "active",
+                      "reactivated_at": datetime.now(timezone.utc)},
+             "$unset": {"paused_at": "", "pause_reason": ""}},
+        )
     await _clear_attempts(ip, email)
     await issue_password_session(user["user_id"], response)
     return {
@@ -168,6 +198,7 @@ async def password_login(payload: _LoginRequest, request: Request, response: Res
         "email": email,
         "name": user.get("name"),
         "must_change_password": bool(user.get("must_change_password")),
+        "reactivated": was_paused,
     }
 
 
@@ -227,6 +258,7 @@ async def password_set_initial(payload: _SetInitialPayload, request: Request):
         raise HTTPException(status_code=400, detail="No pending password change required")
     await _set_user_password(user.user_id, payload.new_password,
                              require_change_on_next_login=False)
+    await _notify_password_changed(user.user_id, request)
     return {"ok": True}
 
 
@@ -249,6 +281,7 @@ async def password_change(payload: _ChangePayload, request: Request):
             raise HTTPException(status_code=401, detail="Current password is incorrect")
     await _set_user_password(user.user_id, payload.new_password,
                              require_change_on_next_login=False)
+    await _notify_password_changed(user.user_id, request)
     return {"ok": True}
 
 

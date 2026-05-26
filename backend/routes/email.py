@@ -609,6 +609,78 @@ async def send_temp_password_email(to: str, name: str, temp_password: str,
     )
 
 
+async def send_password_changed_email(to: str, name: str,
+                                      ip: Optional[str] = None,
+                                      user_agent: Optional[str] = None):
+    """Fired whenever a user successfully changes their password from inside
+    the dashboard. Security-best-practice: if it wasn't them, they need to
+    know immediately so they can reset and lock the attacker out.
+    """
+    first = (name or "there").split()[0]
+    when = datetime.now(timezone.utc).strftime("%b %d, %Y at %H:%M UTC")
+    meta_rows = ""
+    if ip:
+        meta_rows += (
+            f'<tr><td style="padding:6px 14px;color:#52525b;font-size:12.5px">IP address:</td>'
+            f'<td style="padding:6px 14px;color:#18181b;font-family:monospace;font-size:12.5px">{ip}</td></tr>'
+        )
+    if user_agent:
+        ua = user_agent[:160]
+        meta_rows += (
+            f'<tr><td style="padding:6px 14px;color:#52525b;font-size:12.5px">Device:</td>'
+            f'<td style="padding:6px 14px;color:#18181b;font-size:12.5px">{ua}</td></tr>'
+        )
+    meta_block = (
+        f'<table style="margin:14px 0;border-collapse:collapse;background:#fafafa;'
+        f'border:1px solid #e4e4e7;border-radius:8px">'
+        f'<tr><td style="padding:6px 14px;color:#52525b;font-size:12.5px">When:</td>'
+        f'<td style="padding:6px 14px;color:#18181b;font-size:12.5px">{when}</td></tr>'
+        f"{meta_rows}</table>"
+    )
+    subj = "Your CortexViral password was changed"
+    body = f"""
+    <p>Hey <strong>{first}</strong>,</p>
+    <p>This is a confirmation that your CortexViral password was just changed.</p>
+    {meta_block}
+    <p style="background:#fff7ed;border:1px solid #fed7aa;padding:12px 16px;border-radius:8px;color:#9a3412;font-size:13px">
+      🔒 <strong>If this wasn't you</strong>, your account may be compromised. Reset your password immediately and contact us at <a href="mailto:support@cortexviral.com" style="color:#9a3412">support@cortexviral.com</a>.
+    </p>
+    <p style="color:#71717a;font-size:13.5px">— The CortexViral team</p>
+    """
+    return await send_email(
+        to=to, subject=subj, tags=["password_changed", "security"],
+        html=_layout(
+            "Password changed",
+            body,
+            cta_label="Review account",
+            cta_url=f"{PUBLIC_SITE_URL}/dashboard/settings/account",
+        ),
+    )
+
+
+async def send_account_paused_email(to: str, name: str):
+    """Fired when the user pauses their own account (soft-delete). Tells them
+    exactly how to come back (just log in again)."""
+    first = (name or "there").split()[0]
+    subj = "Your CortexViral account is paused — see you soon"
+    body = f"""
+    <p>Hey <strong>{first}</strong>,</p>
+    <p>Your CortexViral account is now <strong>paused</strong>. We've signed you out everywhere and stopped any new emails.</p>
+    <p><strong>Nothing is deleted.</strong> Your posts, scheduled content, connected channels, and brand details are all safe.</p>
+    <p>Whenever you're ready to come back, just sign in with the same email and your account will be reactivated automatically.</p>
+    <p style="color:#71717a;font-size:13.5px">If you'd rather permanently delete your account instead, you can do that from the same page.<br>— The CortexViral team</p>
+    """
+    return await send_email(
+        to=to, subject=subj, tags=["account_paused"],
+        html=_layout(
+            "Account paused",
+            body,
+            cta_label="Sign in to reactivate",
+            cta_url=f"{PUBLIC_SITE_URL}/login",
+        ),
+    )
+
+
 
 
 # -----------------------------------------------------------------------------

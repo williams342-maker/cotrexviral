@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Loader2, Trash2, ShieldAlert, User as UserIcon, Mail, Crown, Sparkles, Gift, ExternalLink, KeyRound, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Loader2, Trash2, ShieldAlert, User as UserIcon, Mail, Crown, Sparkles, Gift, ExternalLink, KeyRound, Eye, EyeOff, AlertCircle, CheckCircle2, LogOut, PauseCircle, Monitor } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useAuth, API } from '../../context/AuthContext';
 import { useToast } from '../../hooks/use-toast';
@@ -15,6 +15,7 @@ const AccountSettings = () => {
   const { user, logout } = useAuth();
   const { toast } = useToast();
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showPause, setShowPause] = useState(false);
 
   if (!user) {
     return (
@@ -90,6 +91,9 @@ const AccountSettings = () => {
       {/* Password */}
       <PasswordSection />
 
+      {/* Active sessions */}
+      <SessionsSection />
+
       {/* Privacy / data export */}
       <section className="mb-10" data-testid="account-privacy-section">
         <SectionHeader icon={ShieldAlert} label="Privacy" />
@@ -115,6 +119,31 @@ const AccountSettings = () => {
       {/* Danger zone */}
       <section data-testid="account-danger-zone">
         <SectionHeader icon={ShieldAlert} label="Danger zone" tone="rose" />
+
+        {/* Pause account (reversible) */}
+        <div className="rounded-2xl p-5 border border-amber-500/30 bg-amber-500/[0.04] mb-3" data-testid="account-pause-card">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0">
+              <PauseCircle className="text-amber-300" size={20} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[14.5px] font-semibold text-white">Pause my account</div>
+              <p className="text-[13px] text-zinc-400 mt-0.5 leading-relaxed">
+                Take a break. We'll sign you out of every device and stop sending emails. <strong className="text-amber-300">Nothing is deleted</strong> — sign back in any time to pick up where you left off.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPause(true)}
+              data-testid="account-pause-trigger"
+              className="bg-amber-500 hover:bg-amber-400 text-zinc-950 text-[12.5px] font-semibold px-4 h-10 rounded-lg inline-flex items-center gap-1.5 shrink-0"
+            >
+              <PauseCircle size={13} /> Pause account
+            </button>
+          </div>
+        </div>
+
+        {/* Delete account (irreversible) */}
         <div className="rounded-2xl p-5 border border-rose-500/30 bg-rose-500/[0.04]">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center shrink-0">
@@ -145,6 +174,17 @@ const AccountSettings = () => {
           onConfirmed={async () => {
             try { await logout(); } catch (e) { /* server already cleared session */ }
             toast({ title: 'Account deleted', description: 'All your data has been removed. Goodbye for now.' });
+            window.location.href = '/';
+          }}
+        />
+      )}
+
+      {showPause && (
+        <ConfirmPauseModal
+          email={user.email}
+          onClose={() => setShowPause(false)}
+          onConfirmed={async () => {
+            toast({ title: 'Account paused', description: 'Sign in any time to come back.' });
             window.location.href = '/';
           }}
         />
@@ -459,6 +499,176 @@ const ConfirmDeleteModal = ({ email, onClose, onConfirmed }) => {
             >
               {busy ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
               {busy ? 'Deleting…' : 'Delete forever'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const SessionsSection = () => {
+  const { toast } = useToast();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await axios.get(`${API}/account/sessions`, { withCredentials: true });
+      setData(r.data);
+    } catch (e) {
+      setData(null);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const revokeOthers = async () => {
+    if (busy) return;
+    if (!data || data.others < 1) return;
+    setBusy(true);
+    try {
+      const r = await axios.post(`${API}/account/sessions/revoke-others`, {}, { withCredentials: true });
+      toast({
+        title: `Signed out of ${r.data.revoked} other device${r.data.revoked === 1 ? '' : 's'}`,
+        description: 'You\'re still signed in on this device.',
+      });
+      load();
+    } catch (e) {
+      toast({ title: 'Could not sign out other sessions', description: e.response?.data?.detail || e.message });
+    }
+    setBusy(false);
+  };
+
+  const revokeAll = async () => {
+    if (busy) return;
+    const yes = window.confirm('Sign out of every device, including this one?');
+    if (!yes) return;
+    setBusy(true);
+    try {
+      await axios.post(`${API}/account/sessions/revoke-all`, {}, { withCredentials: true });
+      toast({ title: 'Signed out everywhere', description: 'You\'ll need to sign back in.' });
+      window.location.href = '/';
+    } catch (e) {
+      toast({ title: 'Could not sign out everywhere', description: e.response?.data?.detail || e.message });
+      setBusy(false);
+    }
+  };
+
+  const totalLabel = data
+    ? `${data.total} active session${data.total === 1 ? '' : 's'}`
+    : '—';
+
+  return (
+    <section className="mb-6" data-testid="account-sessions-section">
+      <SectionHeader icon={Monitor} label="Active sessions" />
+      <div className="cv-glass rounded-2xl p-5">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 flex items-center justify-center shrink-0">
+            <Monitor size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[15px] font-semibold text-white" data-testid="account-sessions-count">
+              {loading ? <Loader2 size={14} className="animate-spin inline" /> : totalLabel}
+            </div>
+            <div className="text-[12.5px] text-zinc-400 mt-0.5 leading-relaxed">
+              {data && data.others > 0
+                ? `You're signed in on ${data.others} other device${data.others === 1 ? '' : 's'}. Lost a laptop or phone? Sign out everywhere to lock it down.`
+                : 'This is your only active session. You\'re good.'}
+            </div>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={revokeOthers}
+              disabled={busy || loading || !data || data.others < 1}
+              data-testid="account-revoke-others"
+              className="inline-flex items-center gap-1.5 text-[12.5px] font-medium bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3.5 h-9 rounded-lg border border-white/10"
+            >
+              <LogOut size={12} /> Sign out other devices
+            </button>
+            <button
+              type="button"
+              onClick={revokeAll}
+              disabled={busy || loading}
+              data-testid="account-revoke-all"
+              className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 px-3.5 h-9 rounded-lg border border-rose-500/30 disabled:opacity-40"
+            >
+              <LogOut size={12} /> Sign out everywhere
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const ConfirmPauseModal = ({ email, onClose, onConfirmed }) => {
+  const { toast } = useToast();
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await axios.post(`${API}/account/pause`, { reason }, { withCredentials: true });
+      onConfirmed();
+    } catch (err) {
+      toast({
+        title: 'Could not pause account',
+        description: err.response?.data?.detail || err.message,
+      });
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={() => { if (!busy) onClose(); }}
+      data-testid="account-pause-modal"
+    >
+      <div
+        className="bg-zinc-950 border border-amber-500/30 rounded-3xl max-w-md w-full p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 text-amber-300 mb-1">
+          <PauseCircle size={20} />
+          <h3 className="text-lg font-semibold">Pause your account</h3>
+        </div>
+        <p className="text-[13.5px] text-zinc-400 leading-relaxed mt-2">
+          We'll sign <strong className="text-white">{email}</strong> out of every device and stop sending emails. Your posts, schedules, and connections stay intact. Sign back in any time to reactivate — no support ticket needed.
+        </p>
+        <form onSubmit={submit} className="mt-4 space-y-3">
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            placeholder="(Optional) Anything we can improve before you go?"
+            data-testid="account-pause-reason"
+            className="w-full rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-100 px-3.5 py-2.5 text-[13px] outline-none focus:border-amber-500/50 resize-none"
+          />
+          <div className="flex gap-2 justify-end pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy}
+              className="text-[13px] font-medium text-zinc-300 px-4 h-10 rounded-xl hover:bg-zinc-800/80"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              data-testid="account-pause-submit"
+              className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-zinc-950 text-[13px] font-semibold px-5 h-10 rounded-xl"
+            >
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <PauseCircle size={14} />}
+              {busy ? 'Pausing…' : 'Pause account'}
             </button>
           </div>
         </form>
