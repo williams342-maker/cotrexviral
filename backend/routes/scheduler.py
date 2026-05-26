@@ -62,6 +62,10 @@ async def _publish_due_posts_now() -> dict:
         from routes.oauth_tiktok import publish_to_tiktok
     except Exception:  # pragma: no cover
         publish_to_tiktok = None
+    try:
+        from routes.oauth_pinterest import publish_to_pinterest
+    except Exception:  # pragma: no cover
+        publish_to_pinterest = None
 
     for post in due:
         platforms = post.get("platforms") or []
@@ -81,6 +85,20 @@ async def _publish_due_posts_now() -> dict:
             )
             if not res.get("ok"):
                 logger.warning("scheduler: tiktok dispatch failed for %s: %s", post["id"], res.get("reason"))
+        if "pinterest" in platforms and publish_to_pinterest:
+            res = await publish_to_pinterest(
+                post["user_id"], post["content"],
+                image_url=post.get("media_url") or post.get("pinterest_image_url"),
+                board_id=post.get("pinterest_board_id"),
+                link=post.get("pinterest_link"),
+                title=post.get("pinterest_title"),
+            )
+            await db.posts.update_one(
+                {"id": post["id"]},
+                {"$set": {"dispatch.pinterest": res}},
+            )
+            if not res.get("ok"):
+                logger.warning("scheduler: pinterest dispatch failed for %s: %s", post["id"], res.get("reason"))
 
     return {"due": len(due), "published": result.modified_count, "ids": ids}
 

@@ -178,6 +178,10 @@ class PublishRequest(BaseModel):
     media_url: Optional[str] = None
     scheduled_at: Optional[datetime] = None
     repeat_weeks: Optional[int] = Field(None, ge=2, le=12)
+    # Pinterest-specific (only used when "pinterest" is in platforms):
+    pinterest_board_id: Optional[str] = None
+    pinterest_link: Optional[str] = None
+    pinterest_title: Optional[str] = None
 
 
 class ScheduledUpdate(BaseModel):

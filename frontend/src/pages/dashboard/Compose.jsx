@@ -32,6 +32,35 @@ const Compose = () => {
   const [aiTimeMeta, setAiTimeMeta] = useState(null); // { platform, day, hour }
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [repeatWeeks, setRepeatWeeks] = useState(4);
+  // Pinterest-specific publishing state. Surfaces only when Pinterest is selected.
+  const [pinterestBoards, setPinterestBoards] = useState([]);
+  const [boardsLoading, setBoardsLoading] = useState(false);
+  const [pinBoardId, setPinBoardId] = useState('');
+  const [pinImageUrl, setPinImageUrl] = useState('');
+  const [pinLink, setPinLink] = useState('');
+  const [pinTitle, setPinTitle] = useState('');
+
+  const pinterestSelected = !!selected.pinterest;
+
+  // Fetch the user's boards the first time Pinterest is selected, then cache.
+  useEffect(() => {
+    if (!pinterestSelected || pinterestBoards.length > 0 || boardsLoading) return;
+    setBoardsLoading(true);
+    axios.get(`${API}/oauth/pinterest/boards`, { withCredentials: true })
+      .then((r) => {
+        setPinterestBoards(r.data.boards || []);
+        if ((r.data.boards || []).length && !pinBoardId) {
+          setPinBoardId(r.data.boards[0].id);
+        }
+      })
+      .catch((e) => {
+        toast({
+          title: 'Could not load Pinterest boards',
+          description: e.response?.data?.detail || e.message,
+        });
+      })
+      .finally(() => setBoardsLoading(false));
+  }, [pinterestSelected]);
 
   useEffect(() => {
     axios.get(`${API}/channels`, { withCredentials: true })
@@ -115,6 +144,22 @@ const Compose = () => {
         if (repeatWeekly && repeatWeeks > 1) {
           payload.repeat_weeks = Math.min(12, Math.max(2, parseInt(repeatWeeks, 10) || 2));
         }
+      }
+      if (platforms.includes('pinterest')) {
+        if (!pinImageUrl.trim()) {
+          toast({ title: 'Pinterest needs an image URL', description: 'Pinterest requires an image for every Pin.' });
+          setPublishing(false);
+          return;
+        }
+        if (!pinBoardId) {
+          toast({ title: 'Pick a Pinterest board' });
+          setPublishing(false);
+          return;
+        }
+        payload.media_url = pinImageUrl.trim();
+        payload.pinterest_board_id = pinBoardId;
+        if (pinLink.trim()) payload.pinterest_link = pinLink.trim();
+        if (pinTitle.trim()) payload.pinterest_title = pinTitle.trim();
       }
       const r = await axios.post(`${API}/channels/publish`, payload, { withCredentials: true });
       const isScheduled = r.data.status === 'scheduled';
@@ -230,6 +275,66 @@ const Compose = () => {
             {publishing ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
             {publishing ? (scheduleAt ? 'Scheduling…' : 'Publishing…') : (scheduleAt ? 'Schedule' : 'Publish now')}
           </button>
+
+          {pinterestSelected && (
+            <div className="mt-4 rounded-2xl border border-rose-100 bg-rose-50/40 p-3.5 space-y-2.5" data-testid="compose-pinterest-block">
+              <div className="text-[11px] uppercase tracking-wider text-rose-700 font-bold">📌 Pinterest details</div>
+              <div>
+                <label className="text-[11px] font-medium text-neutral-600 mb-1 block">Board *</label>
+                {boardsLoading ? (
+                  <div className="text-[12px] text-neutral-500 inline-flex items-center gap-1.5">
+                    <Loader2 size={11} className="animate-spin" /> Loading your boards…
+                  </div>
+                ) : pinterestBoards.length === 0 ? (
+                  <div className="text-[12px] text-rose-700">No boards found on your Pinterest account.</div>
+                ) : (
+                  <select
+                    value={pinBoardId}
+                    onChange={(e) => setPinBoardId(e.target.value)}
+                    data-testid="compose-pin-board"
+                    className="w-full h-9 rounded-lg border border-neutral-300 bg-white px-2 text-[12.5px]"
+                  >
+                    {pinterestBoards.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-neutral-600 mb-1 block">Image URL *</label>
+                <Input
+                  type="url"
+                  value={pinImageUrl}
+                  onChange={(e) => setPinImageUrl(e.target.value)}
+                  placeholder="https://…/image.jpg"
+                  data-testid="compose-pin-image"
+                  className="h-9 rounded-lg border-neutral-300 text-[12.5px]"
+                />
+                <div className="text-[10.5px] text-neutral-500 mt-1">Required by Pinterest. Direct URL to a JPG/PNG.</div>
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-neutral-600 mb-1 block">Destination link <span className="text-neutral-400">(optional)</span></label>
+                <Input
+                  type="url"
+                  value={pinLink}
+                  onChange={(e) => setPinLink(e.target.value)}
+                  placeholder="https://yourshop.com/product"
+                  data-testid="compose-pin-link"
+                  className="h-9 rounded-lg border-neutral-300 text-[12.5px]"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-neutral-600 mb-1 block">Pin title <span className="text-neutral-400">(optional, ≤ 100 chars)</span></label>
+                <Input
+                  value={pinTitle}
+                  onChange={(e) => setPinTitle(e.target.value.slice(0, 100))}
+                  placeholder="Short, scroll-stopping title"
+                  data-testid="compose-pin-title"
+                  className="h-9 rounded-lg border-neutral-300 text-[12.5px]"
+                />
+              </div>
+            </div>
+          )}
           <div className="mt-3">
             <div className="flex items-center justify-between mb-1">
               <label className="text-[11.5px] font-medium text-neutral-600 block">Schedule for later (optional)</label>

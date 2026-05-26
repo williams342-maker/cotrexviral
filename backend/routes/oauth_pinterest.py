@@ -269,3 +269,99 @@ async def get_fresh_pinterest_token(user_id: str) -> str | None:
         }},
     )
     return new_token
+
+
+# --- /boards: list the connected user's boards (for the Compose picker) ------
+
+@api.get("/oauth/pinterest/boards")
+async def pinterest_boards(request: Request):
+    """Return the connected user's boards. Used by the Compose page to let
+    the user pick a destination when publishing a Pin."""
+    user = await get_current_user(request)
+    token = await get_fresh_pinterest_token(user.user_id)
+    if not token:
+        raise HTTPException(status_code=400, detail="Pinterest not connected")
+    async with httpx.AsyncClient(timeout=15) as cli:
+        r = await cli.get(
+            f"{PINTEREST_API_BASE}/v5/boards",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"page_size": 100},
+        )
+    if r.status_code != 200:
+        logger.warning("Pinterest /boards failed for %s: %s %s",
+                       user.user_id, r.status_code, r.text[:200])
+        raise HTTPException(status_code=502, detail="Could not fetch boards")
+    items = r.json().get("items", []) or []
+    # Slim shape — the frontend only needs id + name + privacy.
+    return {
+        "boards": [
+            {"id": b.get("id"), "name": b.get("name"), "privacy": b.get("privacy")}
+            for b in items if b.get("id") and b.get("name")
+        ],
+    }
+
+
+# --- Publish helper: create a Pin -------------------------------------------
+
+# Pinterest's POST /v5/pins requires an image. We accept image_url (URL we
+# pass through to Pinterest, who fetches it server-side). The post body needs
+# to include a `board_id` — which the user picked in Compose and we stored
+# on the post doc as `pinterest_board_id`.
+PIN_DESCRIPTION_LIMIT = 500
+
+
+async def publish_to_pinterest(user_id: str, text: str, *,
+                               image_url: str | None = None,
+                               board_id: str | None = None,
+                               link: str | None = None,
+                               title: str | None = None) -> dict:
+    """Create a Pin on the user's behalf. Returns {ok, ...} shape matching
+    the other publish_to_* helpers so the scheduler dispatcher can record the
+    outcome uniformly."""
+    if not image_url:
+        return {"ok": False, "reason": "pinterest_requires_image_url"}
+    if not board_id:
+        return {"ok": False, "reason": "pinterest_requires_board_id"}
+
+    token = await get_fresh_pinterest_token(user_id)
+    if not token:
+        return {"ok": False, "reason": "not_connected"}
+
+    # Pinterest's description cap is 500 chars — truncate gracefully so a
+    # long AI-generated caption doesn't 400 the whole publish.
+    description = (text or "")[:PIN_DESCRIPTION_LIMIT]
+    pin_title = (title or text or "Pin")[:100] if text else "Pin"
+
+    body = {
+        "board_id": board_id,
+        "title": pin_title,
+        "description": description,
+        "media_source": {"source_type": "image_url", "url": image_url},
+    }
+    if link:
+        body["link"] = link
+
+    async with httpx.AsyncClient(timeout=30) as cli:
+        r = await cli.post(
+            f"{PINTEREST_API_BASE}/v5/pins",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            json=body,
+        )
+    if r.status_code not in (200, 201):
+        logger.warning("Pinterest publish failed for %s: %s %s",
+                       user_id, r.status_code, r.text[:300])
+        return {
+            "ok": False,
+            "reason": "api_error",
+            "status": r.status_code,
+            "body": r.text[:400],
+        }
+    pin = r.json() or {}
+    return {
+        "ok": True,
+        "pin_id": pin.get("id"),
+        "permalink": pin.get("link") or f"https://www.pinterest.com/pin/{pin.get('id')}",
+    }

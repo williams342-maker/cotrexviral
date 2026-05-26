@@ -143,6 +143,10 @@ async def publish(payload: PublishRequest, request: Request):
                 "recurrence_total": payload.repeat_weeks,
                 "created_at": datetime.now(timezone.utc),
             }
+            if "pinterest" in (payload.platforms or []):
+                post["pinterest_board_id"] = payload.pinterest_board_id
+                post["pinterest_link"] = payload.pinterest_link
+                post["pinterest_title"] = payload.pinterest_title
             await db.posts.insert_one(post)
             created_posts.append(post["id"])
         return {
@@ -164,9 +168,13 @@ async def publish(payload: PublishRequest, request: Request):
         "scheduled_at": payload.scheduled_at if is_scheduled else None,
         "created_at": datetime.now(timezone.utc),
     }
+    if "pinterest" in (payload.platforms or []):
+        post["pinterest_board_id"] = payload.pinterest_board_id
+        post["pinterest_link"] = payload.pinterest_link
+        post["pinterest_title"] = payload.pinterest_title
     await db.posts.insert_one(post)
 
-    # Immediate dispatch to live APIs (currently: LinkedIn + TikTok).
+    # Immediate dispatch to live APIs (currently: LinkedIn + TikTok + Pinterest).
     # Scheduled posts are picked up by the background scheduler instead.
     dispatch = {}
     if not is_scheduled and "linkedin" in (payload.platforms or []):
@@ -176,6 +184,15 @@ async def publish(payload: PublishRequest, request: Request):
         from routes.oauth_tiktok import publish_to_tiktok  # lazy import (circular safe)
         dispatch["tiktok"] = await publish_to_tiktok(
             user.user_id, payload.content, payload.media_url,
+        )
+    if not is_scheduled and "pinterest" in (payload.platforms or []):
+        from routes.oauth_pinterest import publish_to_pinterest  # lazy import (circular safe)
+        dispatch["pinterest"] = await publish_to_pinterest(
+            user.user_id, payload.content,
+            image_url=payload.media_url,
+            board_id=payload.pinterest_board_id,
+            link=payload.pinterest_link,
+            title=payload.pinterest_title,
         )
     if dispatch:
         await db.posts.update_one({"id": post["id"]}, {"$set": {"dispatch": dispatch}})
