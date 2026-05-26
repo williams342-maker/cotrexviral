@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import Marketing from './pages/Marketing';
 import Agents from './pages/Agents';
 import Pricing from './pages/Pricing';
+import Roadmap from './pages/Roadmap';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import SitemapPage from './pages/Sitemap';
@@ -35,6 +36,7 @@ import AdminAudit from './pages/admin/AdminAudit';
 import AdminBroadcasts from './pages/admin/AdminBroadcasts';
 import AdminWebhookEvents from './pages/admin/AdminWebhookEvents';
 import AdminSettings from './pages/admin/AdminSettings';
+import AdminRoadmap from './pages/admin/AdminRoadmap';
 import Onboarding from './pages/Onboarding';
 import AuthClaim from './pages/AuthClaim';
 import { Toaster } from './components/ui/toaster';
@@ -55,6 +57,7 @@ function AppRouter() {
       <Route path="/marketing" element={<Marketing />} />
       <Route path="/agents" element={<Agents />} />
       <Route path="/pricing" element={<Pricing />} />
+      <Route path="/roadmap" element={<Roadmap />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/sitemap" element={<SitemapPage />} />
@@ -90,6 +93,7 @@ function AppRouter() {
       <Route path="/admin/broadcasts" element={<ProtectedRoute admin><AdminBroadcasts /></ProtectedRoute>} />
       <Route path="/admin/webhook-events" element={<ProtectedRoute admin><AdminWebhookEvents /></ProtectedRoute>} />
       <Route path="/admin/settings" element={<ProtectedRoute admin><AdminSettings /></ProtectedRoute>} />
+      <Route path="/admin/roadmap" element={<ProtectedRoute admin><AdminRoadmap /></ProtectedRoute>} />
     </Routes>
     </>
   );

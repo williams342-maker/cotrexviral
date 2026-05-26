@@ -9,6 +9,60 @@
  */
 export const POSTS = [
   {
+    slug: 'building-an-ai-marketing-platform-2026',
+    title: 'What Building an AI Marketing Platform Actually Looks Like in 2026',
+    description: 'A three-phase blueprint for AI marketing platforms in 2026 — from MVP assistant to autonomous marketing employees. Stack, timeline, and the trade-offs nobody talks about.',
+    cluster: 'AI marketing tools',
+    date: '2026-02-26',
+    readMin: 9,
+    excerpt: 'Everyone wants an "AI marketing employee." Almost nobody ships one. Here is the honest three-phase roadmap we follow at CortexViral — what is realistic in 2-4 weeks, what takes a quarter, and what is genuinely autonomous.',
+    body: `
+      <h2>The honest 2026 reality</h2>
+      <p>An "AI marketing platform" can mean three very different products in 2026 — an assistant, an agent, or an autonomous team. Most launches mash all three into one pitch deck and ship the first one. We deliberately split the journey into three phases at CortexViral, and this post is the full breakdown.</p>
+
+      <h2>Phase 1 — The MVP assistant (2 to 4 weeks of focused work)</h2>
+      <p>The MVP is a working ChatGPT-powered marketing assistant with a basic dashboard, a content generator, and two real social automations. That is it. No analytics, no campaigns, no agents.</p>
+      <p>Recommended stack for this phase:</p>
+      <ul>
+        <li><strong>Next.js</strong> for the SPA + SEO prerender</li>
+        <li><strong>OpenAI API</strong> (GPT-class) for generation</li>
+        <li><strong>Supabase</strong> or MongoDB for persistence + auth</li>
+        <li><strong>n8n</strong> or a simple cron loop for scheduled posting</li>
+      </ul>
+      <p>If you have a tight 2–4 week timeline, ruthlessly cut the feature list to the four above. Every "wouldn't it be nice if…" added in this window pushes ship date by a week. We learned this the hard way scaffolding OAuth for five platforms before Phase 2 had even started — see our <a href="/roadmap">live roadmap</a> for what we kept and what we deferred.</p>
+
+      <h2>Phase 2 — Agent mode (one quarter of polish per feature)</h2>
+      <p>This is where the assistant stops being a tool you open and starts being a teammate that runs in the background. Six features turn an assistant into an agent:</p>
+      <ol>
+        <li><strong>Scheduled posting</strong> — not just queueing, but platform-specific peak-window optimisation.</li>
+        <li><strong>Automatic blog generation</strong> — a single keyword in, a publish-ready long-form post out.</li>
+        <li><strong>Analytics summaries</strong> — weekly digests in plain English ("Here is what worked, why, what to ship next").</li>
+        <li><strong>Email automation</strong> — lifecycle, welcome, abandoned-cart, re-engagement.</li>
+        <li><strong>AI memory</strong> — persistent recall of every post, every result, every reply.</li>
+        <li><strong>Social listening</strong> — real-time monitoring of Reddit, X, TikTok for actionable hooks.</li>
+      </ol>
+      <p>If Phase 1 was 4 weeks, expect each Phase 2 feature to take 2-4 weeks of actual production-grade work — not the rough demo you saw on Twitter. The painful part is not the LLM call. It is the queueing, retries, observability, idempotency, and bot-detection mitigation around the LLM call.</p>
+
+      <h2>Phase 3 — Autonomous marketing employees</h2>
+      <p>This is the "Enrich Labs" tier. The platform stops needing you to brief it on every campaign. You set the quarterly goal, the agents run the playbook. Six capabilities define this phase:</p>
+      <ul>
+        <li><strong>Campaign execution</strong> — brief in, multi-channel campaign out, end-to-end.</li>
+        <li><strong>Automatic A/B testing</strong> — every post auto-spawns variants; winners get scaled.</li>
+        <li><strong>Competitor monitoring</strong> — track winning hooks and growth velocity in real time.</li>
+        <li><strong>AI workflows</strong> — visual node-based automations ("if engagement drops 20%, ship 5 new hooks").</li>
+        <li><strong>Ad optimisation</strong> — auto-bid, auto-pause, creative refresh on Meta + TikTok Ads.</li>
+        <li><strong>Multi-agent system</strong> — specialist agents collaborating on every campaign.</li>
+      </ul>
+      <p>Realistic timeline: a quarter per capability, with significant infra refactors between them. Phase 3 is where you stop being a SaaS and start being a marketing department in a box.</p>
+
+      <h2>The trade-off nobody talks about</h2>
+      <p>The harder problem in 2026 is not capability — GPT-class models are good enough. The harder problem is <em>trust</em>. Autonomous marketing agents that spend ad budget and post to a million followers need explainability, audit logs, and reversible actions. We treat every agent decision the same way Stripe treats a payment: idempotent, logged, and disputable.</p>
+
+      <h2>Where CortexViral is on this curve</h2>
+      <p>We are at the end of Phase 1 — assistant is live, content generation is shipped, Pinterest + TikTok + LinkedIn publish for real, and Facebook + Instagram are queued behind the OAuth scaffold. Phase 2 starts this quarter. See the full breakdown on our <a href="/roadmap">public roadmap</a>, or try the assistant tier free on the <a href="/dashboard">dashboard</a>.</p>
+    `,
+  },
+  {
     slug: 'what-makes-content-go-viral-2026',
     title: 'What Makes Content Go Viral in 2026',
     description: 'The science of viral content in 2026: hook windows, algorithm signals, and the 7 patterns AI uses to predict what blows up.',

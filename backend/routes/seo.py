@@ -29,6 +29,7 @@ SITE_URL = os.environ.get("PUBLIC_SITE_URL", "https://cortexviral.com")
 SEO_LANDING_PATHS = [
     ("/", "1.0", "weekly"),
     ("/pricing", "0.95", "weekly"),
+    ("/roadmap", "0.8", "weekly"),
     ("/ai-tiktok-post-generator", "0.9", "weekly"),
     ("/viral-content-ideas-generator", "0.9", "weekly"),
     ("/instagram-caption-ai-generator", "0.9", "weekly"),
@@ -48,6 +49,7 @@ SEO_LANDING_PATHS = [
     ("/blog/short-form-video-scripts-that-work", "0.7", "monthly"),
     ("/blog/going-viral-as-a-small-account", "0.7", "monthly"),
     # ----- Cluster: AI marketing tools -----
+    ("/blog/building-an-ai-marketing-platform-2026", "0.7", "monthly"),
     ("/blog/ai-tools-for-viral-content-creation", "0.7", "monthly"),
     ("/blog/best-ai-tools-for-creators-2026", "0.7", "monthly"),
     ("/blog/how-ai-is-changing-content-marketing", "0.7", "monthly"),

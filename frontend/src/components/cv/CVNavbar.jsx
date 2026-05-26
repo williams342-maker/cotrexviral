@@ -12,6 +12,7 @@ const links = [
   { label: 'Results', href: '#results' },
   { label: 'Agents', href: '/agents', external: true },
   { label: 'Pricing', href: '/pricing', external: true },
+  { label: 'Roadmap', href: '/roadmap', external: true },
 ];
 
 const CVNavbar = ({ onGetStarted }) => {

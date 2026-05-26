@@ -14,6 +14,7 @@ const productLinks = [
 const companyLinks = [
   { label: 'Agents', to: '/agents' },
   { label: 'Pricing', to: '/pricing' },
+  { label: 'Roadmap', to: '/roadmap' },
   { label: 'Blog', to: '/blog' },
   { label: 'Dashboard', to: '/dashboard' },
 ];
