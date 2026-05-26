@@ -378,3 +378,116 @@ class TestHelpersAndUtilities:
         # Don't crash on malformed hashes — just return False.
         assert verify_password("anything", "not-a-real-hash") is False
         assert verify_password("anything", "") is False
+
+
+class TestAuthMeExposesPasswordState:
+    """The /auth/me endpoint must surface has_password + must_change_password
+    so the SPA can render the correct Account Settings UI (Add vs Change
+    password) and the must-change redirect."""
+
+    def test_password_user_has_password_true_and_must_change_false(self):
+        uid, email = _setup_test_user_with_password("RegularPw1")
+        try:
+            with httpx.Client(timeout=10) as cli:
+                cli.post(f"{API_URL}/api/auth/password/login",
+                         json={"email": email, "password": "RegularPw1"})
+                me = cli.get(f"{API_URL}/api/auth/me")
+                assert me.status_code == 200
+                body = me.json()
+                assert body["has_password"] is True
+                assert body["must_change_password"] is False
+        finally:
+            _cleanup_user(email)
+
+    def test_temp_pw_user_has_must_change_true(self):
+        import sys
+        sys.path.insert(0, "/app/backend")
+        from core import db
+        from routes.password_auth import hash_password
+        email = f"tempme_{secrets.token_hex(4)}@auth-test.dev"
+        async def setup():
+            await db.users.insert_one({
+                "user_id": f"user_tempme_{secrets.token_hex(4)}",
+                "email": email, "name": "T", "status": "active",
+                "password_hash": hash_password("TempPw123"),
+                "must_change_password": True,
+                "created_at": datetime.now(timezone.utc),
+            })
+        asyncio.get_event_loop().run_until_complete(setup())
+        try:
+            with httpx.Client(timeout=10) as cli:
+                cli.post(f"{API_URL}/api/auth/password/login",
+                         json={"email": email, "password": "TempPw123"})
+                me = cli.get(f"{API_URL}/api/auth/me")
+                assert me.status_code == 200
+                body = me.json()
+                assert body["has_password"] is True
+                assert body["must_change_password"] is True
+        finally:
+            _cleanup_user(email)
+
+
+class TestPasswordChangeFlow:
+    """Google-only users (no password_hash) can call /change with no
+    current_password to set their first password. Existing password users
+    must provide the correct current_password."""
+
+    def test_google_only_user_can_add_password(self):
+        """Add `password_hash` to a user that started with no password."""
+        import sys
+        sys.path.insert(0, "/app/backend")
+        from core import db
+        email = f"addpw_{secrets.token_hex(4)}@auth-test.dev"
+        uid = f"user_addpw_{secrets.token_hex(4)}"
+        token = f"addpw_session_{secrets.token_hex(8)}"
+        async def setup():
+            await db.users.insert_one({
+                "user_id": uid, "email": email, "name": "G", "status": "active",
+                "created_at": datetime.now(timezone.utc),
+            })
+            from datetime import timedelta
+            await db.user_sessions.insert_one({
+                "user_id": uid, "session_token": token,
+                "expires_at": datetime.now(timezone.utc) + timedelta(days=1),
+                "created_at": datetime.now(timezone.utc),
+            })
+        asyncio.get_event_loop().run_until_complete(setup())
+        try:
+            h = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+            r = httpx.post(
+                f"{API_URL}/api/auth/password/change",
+                headers=h,
+                # No current_password — backend should allow because they had none
+                json={"current_password": "", "new_password": "MyFirstPw1"},
+                timeout=10,
+            )
+            assert r.status_code == 200
+
+            # Now they can log in with the new password
+            login = httpx.post(
+                f"{API_URL}/api/auth/password/login",
+                json={"email": email, "password": "MyFirstPw1"},
+                timeout=10,
+            )
+            assert login.status_code == 200
+            assert login.json()["must_change_password"] is False
+        finally:
+            _cleanup_user(email)
+
+    def test_change_requires_correct_current_password(self):
+        uid, email = _setup_test_user_with_password("Original1")
+        try:
+            with httpx.Client(timeout=10) as cli:
+                cli.post(f"{API_URL}/api/auth/password/login",
+                         json={"email": email, "password": "Original1"})
+                # Wrong current password → 401
+                r = cli.post(f"{API_URL}/api/auth/password/change",
+                             json={"current_password": "WrongOldPw",
+                                   "new_password": "NewPw123!"})
+                assert r.status_code == 401
+                # Original password still works
+                r2 = cli.post(f"{API_URL}/api/auth/password/login",
+                              json={"email": email, "password": "Original1"})
+                assert r2.status_code == 200
+        finally:
+            _cleanup_user(email)

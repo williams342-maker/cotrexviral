@@ -101,6 +101,8 @@ async def auth_me(request: Request):
     doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0}) or {}
     payload = user.model_dump()
     payload["onboarding_required"] = _onboarding_required(doc)
+    payload["has_password"] = bool(doc.get("password_hash"))
+    payload["must_change_password"] = bool(doc.get("must_change_password"))
     return payload
 
 

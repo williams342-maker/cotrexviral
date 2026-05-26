@@ -32,6 +32,18 @@ const ProtectedRoute = ({ children, admin }) => {
     return <Navigate to="/onboarding" replace />;
   }
 
+  // Force temp-password users to set a permanent password before doing anything
+  // else. Bypassed on /onboarding (so we don't get caught in a loop with the
+  // onboarding redirect above) and on the change-password screen itself.
+  if (
+    effectiveUser.must_change_password
+    && location.pathname !== '/onboarding'
+    && location.pathname !== '/dashboard/settings/account'
+    && !location.pathname.startsWith('/auth-callback')
+  ) {
+    return <Navigate to="/dashboard/settings/account?force_change=1" replace />;
+  }
+
   if (admin && !effectiveUser.is_admin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F6F4ED] p-6">
