@@ -35,6 +35,37 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 43) **🔄 Trend → Draft loop + 💡 Proactive spend nudges**
+  - **"Draft post from this signal"** — closes the signal → memory → content loop:
+    - New endpoint `POST /api/trends/draft-post` body `{trend_id, platform}` (supports `linkedin`, `twitter`/`x`, `instagram`, `tiktok`, `pinterest`, `facebook`).
+    - User-scoped ownership check: a query like `find_one({"id": trend_id, "user_id": ..., "kind": "trend"})` does ownership + existence in one round-trip; passing another user's signal id returns 404 (verified by an isolation test).
+    - Routes through Nova (Copy specialist), honoring the user's saved per-agent mode pref (`agent_prefs.nova`). Includes brand name + niche in the system prompt when set on the user doc, so drafts sound on-brand.
+    - Platform-specific format guidance baked into the prompt (e.g., Pinterest = title <=100 chars + description 200-300 + 4 hashtags). LLM is instructed to end with `HASHTAGS: #tag1 #tag2 …` — the server splits that line off into a separate `suggested_hashtags` array (max 8) so the UI can render them as pills.
+    - Persists every draft as a `draft_from_trend` memory row (deduped by `draft:{signal_id}:{platform}` so re-generating overwrites). Spend tracked in `llm_usage`; counts towards AI generation quota.
+    - 502/503 budget-exceeded errors surface as clean HTTP status codes instead of generic 500s.
+  - **Frontend `Trends.jsx::TrendCard`**:
+    - Every trend card now has a **"Draft post" button** with a chevron toggle. Click → expands an inline panel with platform-selector chips (LinkedIn / Twitter / Instagram / TikTok / Pinterest / Facebook).
+    - Generate button shows live "Nova is drafting…" spinner state.
+    - Generated draft renders in a violet-bordered card with the prose; hashtags shown as separate violet pills below.
+    - **Action toolbar**: Copy (clipboard + 2s "Copied ✓" confirmation), Open in Compose (routes to `/dashboard/compose?content=...&platform=...&source=trend` with the draft pre-seeded), and "Try another platform" (reset state for another generation).
+    - Existing "view source" external link moved into the card's metadata row (was previously the whole card).
+  - **Proactive spend nudges**:
+    - New endpoint `GET /api/ai/agent/spend-hint?days=30` runs a Mongo `$regexMatch` aggregation on `llm_usage` to count Opus calls + cost. Returns `show: true` only when `opus_calls >= 20` AND (`opus_cost >= $2.00` OR `opus_share >= 50%`) — calibrated so casual users never see it but heavy Opus users do.
+    - Suggestion message includes projected savings: "Switching half to Auto/Creative would save ~$0.78" (computed from the price delta between Opus and Sonnet × 50% of Opus calls).
+    - `days` clamped 1..90.
+  - **Frontend `AgentWorkspace.jsx`** banner:
+    - Amber "SPEND TIP" banner above the composer, only renders when backend returns `show: true` AND the user hasn't dismissed it this session.
+    - **Inline "Switch this agent" link** auto-applies the suggested mode (calls `pickMode(suggestion.mode_hint)` which both updates local state AND PUTs to `/ai/agent/prefs`) and dismisses the banner.
+    - × dismiss button — session-only state (no persistence). Resets on page reload so it doesn't feel like silencing a permanent warning.
+  - **11 new pytest cases** (`tests/test_trend_drafts_and_nudge.py`):
+    - `TestDraftFromSignalAuth` (4): 401 anon · 422 unknown platform · 404 unknown trend_id · 404 when accessing another user's trend (cross-tenant isolation).
+    - `TestDraftFromSignalHappyPath` (3): generates valid draft + strips trailing `HASHTAGS:` line into separate array · supports multiple platforms · draft persists as `draft_from_trend` memory. All three skip cleanly on 502/503/budget-exceeded.
+    - `TestSpendHint` (4): 401 anon · default user sees no nudge · synthetic 25 Opus rows triggers `show: true` with non-empty suggestion + positive savings · `days` clamped to 90.
+  - **All 58 agent-stack tests pass** across `test_agent_chat`, `test_agent_handoff`, `test_model_router`, `test_ai_team_and_spend`, `test_trend_drafts_and_nudge`.
+  - **Live curl-verified**: Real LinkedIn draft from "dunkin bucket of coffee +450%" signal produced a 200-word post leading with the trend, then 3 takeaways with bold subheadings, ending with `#ConsumerTrends #RetailStrategy #GoogleTrends`.
+  - **UI screenshot-verified**: Trends page draft panel renders all 6 platforms, draft body, hashtag pills, and Copy/Open in Compose/Try another platform buttons. AgentWorkspace amber spend nudge banner renders with "Switch this agent" CTA + dismiss × correctly.
+
+
 - 2026-02-28 (part 42) **🏟️ Convene — Multi-step team orchestrator**
   - **What it is**: One brief runs sequentially through N specialists (each one sees the prior agents' answers as context), then Atlas synthesizes a single ranked executive summary with next-3-actions. The team behaves like a Slack huddle: builds on each other rather than firing N independent answers.
   - **Backend** (`routes/agent_chat.py`):

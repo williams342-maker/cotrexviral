@@ -54,6 +54,11 @@ const AgentWorkspace = () => {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef(null);
+  // Spend nudge — only shown when the user's heavy on Opus AND hasn't
+  // dismissed it via the close button. Session-only dismissal (resets on
+  // page reload) — feels less heavy-handed than a permanent flag.
+  const [spendHint, setSpendHint] = useState(null);
+  const [spendHintDismissed, setSpendHintDismissed] = useState(false);
 
   // Load agents catalogue + available routing modes (Auto/Fast/Deep/Creative)
   // + the user's persisted per-agent mode preferences.
@@ -67,6 +72,9 @@ const AgentWorkspace = () => {
     axios.get(`${API}/ai/agent/prefs`, { withCredentials: true })
       .then((r) => setPrefs(r.data.prefs || {}))
       .catch(() => setPrefs({}));
+    axios.get(`${API}/ai/agent/spend-hint`, { withCredentials: true })
+      .then((r) => setSpendHint(r.data?.show ? r.data : null))
+      .catch(() => setSpendHint(null));
   }, []);
 
   // Whenever the active agent changes, hydrate the mode chip from the
@@ -349,6 +357,42 @@ const AgentWorkspace = () => {
             </div>
 
             {/* Composer */}
+            {spendHint && !spendHintDismissed && spendHint.suggestion && (
+              <div
+                className="mx-4 mt-3 mb-1 rounded-xl border border-amber-500/30 bg-amber-500/[0.05] px-3 py-2.5 flex items-start gap-2.5"
+                data-testid="agent-spend-hint"
+              >
+                <Sparkles size={14} className="text-amber-300 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11.5px] uppercase tracking-[0.18em] text-amber-300 font-semibold mb-0.5">
+                    Spend tip
+                  </p>
+                  <p className="text-[12.5px] text-zinc-300 leading-snug">
+                    {spendHint.suggestion.message}{' '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (spendHint.suggestion.mode_hint) pickMode(spendHint.suggestion.mode_hint);
+                        setSpendHintDismissed(true);
+                      }}
+                      className="text-amber-200 underline underline-offset-2 hover:text-amber-100 font-semibold"
+                      data-testid="agent-spend-hint-apply"
+                    >
+                      Switch this agent
+                    </button>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSpendHintDismissed(true)}
+                  className="text-zinc-500 hover:text-zinc-200 shrink-0"
+                  aria-label="Dismiss"
+                  data-testid="agent-spend-hint-dismiss"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             <form
               onSubmit={(e) => { e.preventDefault(); send(); }}
               className="px-4 py-3 border-t border-white/5 flex flex-col gap-2"

@@ -199,3 +199,74 @@ async def admin_llm_spend(request: Request, days: int = 30):
         "top_users":            top_users,
         "biggest_driver":       biggest,
     }
+
+
+
+# Heuristic thresholds for the "consider switching modes" nudge.
+# Tuned so a casual user never sees it (low cap) but a heavy Opus user does
+# (>$2 / 30 days OR >50% of spend on Opus with at least 20 calls).
+_SPEND_NUDGE_OPUS_COST_CAP    = 2.00   # USD over the trailing window
+_SPEND_NUDGE_OPUS_SHARE_CAP   = 0.50   # 50% of total
+_SPEND_NUDGE_OPUS_MIN_CALLS   = 20     # don't nudge brand-new users
+
+
+@api.get("/ai/agent/spend-hint")
+async def user_spend_hint(request: Request, days: int = 30):
+    """Per-user spend nudge for AgentWorkspace. Shape:
+      `{show: bool, opus_calls, opus_cost, total_cost, share, suggestion}`
+
+    Returns `show: true` only when the user has spent meaningful money
+    on Opus AND it's a large share of their total — otherwise the banner
+    stays hidden so it doesn't feel naggy."""
+    from deps import get_current_user
+    user = await get_current_user(request)
+    days = max(1, min(90, int(days or 30)))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    pipeline = [
+        {"$match": {"user_id": user.user_id, "ts": {"$gte": since}}},
+        {"$group": {
+            "_id":   None,
+            "total": {"$sum": "$cost"},
+            "opus_cost":  {"$sum": {"$cond": [{"$regexMatch": {"input": "$model", "regex": "opus", "options": "i"}}, "$cost", 0]}},
+            "opus_calls": {"$sum": {"$cond": [{"$regexMatch": {"input": "$model", "regex": "opus", "options": "i"}}, 1, 0]}},
+        }},
+    ]
+    rows = await db.llm_usage.aggregate(pipeline).to_list(length=1)
+    if not rows:
+        return {"show": False, "days": days, "opus_calls": 0, "opus_cost": 0,
+                "total_cost": 0, "share": 0, "suggestion": None}
+    r = rows[0]
+    total = float(r.get("total") or 0)
+    opus_cost = float(r.get("opus_cost") or 0)
+    opus_calls = int(r.get("opus_calls") or 0)
+    share = (opus_cost / total) if total > 0 else 0.0
+
+    show = (
+        opus_calls >= _SPEND_NUDGE_OPUS_MIN_CALLS
+        and (opus_cost >= _SPEND_NUDGE_OPUS_COST_CAP
+             or share >= _SPEND_NUDGE_OPUS_SHARE_CAP)
+    )
+    suggestion = None
+    if show:
+        # Project the savings if half of the Opus calls swapped to Sonnet.
+        sonnet_cost = _cost_for("claude-sonnet")
+        opus_avg = _cost_for("claude-opus")
+        savings = (opus_calls / 2) * (opus_avg - sonnet_cost)
+        suggestion = {
+            "message": (
+                f"You've used Atlas in Deep mode {opus_calls} times this period "
+                f"(~${opus_cost:.2f}, {int(share * 100)}% of your spend). "
+                f"Switching half to Auto/Creative would save ~${max(0, savings):.2f}."
+            ),
+            "mode_hint": "creative",
+            "estimated_savings": round(max(0, savings), 2),
+        }
+    return {
+        "show":       show,
+        "days":       days,
+        "opus_calls": opus_calls,
+        "opus_cost":  round(opus_cost, 4),
+        "total_cost": round(total, 4),
+        "share":      round(share, 3),
+        "suggestion": suggestion,
+    }

@@ -3,6 +3,7 @@ import axios from 'axios';
 import {
   TrendingUp, Loader2, RefreshCw, ExternalLink, MessageSquare,
   ArrowUp, Sparkles, Settings as SettingsIcon, X as XIcon, Plus, Info,
+  Wand2, Copy as CopyIcon, Check, ChevronDown,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { API } from '../../context/AuthContext';
@@ -165,45 +166,9 @@ const Trends = () => {
           </div>
         ) : (
           <div className="space-y-2.5" data-testid="trends-list">
-            {trends.map((t) => {
-              const src = t.meta?.source || 'unknown';
-              const isReddit = src === 'reddit';
-              return (
-                <a
-                  key={t.id}
-                  href={t.meta?.permalink || '#'}
-                  target={t.meta?.permalink ? '_blank' : undefined}
-                  rel="noopener noreferrer"
-                  className={`block cv-glass rounded-xl p-3.5 transition-colors ${
-                    t.meta?.permalink ? 'hover:border-white/10' : 'cursor-default'
-                  }`}
-                  data-testid={`trend-card-${t.id}`}
-                >
-                  <div className="flex items-start gap-3">
-                    <span className={`shrink-0 text-[10.5px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border ${
-                      isReddit
-                        ? 'bg-orange-500/15 text-orange-300 border-orange-500/30'
-                        : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                    }`}>
-                      {isReddit ? 'Reddit' : 'GTrends'}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13.5px] text-zinc-100 leading-snug">{t.text}</p>
-                      <div className="flex items-center gap-3 mt-1.5 text-[11px] text-zinc-500">
-                        {isReddit && t.meta?.score != null && (
-                          <span className="inline-flex items-center gap-1"><ArrowUp size={10} /> {t.meta.score.toLocaleString()}</span>
-                        )}
-                        {!isReddit && t.meta?.growth != null && (
-                          <span className="text-emerald-400 font-semibold">+{t.meta.growth}%</span>
-                        )}
-                        <span>{new Date(t.created_at).toLocaleString()}</span>
-                        {t.meta?.permalink && <ExternalLink size={10} className="text-zinc-500" />}
-                      </div>
-                    </div>
-                  </div>
-                </a>
-              );
-            })}
+            {trends.map((t) => (
+              <TrendCard key={t.id} trend={t} />
+            ))}
           </div>
         )}
       </div>
@@ -222,6 +187,189 @@ const Trends = () => {
         />
       )}
     </DashboardLayout>
+  );
+};
+
+const PLATFORMS = ['linkedin', 'twitter', 'instagram', 'tiktok', 'pinterest', 'facebook'];
+
+const TrendCard = ({ trend }) => {
+  const isReddit = (trend.meta?.source) === 'reddit';
+  const [open, setOpen] = useState(false);
+  const [platform, setPlatform] = useState('linkedin');
+  const [drafting, setDrafting] = useState(false);
+  const [draft, setDraft] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState('');
+
+  const generate = async () => {
+    setDrafting(true);
+    setError('');
+    setDraft(null);
+    try {
+      const r = await axios.post(
+        `${API}/trends/draft-post`,
+        { trend_id: trend.id, platform },
+        { withCredentials: true },
+      );
+      setDraft(r.data);
+    } catch (e) {
+      const msg = e.response?.data?.detail || e.message || 'Draft failed';
+      setError(typeof msg === 'string' ? msg : 'Draft failed');
+    }
+    setDrafting(false);
+  };
+
+  const copyDraft = async () => {
+    if (!draft?.draft) return;
+    const text = draft.draft + (draft.suggested_hashtags?.length
+      ? '\n\n' + draft.suggested_hashtags.join(' ') : '');
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (_) {}
+  };
+
+  const openInCompose = () => {
+    if (!draft?.draft) return;
+    const params = new URLSearchParams({
+      content: draft.draft,
+      platform: draft.platform,
+      source: 'trend',
+    });
+    window.location.href = `/dashboard/compose?${params.toString()}`;
+  };
+
+  return (
+    <div className="cv-glass rounded-xl p-3.5" data-testid={`trend-card-${trend.id}`}>
+      <div className="flex items-start gap-3">
+        <span className={`shrink-0 text-[10.5px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border ${
+          isReddit
+            ? 'bg-orange-500/15 text-orange-300 border-orange-500/30'
+            : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+        }`}>
+          {isReddit ? 'Reddit' : 'GTrends'}
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-[13.5px] text-zinc-100 leading-snug">{trend.text}</p>
+          <div className="flex items-center gap-3 mt-1.5 text-[11px] text-zinc-500 flex-wrap">
+            {isReddit && trend.meta?.score != null && (
+              <span className="inline-flex items-center gap-1"><ArrowUp size={10} /> {trend.meta.score.toLocaleString()}</span>
+            )}
+            {!isReddit && trend.meta?.growth != null && (
+              <span className="text-emerald-400 font-semibold">+{trend.meta.growth}%</span>
+            )}
+            <span>{new Date(trend.created_at).toLocaleString()}</span>
+            {trend.meta?.permalink && (
+              <a
+                href={trend.meta.permalink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-zinc-400 hover:text-zinc-200 inline-flex items-center gap-1"
+              >
+                view source <ExternalLink size={10} />
+              </a>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          data-testid={`trend-draft-toggle-${trend.id}`}
+          className={`shrink-0 inline-flex items-center gap-1.5 text-[11.5px] font-semibold px-2.5 h-7 rounded-md border transition-colors ${
+            open
+              ? 'bg-violet-500/20 text-violet-200 border-violet-500/40'
+              : 'bg-white/[0.04] text-zinc-300 border-white/10 hover:text-white hover:bg-white/[0.08]'
+          }`}
+        >
+          <Wand2 size={11} />
+          Draft post
+          <ChevronDown size={10} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+
+      {open && (
+        <div className="mt-3 pt-3 border-t border-white/5 space-y-2.5" data-testid={`trend-draft-panel-${trend.id}`}>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10.5px] uppercase tracking-[0.18em] text-zinc-500 font-semibold pr-1">For</span>
+            {PLATFORMS.map((p) => (
+              <button
+                key={p}
+                type="button"
+                disabled={drafting}
+                onClick={() => setPlatform(p)}
+                data-testid={`trend-draft-platform-${trend.id}-${p}`}
+                className={`text-[11px] font-semibold rounded-full px-2.5 h-6 inline-flex items-center capitalize transition-colors ${
+                  platform === p
+                    ? 'bg-violet-500/20 text-violet-200 border border-violet-500/40'
+                    : 'bg-white/[0.04] text-zinc-400 border border-white/10 hover:text-zinc-200'
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+
+          {!draft && (
+            <button
+              type="button"
+              onClick={generate}
+              disabled={drafting}
+              data-testid={`trend-draft-generate-${trend.id}`}
+              className="w-full h-10 rounded-lg text-[12.5px] font-semibold inline-flex items-center justify-center gap-1.5 cv-btn-primary disabled:opacity-50"
+            >
+              {drafting ? <><Loader2 size={13} className="animate-spin" /> Nova is drafting…</> : <><Sparkles size={13} /> Generate {platform} post with Nova</>}
+            </button>
+          )}
+
+          {draft && (
+            <div className="space-y-2" data-testid={`trend-draft-result-${trend.id}`}>
+              <div className="rounded-lg border border-violet-500/30 bg-violet-500/[0.04] p-3">
+                <pre className="text-[12.5px] text-zinc-100 leading-relaxed whitespace-pre-wrap font-sans">{draft.draft}</pre>
+              </div>
+              {draft.suggested_hashtags?.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {draft.suggested_hashtags.map((h) => (
+                    <span key={h} className="text-[11px] text-violet-300 bg-violet-500/10 border border-violet-500/30 rounded-full px-2 py-0.5">{h}</span>
+                  ))}
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={copyDraft}
+                  data-testid={`trend-draft-copy-${trend.id}`}
+                  className="h-9 px-3 rounded-md text-[12px] font-semibold bg-white/[0.06] hover:bg-white/[0.10] text-zinc-200 border border-white/10 inline-flex items-center gap-1.5"
+                >
+                  {copied ? <><Check size={12} className="text-emerald-400" /> Copied</> : <><CopyIcon size={12} /> Copy</>}
+                </button>
+                <button
+                  type="button"
+                  onClick={openInCompose}
+                  data-testid={`trend-draft-compose-${trend.id}`}
+                  className="h-9 px-3 rounded-md text-[12px] font-semibold cv-btn-primary inline-flex items-center gap-1.5"
+                >
+                  <ExternalLink size={12} /> Open in Compose
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setDraft(null); }}
+                  className="h-9 px-3 rounded-md text-[12px] font-semibold text-zinc-400 hover:text-zinc-200"
+                >
+                  Try another platform
+                </button>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="text-[12px] text-rose-300 bg-rose-500/[0.08] border border-rose-500/30 rounded-lg p-2.5" data-testid={`trend-draft-error-${trend.id}`}>
+              {error}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 };
 

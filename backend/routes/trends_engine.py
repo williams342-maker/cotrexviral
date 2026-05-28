@@ -36,7 +36,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
-from fastapi import Request
+from fastapi import Request, HTTPException
 from pydantic import BaseModel, Field
 
 from core import db, api
@@ -360,4 +360,148 @@ async def trends_source_status(request: Request):
             "configured": True,
             "note": "Google Trends always available (pytrends, no key).",
         },
+    }
+
+
+
+# ---------------------------------------------------------------------------
+# "Draft post from signal" — closes the loop: signal → memory → content
+# ---------------------------------------------------------------------------
+class _DraftFromSignalRequest(BaseModel):
+    trend_id: str = Field(..., min_length=1, max_length=64)
+    platform: Optional[str] = Field(default="linkedin", max_length=24)
+
+
+_PLATFORM_GUIDANCE = {
+    "linkedin":  "LinkedIn post (200-300 words, professional tone, 1 sharp hook, line breaks for skim-ability, no hashtag dump — 3 max).",
+    "twitter":   "Twitter / X thread (4-6 tweets, each <=280 chars, lead with the spiciest insight).",
+    "x":         "X (Twitter) thread (4-6 tweets, each <=280 chars, lead with the spiciest insight).",
+    "instagram": "Instagram caption (120-180 words, conversational, line breaks for readability, ~5 hashtags).",
+    "tiktok":    "TikTok caption + hook (under 150 chars caption, plus a 3-line voiceover script with a pattern-interrupt opener).",
+    "pinterest": "Pinterest pin title (<=100 chars) + description (200-300 chars) + 4 hashtags.",
+    "facebook":  "Facebook post (150-220 words, friendly tone, 1 question to drive comments, 2-3 hashtags).",
+}
+
+
+@api.post("/trends/draft-post")
+async def draft_post_from_trend(payload: _DraftFromSignalRequest, request: Request):
+    """Generate a platform-tailored draft post from one ingested trend
+    signal. Uses Nova (Copy specialist) so the voice matches what the
+    user gets from the Agent Workspace.
+
+    Returns `{draft, platform, signal: {text, source}, suggested_hashtags}`.
+    The draft is also persisted as a `draft_from_trend` memory row so
+    Compose can pick it up later and the user has audit history.
+
+    Routes through Nova's existing LLM model (creative/Sonnet by default,
+    or the user's per-agent mode preference). Counts towards the user's
+    AI generation quota + appears in the admin spend dashboard."""
+    from routes.ai import _gated_user
+    user = await _gated_user(request)
+    platform = (payload.platform or "linkedin").strip().lower()
+    if platform not in _PLATFORM_GUIDANCE:
+        raise HTTPException(status_code=422, detail="Unsupported platform")
+
+    # Fetch the signal — both ownership and existence in one query.
+    signal = await db.cortex_memory.find_one(
+        {"id": payload.trend_id, "user_id": user.user_id, "kind": "trend"},
+        {"_id": 0, "id": 1, "text": 1, "meta": 1},
+    )
+    if not signal:
+        raise HTTPException(status_code=404, detail="Trend signal not found")
+
+    # Build the brief for Nova. We embed the signal verbatim so she can
+    # quote the actual upvote count / growth % when useful.
+    from routes.agent_chat import AGENTS
+    from routes.ai import _llm_for_user
+    from routes.model_router import resolve_user_mode
+    from routes.plans import record_ai_generation
+    from emergentintegrations.llm.chat import UserMessage
+
+    nova = AGENTS["nova"]
+    # Honor the user's saved per-agent mode preference if they've set one.
+    user_doc = await db.users.find_one(
+        {"user_id": user.user_id}, {"_id": 0, "agent_prefs": 1, "brand_name": 1, "niche": 1},
+    ) or {}
+    user_mode = (user_doc.get("agent_prefs") or {}).get("nova", "auto")
+    provider, model, task_used = resolve_user_mode(user_mode, "nova")
+
+    brand_block = ""
+    if user_doc.get("brand_name") or user_doc.get("niche"):
+        brand_block = (
+            f"\n\nBrand: {user_doc.get('brand_name') or 'n/a'} · "
+            f"Niche: {user_doc.get('niche') or 'n/a'}"
+        )
+
+    system = nova["system"] + (
+        f"\n\nYou are turning a viral signal into one shippable {platform} draft. "
+        f"Format spec: {_PLATFORM_GUIDANCE[platform]} "
+        "Lead with what the SIGNAL itself says, not generic advice. "
+        "End your reply with a separate line: `HASHTAGS: #tag1 #tag2 #tag3`."
+        + brand_block
+    )
+    chat = await _llm_for_user(
+        user.user_id, f"draft-from-signal-{user.user_id}", system,
+        provider=provider, model=model,
+    )
+    user_msg = f"Signal:\n{signal['text']}\n\nDraft the {platform} post now."
+    try:
+        raw = await chat.send_message(UserMessage(text=user_msg))
+    except Exception as e:
+        # Surface a clean error instead of a generic 500.
+        if "budget" in str(e).lower():
+            raise HTTPException(status_code=503, detail="LLM budget exceeded — top up the universal key")
+        raise HTTPException(status_code=502, detail=f"Draft generation failed: {str(e)[:200]}")
+    raw = (raw or "").strip()
+
+    # Pull out the trailing HASHTAGS line so the frontend can render
+    # them as separate pills.
+    suggested_hashtags: list[str] = []
+    draft_body = raw
+    for line in reversed(raw.splitlines()):
+        if line.upper().startswith("HASHTAGS:"):
+            tags = line.split(":", 1)[1].strip()
+            suggested_hashtags = [
+                t if t.startswith("#") else f"#{t}"
+                for t in tags.replace(",", " ").split() if t.strip("#")
+            ][:8]
+            draft_body = raw.replace(line, "").rstrip()
+            break
+
+    # Persist + bookkeeping (best-effort each).
+    try:
+        from routes.memory import remember
+        await remember(
+            user.user_id, "draft_from_trend",
+            f"Draft ({platform}) from signal: {signal['text'][:160]}",
+            meta={
+                "signal_id": signal["id"], "platform": platform,
+                "draft": draft_body[:1200],
+                "hashtags": suggested_hashtags,
+            },
+            dedupe_key=f"draft:{signal['id']}:{platform}",
+        )
+    except Exception:
+        pass
+    try:
+        await record_ai_generation(user.user_id, f"trend_draft:{platform}")
+    except Exception:
+        pass
+    try:
+        from routes.llm_spend import record_llm_call
+        await record_llm_call(user.user_id, "nova", task_used, model)
+    except Exception:
+        pass
+
+    return {
+        "draft": draft_body,
+        "platform": platform,
+        "suggested_hashtags": suggested_hashtags,
+        "signal": {
+            "id":     signal["id"],
+            "text":   signal["text"],
+            "source": (signal.get("meta") or {}).get("source"),
+        },
+        "model": model,
+        "mode":  task_used,
     }
