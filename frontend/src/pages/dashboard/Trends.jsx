@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { useLocation } from 'react-router-dom';
 import {
   TrendingUp, Loader2, RefreshCw, ExternalLink, MessageSquare,
   ArrowUp, Sparkles, Settings as SettingsIcon, X as XIcon, Plus, Info,
-  Wand2, Copy as CopyIcon, Check, ChevronDown,
+  Wand2, Copy as CopyIcon, Check, ChevronDown, Layers,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { API } from '../../context/AuthContext';
@@ -14,6 +15,12 @@ import { useToast } from '../../hooks/use-toast';
 
 const Trends = () => {
   const { toast } = useToast();
+  const location = useLocation();
+  // Optional campaign context — when present, every "Open in Compose"
+  // CTA on a signal card forwards the campaign_id so the resulting
+  // post is linked to the campaign automatically.
+  const initialCampaignId = new URLSearchParams(location.search).get('campaign_id');
+  const [campaign, setCampaign] = useState(null);
   const [trends, setTrends] = useState([]);
   const [seeds, setSeeds] = useState({ subreddits: [], keywords: [], user_configured: false });
   const [sourceStatus, setSourceStatus] = useState(null);
@@ -43,6 +50,24 @@ const Trends = () => {
   };
 
   useEffect(() => { load().finally(() => setLoading(false)); }, []);
+
+  // Resolve `?campaign_id=` once into a friendly chip.
+  useEffect(() => {
+    if (!initialCampaignId) return;
+    let cancelled = false;
+    axios.get(`${API}/campaigns/${initialCampaignId}`, { withCredentials: true })
+      .then((r) => {
+        if (cancelled) return;
+        setCampaign({ id: r.data.id, name: r.data.name, goal: r.data.custom_goal || r.data.goal });
+        toast({
+          title: 'Hunting signals for a campaign',
+          description: `Drafts you ship from here will link to "${r.data.name}".`,
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCampaignId]);
 
   const ingest = async (subreddits, keywords) => {
     if (ingesting) return;
@@ -97,6 +122,28 @@ const Trends = () => {
       }
     >
       <div className="cv-dash-scope" data-testid="trends-page">
+
+        {/* Campaign context chip — shown only when arrived from a campaign */}
+        {campaign && (
+          <div className="cv-glass rounded-2xl p-3.5 mb-4 flex items-center gap-3 border-cyan-500/30 bg-cyan-500/[0.05]"
+            data-testid="trends-campaign-chip">
+            <span className="w-9 h-9 rounded-lg bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 flex items-center justify-center shrink-0">
+              <Layers size={15} />
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] uppercase tracking-widest text-cyan-300 font-bold">Hunting signals for</div>
+              <div className="text-sm font-semibold text-white truncate">{campaign.name}<span className="text-zinc-500 font-normal text-xs ml-2">· {campaign.goal}</span></div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCampaign(null)}
+              className="text-[11px] text-cyan-300 hover:text-cyan-200 underline"
+              data-testid="trends-campaign-detach"
+            >
+              Detach
+            </button>
+          </div>
+        )}
 
         {/* Reddit-not-configured hint */}
         {sourceStatus?.reddit?.configured === false && (
@@ -204,7 +251,7 @@ const Trends = () => {
         ) : (
           <div className="space-y-2.5" data-testid="trends-list">
             {trends.map((t) => (
-              <TrendCard key={t.id} trend={t} />
+              <TrendCard key={t.id} trend={t} campaignId={campaign?.id || null} />
             ))}
           </div>
         )}
@@ -324,7 +371,7 @@ const AutoDraftCard = ({ settings, busy, onSave, onRunNow }) => {
   );
 };
 
-const TrendCard = ({ trend }) => {
+const TrendCard = ({ trend, campaignId = null }) => {
   const isReddit = (trend.meta?.source) === 'reddit';
   const [open, setOpen] = useState(false);
   const [platform, setPlatform] = useState('linkedin');
@@ -369,6 +416,7 @@ const TrendCard = ({ trend }) => {
       platform: draft.platform,
       source: 'trend',
     });
+    if (campaignId) params.set('campaign_id', campaignId);
     window.location.href = `/dashboard/compose?${params.toString()}`;
   };
 

@@ -387,6 +387,23 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
         except Exception:
             logger.exception("Failed to persist run %s", run_id)
 
+        # If the run was tied to a campaign, pin the latest summary onto
+        # the campaign doc so the detail page surfaces "what the team
+        # last said about this campaign" without an extra fetch.
+        if campaign_id and summary_text:
+            try:
+                await db.campaigns.update_one(
+                    {"id": campaign_id, "user_id": user.user_id},
+                    {"$set": {
+                        "latest_run_id":      run_id,
+                        "latest_run_summary": summary_text[:1200],
+                        "latest_run_at":      datetime.now(timezone.utc),
+                        "updated_at":         datetime.now(timezone.utc),
+                    }},
+                )
+            except Exception:
+                logger.exception("Failed to pin run %s onto campaign %s", run_id, campaign_id)
+
         yield _sse("os_persisted", {"run_id": run_id})
 
     return StreamingResponse(

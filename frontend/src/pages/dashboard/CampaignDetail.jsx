@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Sparkles, Loader2, Layers, Eye, Heart, MousePointer,
   Inbox, Calendar as CalendarIcon, FileText, Play, Edit3, Save, X,
-  Send,
+  Send, TrendingUp, Activity,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import RunOSModal from '../../components/RunOSModal';
@@ -265,6 +265,13 @@ const CampaignDetail = () => {
               ))}
             </select>
             <button
+              onClick={() => navigate(`/dashboard/trends?campaign_id=${id}`)}
+              className="h-9 px-3 rounded-lg border border-white/10 bg-white/[0.02] hover:bg-white/5 text-zinc-200 text-xs font-medium flex items-center gap-1.5"
+              data-testid="campaign-trends-btn"
+            >
+              <TrendingUp size={12} /> Hunt signals
+            </button>
+            <button
               onClick={() => setRunOpen(true)}
               className="h-9 px-3 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium flex items-center gap-1.5 shadow-[0_4px_20px_rgb(124_58_237_/_0.35)]"
               data-testid="campaign-run-os-btn"
@@ -382,6 +389,41 @@ const CampaignDetail = () => {
             </div>
           )}
         </div>
+
+        {/* Latest OS run pin — set by `marketing_os.run_marketing_os`
+            whenever a run completes against this campaign. Gives the
+            user a one-glance "what did the team last decide" surface
+            without digging through the runs history. */}
+        {data.latest_run_summary && (
+          <div
+            className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.04] p-5"
+            data-testid="campaign-latest-run"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="w-7 h-7 rounded-md bg-violet-500/15 border border-violet-500/30 text-violet-300 flex items-center justify-center">
+                  <Activity size={13} />
+                </span>
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest text-violet-300 font-bold">Latest OS run</div>
+                  <div className="text-[11px] text-zinc-500">
+                    {data.latest_run_at ? new Date(data.latest_run_at).toLocaleString() : ''}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setRunOpen(true)}
+                className="text-xs px-2.5 py-1 rounded-md border border-violet-500/30 text-violet-300 hover:bg-violet-500/15 flex items-center gap-1"
+                data-testid="campaign-latest-run-rerun"
+              >
+                <Play size={11} /> Re-run
+              </button>
+            </div>
+            <div className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap line-clamp-[10]" data-testid="campaign-latest-run-summary">
+              {data.latest_run_summary}
+            </div>
+          </div>
+        )}
 
         {/* Atlas's plan */}
         <div className="rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-600/5 via-zinc-950/30 to-zinc-950/30 p-5" data-testid="campaign-plan-section">
