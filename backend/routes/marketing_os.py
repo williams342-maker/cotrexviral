@@ -270,7 +270,7 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
         )
         if not camp:
             raise HTTPException(status_code=404, detail="Campaign not found")
-        campaign_id = camp.get("name") and payload.campaign_id
+        campaign_id = payload.campaign_id
         ctx_parts = [f"Campaign: {camp.get('name')}", f"Goal: {camp.get('goal')}"]
         if camp.get("audience"):
             ctx_parts.append(f"Audience: {camp['audience']}")

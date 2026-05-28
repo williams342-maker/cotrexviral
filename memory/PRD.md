@@ -35,6 +35,30 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-28 (part 48) **🕸️ P0 — Orchestration migration to LangGraph (explicit StateGraph, conditional edges, MongoDB checkpointer)**
+  - **What changed**: the Marketing OS canonical 5-role chain (Strategy → Intelligence → Content → Distribution → Analytics) is now an explicit `langgraph.StateGraph` instead of a hand-rolled linear `_convene` loop. The custom `_convene` engine remains for the per-agent "Convene the team" modal on the AI Team page (different UX, different shape) — only the Marketing OS `/run/stream` was migrated.
+  - **New module `routes/marketing_os_graph.py`** (~570 lines, single responsibility):
+    - `OSState` TypedDict: `{run_id, user_id, brief, transcript[], summary, mode, skip_distribution, error, ...}` — JSON-serialisable so the checkpointer can persist per-step state.
+    - **5 nodes** built via a closure factory (`_build_role_node`, `_build_summarizer_node`): strategy / intelligence / content / distribution / summariser. Each node reads prior transcript, builds the same context block as the legacy `_convene` (so behaviour is unchanged), calls `send_with_usage` via the existing emergentintegrations wrapper, records spend, and pushes SSE-shaped tuples to a per-run `asyncio.Queue`.
+    - **Conditional edges** — the headline upgrade vs the linear loop:
+      • `_route_after_content` → routes to `summariser` (bypasses Kai/Distribution) when `state.skip_distribution=true`, otherwise to `distribution`. Triggered automatically when a campaign has `platforms: []` AND no explicit `roles` override — saves a 5-15s LLM call on research/draft-only runs.
+      • `_route_after_strategy` / `_route_after_intelligence` short-circuit straight to the summariser on upstream LLM errors, so we don't burn budget calling the next agent with empty input.
+    - **MongoDBSaver checkpointer**: writes per-step checkpoints to `langgraph_checkpoints` + `langgraph_checkpoint_writes` collections. Lazy-pings Mongo at startup with a 2s timeout; **falls back to in-memory `MemorySaver`** if Mongo is unreachable (logger.warning, never crashes the graph build). Lets partial runs survive backend restarts.
+    - **Per-run SSE queue registry** (`_RUN_QUEUES: dict[run_id, asyncio.Queue]`) — nodes push events, the outer handler drains. Cleaned up in `finally` so no memory leak. Sentinel `("__END__", None)` signals run completion.
+    - **`run_os_graph(user_id, brief, mode, skip_distribution, roles, run_id)` async generator** — the public entrypoint. Yields SSE-shaped (event, data) tuples that the FastAPI handler formats with `_sse()`. Supports both the canonical graph path and a dynamic linear walk for the user-specified `roles` subset case (LangGraph graphs are static).
+  - **Refactored `routes/marketing_os.py::run_marketing_os`**:
+    - Pre-generates `run_id` so `os_started` carries it from the first event (no breaking change to the existing SSE contract).
+    - Detects `skip_distribution` from `campaign.platforms == []` and forwards it to the graph.
+    - Persists `marketing_os_runs` rows with two new fields: `framework: "langgraph"` and `skip_distribution: bool`. Older rows lack these — frontend/queries guard accordingly.
+    - Subtle bug fixed during PR review: `campaign_id = camp.get("name") and payload.campaign_id` → `campaign_id = payload.campaign_id` (the find_one already returned a row; the truthy-chain was a leftover).
+  - **Dependencies added**: `langgraph==1.2.2`, `langgraph-checkpoint==4.1.1`, `langgraph-checkpoint-mongodb==0.4.0`. Bumped `motor 3.3.1 → 3.7.1` and `pymongo 4.5.0 → 4.16.0` for compatibility (langgraph-checkpoint-mongodb requires pymongo>=4.10).
+  - **7 new pytest cases** across two files:
+    - `tests/test_marketing_os.py::TestLangGraphOrchestrator` (5): canonical graph compiles with all 5 nodes; `_route_after_content` skips on flag + on error + runs distribution otherwise; `_route_after_strategy` error short-circuits; CANONICAL_ROLES single-source-of-truth parity between modules; persisted run carries `framework: "langgraph"`.
+    - `tests/test_langgraph_skip_distribution.py` (2, written by the testing agent): creates a transient empty-platforms campaign, asserts `os_started.skip_distribution=true`, asserts SSE stream contains NO `agent_started`/`agent_done` for Kai, asserts persisted row has the conditional-edge metadata.
+  - **All 49 marketing-OS pytest cases pass** (18 original + 26 features + 5 new orchestrator + 2 new skip-distribution). Convene endpoint regression tested (still passes). Pre-existing handoff-test flake at ~100s Cloudflare timeout remains unrelated.
+  - **Frontend**: NO changes required. The SSE event vocabulary is byte-identical (`os_started → agent_started → agent_done × N → summarizing → complete → os_persisted`), so `CommandCenter.jsx` and `RunOSModal` render the LangGraph path unchanged. The only new field clients can read is `os_started.skip_distribution` (currently informational; could power a "⏭ Distribution skipped — no platforms" pill in a future PR).
+
+
 - 2026-05-28 (part 47) **🛡️ "Test this voice" — budget-cap-safe error handling**
   - **Backend (`routes/memory.py::test_brand_voice`)**: wrapped `send_with_usage` in `asyncio.wait_for(..., timeout=25)` so a stalled LiteLLM call aborts before the ingress idle limit. Returns 504 on `asyncio.TimeoutError` and 429 when the underlying error string contains `"budget"`, `"rate limit"`, or `"429"` (LiteLLM surfaces universal-key cap errors this way). Falls back to 503 for any other failure.
   - **Frontend (`pages/dashboard/CommandCenter.jsx::runVoiceTest`)**: added a 30s axios `timeout` so the UI never hangs forever. Distinct toast copy per status: `ECONNABORTED`/timeout ("Timed out — universal key may be over budget"), 422 ("Add an anchor first"), 429 ("LLM budget cap reached — add balance in Profile → Universal Key"), 504 ("LLM is slow right now"), 503 ("LLM unavailable"). Spinner always clears via `finally`.
