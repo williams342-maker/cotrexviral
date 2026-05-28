@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Trophy, Sparkles, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { Trophy, Sparkles, ChevronDown, ChevronUp, AlertTriangle, ArrowUpRight } from 'lucide-react';
 import { API } from '../context/AuthContext';
 
 /* Reusable callout that surfaces the user's feedback-loop insights:
@@ -17,7 +17,7 @@ import { API } from '../context/AuthContext';
    Auto-hides when both lists are empty so brand-new users don't see a
    "no data yet" panel. Falls back gracefully on network error. */
 
-const FeedbackInsights = ({ compact = false, limit = 3, testid = 'feedback-insights', theme = 'dark' }) => {
+const FeedbackInsights = ({ compact = false, limit = 3, testid = 'feedback-insights', theme = 'dark', onUseHook = null }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(!compact);
@@ -132,19 +132,35 @@ const FeedbackInsights = ({ compact = false, limit = 3, testid = 'feedback-insig
         <div className={`text-[11px] italic ${t.mutedText}`}>No winning hooks yet — publish a few posts and the feedback loop will surface them automatically.</div>
       ) : (
         <ul className="space-y-1.5">
-          {winners.slice(0, limit).map((w) => (
-            <li key={w.id} className={`flex items-start gap-2 text-xs ${t.bodyText}`} data-testid={`${testid}-winner-${w.id}`}>
-              <span className="shrink-0 text-emerald-600 font-semibold tabular-nums min-w-[42px]">
-                {Math.round((w.meta?.engagement_rate || 0) * 1000) / 10}%
-              </span>
-              <span className={`text-[10px] uppercase tracking-wider min-w-[58px] ${t.mutedText}`}>
-                {w.meta?.platform || '—'}
-              </span>
-              <span className="flex-1 leading-snug">
-                {(w.text || '').replace(/^\[.+?\]\s*/, '').replace(/\s*\(engagement.*$/, '')}
-              </span>
-            </li>
-          ))}
+          {winners.slice(0, limit).map((w) => {
+            const cleanText = (w.text || '').replace(/^\[.+?\]\s*/, '').replace(/\s*\(engagement.*$/, '');
+            return (
+              <li key={w.id} className={`flex items-start gap-2 text-xs ${t.bodyText} group`} data-testid={`${testid}-winner-${w.id}`}>
+                <span className="shrink-0 text-emerald-600 font-semibold tabular-nums min-w-[42px]">
+                  {Math.round((w.meta?.engagement_rate || 0) * 1000) / 10}%
+                </span>
+                <span className={`text-[10px] uppercase tracking-wider min-w-[58px] ${t.mutedText}`}>
+                  {w.meta?.platform || '—'}
+                </span>
+                <span className="flex-1 leading-snug">{cleanText}</span>
+                {onUseHook && (
+                  <button
+                    type="button"
+                    onClick={() => onUseHook(cleanText, w)}
+                    className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center gap-1 ${
+                      theme === 'light'
+                        ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                        : 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/15'
+                    }`}
+                    data-testid={`${testid}-use-${w.id}`}
+                    title="Use this hook as your topic"
+                  >
+                    Use <ArrowUpRight size={9} />
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
       {losers.length > 0 && (

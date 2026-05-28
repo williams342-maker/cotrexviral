@@ -315,7 +315,24 @@ const Compose = () => {
               </button>
             </div>
           )}
-          <FeedbackInsights testid="compose-feedback-insights" limit={3} theme="light" />
+          <FeedbackInsights
+            testid="compose-feedback-insights"
+            limit={3}
+            theme="light"
+            onUseHook={(hookText) => {
+              setTopic(hookText);
+              toast({
+                title: 'Hook applied',
+                description: 'Generated topic set. Hit "Generate with AI" to riff on this winning pattern.',
+              });
+              // Scroll the topic input into view + focus it so the user
+              // can immediately edit / regenerate from there.
+              setTimeout(() => {
+                const el = document.querySelector('input[placeholder*="yoga"]');
+                if (el) { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+              }, 50);
+            }}
+          />
           <div className="grid md:grid-cols-3 gap-3">
             <div className="md:col-span-2">
               <label className="text-[12px] font-medium text-neutral-600 mb-1.5 block">Topic / Listing</label>
