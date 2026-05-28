@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Command, Sparkles, Zap, TrendingUp, CheckSquare, Trophy,
   ChevronRight, Play, Activity, Loader2, Flame, ArrowRight, Bot,
-  Layers, Users, BarChart3, Megaphone, Brain,
+  Layers, Users, BarChart3, Megaphone, Brain, Plus,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { API } from '../../context/AuthContext';
@@ -236,13 +236,136 @@ const RunModal = ({ open, onClose, onComplete }) => {
 
 
 // ----------------------------------------------------------------------
+// New Campaign Modal — minimal create form (name + goal)
+// ----------------------------------------------------------------------
+const GOAL_OPTIONS = [
+  { id: 'awareness',  label: 'Awareness'  },
+  { id: 'leads',      label: 'Leads'      },
+  { id: 'sales',      label: 'Sales'      },
+  { id: 'retention',  label: 'Retention'  },
+  { id: 'custom',     label: 'Custom'     },
+];
+
+const NewCampaignModal = ({ open, onClose, onCreated }) => {
+  const [name, setName] = useState('');
+  const [goal, setGoal] = useState('awareness');
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  if (!open) return null;
+
+  const submit = async () => {
+    if (!name.trim()) {
+      toast({ title: 'Name required', description: 'Give your campaign a short name.' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await axios.post(
+        `${API}/campaigns`,
+        { name: name.trim(), goal },
+        { withCredentials: true },
+      );
+      toast({ title: 'Campaign created', description: `"${r.data.name}" is in Draft.` });
+      setName(''); setGoal('awareness');
+      onCreated && onCreated(r.data);
+      onClose();
+    } catch (e) {
+      toast({
+        title: 'Could not create campaign',
+        description: e.response?.data?.detail || e.message,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const close = () => { if (saving) return; setName(''); setGoal('awareness'); onClose(); };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={close} data-testid="new-campaign-modal">
+      <div className="w-full max-w-md rounded-2xl border border-cyan-500/30 bg-zinc-950 p-6"
+        onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-cyan-400 font-bold mb-1">Campaign Board</div>
+            <h2 className="text-xl font-bold text-white">New campaign</h2>
+            <p className="text-xs text-zinc-400 mt-1">Name + goal to start — you can flesh out audience and pillars later.</p>
+          </div>
+          <button onClick={close} className="text-zinc-500 hover:text-white text-2xl leading-none" data-testid="new-campaign-close">×</button>
+        </div>
+
+        <label className="block text-[10px] uppercase tracking-widest text-zinc-400 font-semibold mb-1.5">Name</label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Q3 product launch"
+          autoFocus
+          disabled={saving}
+          maxLength={120}
+          className="w-full bg-zinc-900 border border-white/10 rounded-lg p-2.5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-cyan-500/50 mb-4"
+          data-testid="new-campaign-name"
+        />
+
+        <label className="block text-[10px] uppercase tracking-widest text-zinc-400 font-semibold mb-1.5">Goal</label>
+        <div className="grid grid-cols-3 gap-1.5 mb-5" data-testid="new-campaign-goal-options">
+          {GOAL_OPTIONS.map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => setGoal(g.id)}
+              disabled={saving}
+              data-testid={`new-campaign-goal-${g.id}`}
+              className={`px-2.5 py-1.5 rounded-md text-xs border transition-colors ${
+                goal === g.id
+                  ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
+                  : 'border-white/10 text-zinc-400 hover:bg-white/5'
+              }`}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={close}
+            disabled={saving}
+            className="px-4 py-2 rounded-lg border border-white/10 text-zinc-300 hover:bg-white/5 text-sm"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={saving}
+            className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+            data-testid="new-campaign-submit"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+            Create campaign
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// ----------------------------------------------------------------------
 // Main page
 // ----------------------------------------------------------------------
 const CommandCenter = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [runOpen, setRunOpen] = useState(false);
+  const [newCampOpen, setNewCampOpen] = useState(false);
+  // The campaign currently being dragged — id only.
+  const [draggingId, setDraggingId] = useState(null);
+  // Target column being hovered (for visual highlight).
+  const [hoverStatus, setHoverStatus] = useState(null);
 
   const load = async () => {
     try {
@@ -265,6 +388,66 @@ const CommandCenter = () => {
     });
     return groups;
   }, [data?.campaigns]);
+
+  // Optimistic move: update local state immediately, PATCH the server,
+  // roll back + toast on failure. Free movement between all 3 columns.
+  const moveCampaign = async (campaignId, nextStatus) => {
+    const current = (data?.campaigns || []).find((c) => c.id === campaignId);
+    if (!current || current.status === nextStatus) return;
+
+    setData((prev) => prev ? ({
+      ...prev,
+      campaigns: prev.campaigns.map((c) =>
+        c.id === campaignId ? { ...c, status: nextStatus } : c,
+      ),
+    }) : prev);
+
+    try {
+      await axios.patch(
+        `${API}/campaigns/${campaignId}`,
+        { status: nextStatus },
+        { withCredentials: true },
+      );
+      toast({
+        title: 'Campaign moved',
+        description: `"${current.name}" → ${nextStatus}`,
+      });
+    } catch (e) {
+      // Roll back the optimistic update.
+      setData((prev) => prev ? ({
+        ...prev,
+        campaigns: prev.campaigns.map((c) =>
+          c.id === campaignId ? { ...c, status: current.status } : c,
+        ),
+      }) : prev);
+      toast({
+        title: 'Could not move campaign',
+        description: e.response?.data?.detail || e.message,
+      });
+    }
+  };
+
+  const onCardDragStart = (e, campaignId) => {
+    setDraggingId(campaignId);
+    try { e.dataTransfer.effectAllowed = 'move'; } catch (_) { /* noop */ }
+  };
+  const onCardDragEnd = () => { setDraggingId(null); setHoverStatus(null); };
+  const onColumnDragOver = (e, status) => {
+    if (!draggingId) return;
+    e.preventDefault();
+    try { e.dataTransfer.dropEffect = 'move'; } catch (_) { /* noop */ }
+    if (hoverStatus !== status) setHoverStatus(status);
+  };
+  const onColumnDragLeave = (status) => {
+    if (hoverStatus === status) setHoverStatus(null);
+  };
+  const onColumnDrop = (e, status) => {
+    e.preventDefault();
+    const id = draggingId;
+    setDraggingId(null);
+    setHoverStatus(null);
+    if (id) moveCampaign(id, status);
+  };
 
   return (
     <DashboardLayout
@@ -342,38 +525,70 @@ const CommandCenter = () => {
           <div className="lg:col-span-2 rounded-2xl border border-white/10 bg-white/[0.02] p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Layers size={14} className="text-cyan-300" /> Campaign Board</h3>
-              <button onClick={() => navigate('/dashboard/posts')} className="text-xs text-zinc-400 hover:text-white flex items-center gap-1" data-testid="os-campaigns-open">
-                Open posts <ChevronRight size={12} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setNewCampOpen(true)}
+                  className="text-xs px-2.5 py-1 rounded-md bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25 flex items-center gap-1"
+                  data-testid="new-campaign-btn"
+                >
+                  <Plus size={12} /> New
+                </button>
+                <button onClick={() => navigate('/dashboard/posts')} className="text-xs text-zinc-400 hover:text-white flex items-center gap-1" data-testid="os-campaigns-open">
+                  Open posts <ChevronRight size={12} />
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-3 gap-3" data-testid="campaign-board">
-              {['draft', 'active', 'completed'].map((status) => (
-                <div key={status} className="rounded-lg border border-white/5 bg-zinc-950/50 p-2 min-h-[160px]">
-                  <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold px-1 pb-2 flex items-center justify-between">
-                    <span>{status}</span>
-                    <span className="text-zinc-600">{campaignsByStatus[status]?.length || 0}</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {(campaignsByStatus[status] || []).length === 0 ? (
-                      <div className="text-[11px] text-zinc-600 italic px-1 py-2">No campaigns</div>
-                    ) : (
-                      campaignsByStatus[status].map((c) => (
-                        <div key={c.id} className="rounded-md border border-white/5 bg-zinc-900/60 p-2"
-                          data-testid={`campaign-card-${c.id}`}>
-                          <div className="text-xs text-white font-medium truncate">{c.name}</div>
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded border ${STATUS_PILL[status]}`}>{c.goal}</span>
-                            {(c.platforms || []).slice(0, 2).map((p) => (
-                              <span key={p} className="text-[9px] text-zinc-500">{p}</span>
-                            ))}
-                          </div>
+              {['draft', 'active', 'completed'].map((status) => {
+                const isHover = hoverStatus === status && draggingId;
+                return (
+                  <div
+                    key={status}
+                    onDragOver={(e) => onColumnDragOver(e, status)}
+                    onDragLeave={() => onColumnDragLeave(status)}
+                    onDrop={(e) => onColumnDrop(e, status)}
+                    data-testid={`kanban-col-${status}`}
+                    className={`rounded-lg border bg-zinc-950/50 p-2 min-h-[160px] transition-colors ${
+                      isHover ? 'border-cyan-400/60 bg-cyan-500/5' : 'border-white/5'
+                    }`}
+                  >
+                    <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold px-1 pb-2 flex items-center justify-between">
+                      <span>{status}</span>
+                      <span className="text-zinc-600">{campaignsByStatus[status]?.length || 0}</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {(campaignsByStatus[status] || []).length === 0 ? (
+                        <div className="text-[11px] text-zinc-600 italic px-1 py-2">
+                          {isHover ? 'Drop here' : 'No campaigns'}
                         </div>
-                      ))
-                    )}
+                      ) : (
+                        campaignsByStatus[status].map((c) => (
+                          <div
+                            key={c.id}
+                            draggable
+                            onDragStart={(e) => onCardDragStart(e, c.id)}
+                            onDragEnd={onCardDragEnd}
+                            data-testid={`campaign-card-${c.id}`}
+                            className={`rounded-md border border-white/5 bg-zinc-900/60 p-2 cursor-grab active:cursor-grabbing select-none transition-opacity ${
+                              draggingId === c.id ? 'opacity-40' : 'hover:bg-zinc-900/90'
+                            }`}
+                          >
+                            <div className="text-xs text-white font-medium truncate">{c.name}</div>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded border ${STATUS_PILL[status]}`}>{c.goal}</span>
+                              {(c.platforms || []).slice(0, 2).map((p) => (
+                                <span key={p} className="text-[9px] text-zinc-500">{p}</span>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
+            <div className="text-[10px] text-zinc-600 mt-2 px-1">Drag a card between columns to change status.</div>
           </div>
 
           {/* Opportunity Signals */}
@@ -493,6 +708,11 @@ const CommandCenter = () => {
       </div>
 
       <RunModal open={runOpen} onClose={() => setRunOpen(false)} onComplete={load} />
+      <NewCampaignModal
+        open={newCampOpen}
+        onClose={() => setNewCampOpen(false)}
+        onCreated={load}
+      />
     </DashboardLayout>
   );
 };
