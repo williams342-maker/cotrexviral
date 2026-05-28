@@ -18,6 +18,8 @@ import { useToast } from '../../hooks/use-toast';
      RIGHT → metrics rail (sparklines + connected channels list) */
 
 const AGENT_TONES = {
+  blue:    { ring: 'ring-blue-400/40',    dot: 'bg-blue-400',    text: 'text-blue-300',    soft: 'bg-blue-500/10 border-blue-500/30',    stroke: '#60a5fa' },
+  indigo:  { ring: 'ring-indigo-400/40',  dot: 'bg-indigo-400',  text: 'text-indigo-300',  soft: 'bg-indigo-500/10 border-indigo-500/30',  stroke: '#818cf8' },
   emerald: { ring: 'ring-emerald-400/40', dot: 'bg-emerald-400', text: 'text-emerald-300', soft: 'bg-emerald-500/10 border-emerald-500/30', stroke: '#34d399' },
   amber:   { ring: 'ring-amber-400/40',   dot: 'bg-amber-400',   text: 'text-amber-300',   soft: 'bg-amber-500/10 border-amber-500/30',   stroke: '#fbbf24' },
   rose:    { ring: 'ring-rose-400/40',    dot: 'bg-rose-400',    text: 'text-rose-300',    soft: 'bg-rose-500/10 border-rose-500/30',    stroke: '#fb7185' },
@@ -25,6 +27,8 @@ const AGENT_TONES = {
 };
 
 const AGENT_INITIAL_GREETING = {
+  strategy: "I'm Atlas. Tell me your business goal (revenue target, audience size, launch date) and I'll build the full 30/60/90 plan.",
+  research: "Iris here. Drop a niche, competitor, or keyword — I'll come back with the trends, gaps, and audience signals worth acting on.",
   nova: "Hey — I'm Nova. Tell me about your brand, your traffic targets, or your biggest growth blocker, and I'll map out the next 1-2 weeks of moves.",
   sam: "I'm Sam. Drop a topic, target keyword, or competitor URL — I'll come back with a brief you can hand a writer.",
   kai: "Kai here. Tell me your niche and which platforms you live on — I'll surface the trending hooks and competitor moves of the last 14 days.",
@@ -42,7 +46,7 @@ const AgentWorkspace = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [agents, setAgents] = useState([]);
-  const [activeId, setActiveId] = useState(agentId || 'nova');
+  const [activeId, setActiveId] = useState(agentId || 'strategy');
   const [threads, setThreads] = useState({});   // { [agentId]: [{role, content, follow_ups}] }
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -282,6 +286,18 @@ const AgentWorkspace = () => {
 };
 
 const STARTER_PROMPTS = {
+  strategy: [
+    "Build me a 30/60/90 day plan to hit $10k MRR.",
+    "Design a launch funnel for our new product.",
+    "Map our highest-leverage growth bet for this quarter.",
+    "Audit my current funnel and rank what to fix first.",
+  ],
+  research: [
+    "What's trending in my niche on TikTok this week?",
+    "Show me 3 competitor moves of the last 14 days.",
+    "Find untapped keyword opportunities for my brand.",
+    "What pain points are surfacing on Reddit right now?",
+  ],
   nova: [
     "Audit my current marketing — what's the highest-leverage move this week?",
     "Build me a 4-week launch plan for a new product line.",

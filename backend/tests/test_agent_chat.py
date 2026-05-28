@@ -23,7 +23,7 @@ class TestAgentList:
         assert r.status_code == 200
         body = r.json()
         ids = sorted(a["id"] for a in body["agents"])
-        assert ids == ["angela", "kai", "nova", "sam"]
+        assert ids == ["angela", "kai", "nova", "research", "sam", "strategy"]
         for a in body["agents"]:
             # Public payload should NOT leak the system prompt
             assert "system" not in a

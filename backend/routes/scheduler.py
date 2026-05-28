@@ -66,6 +66,11 @@ async def _publish_due_posts_now() -> dict:
         from routes.oauth_pinterest import publish_to_pinterest
     except Exception:  # pragma: no cover
         publish_to_pinterest = None
+    try:
+        from routes.oauth_meta import publish_to_facebook, publish_to_instagram
+    except Exception:  # pragma: no cover
+        publish_to_facebook = None
+        publish_to_instagram = None
 
     for post in due:
         platforms = post.get("platforms") or []
@@ -100,6 +105,28 @@ async def _publish_due_posts_now() -> dict:
             )
             if not res.get("ok"):
                 logger.warning("scheduler: pinterest dispatch failed for %s: %s", post["id"], res.get("reason"))
+        if "facebook" in platforms and publish_to_facebook:
+            res = await publish_to_facebook(
+                post["user_id"], post["content"],
+                image_url=post.get("media_url"),
+            )
+            await db.posts.update_one(
+                {"id": post["id"]},
+                {"$set": {"dispatch.facebook": res}},
+            )
+            if not res.get("ok"):
+                logger.warning("scheduler: facebook dispatch failed for %s: %s", post["id"], res.get("reason"))
+        if "instagram" in platforms and publish_to_instagram:
+            res = await publish_to_instagram(
+                post["user_id"], post["content"],
+                image_url=post.get("media_url"),
+            )
+            await db.posts.update_one(
+                {"id": post["id"]},
+                {"$set": {"dispatch.instagram": res}},
+            )
+            if not res.get("ok"):
+                logger.warning("scheduler: instagram dispatch failed for %s: %s", post["id"], res.get("reason"))
 
     return {"due": len(due), "published": result.modified_count, "ids": ids}
 

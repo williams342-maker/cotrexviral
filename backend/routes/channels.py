@@ -120,6 +120,17 @@ async def publish(payload: PublishRequest, request: Request):
     user = await get_current_user(request)
     is_scheduled = payload.scheduled_at and payload.scheduled_at > datetime.now(timezone.utc)
 
+    # Approval gate — if the user has `require_post_approval` on, scheduled
+    # posts are parked in status="pending_approval" until they hit /approve.
+    # Immediate publishes (is_scheduled=False) bypass this since the user is
+    # actively clicking publish themselves.
+    user_doc = await db.users.find_one(
+        {"user_id": user.user_id},
+        {"_id": 0, "require_post_approval": 1},
+    ) or {}
+    requires_approval = bool(user_doc.get("require_post_approval", False)) and is_scheduled
+    scheduled_status = "pending_approval" if requires_approval else "scheduled"
+
     # --- Weekly recurrence: only valid for scheduled posts. ---
     # When `repeat_weeks` is set (and the post is scheduled into the future),
     # we materialise N instances of the same content at +0w, +1w, ..., +(N-1)w.
@@ -136,7 +147,7 @@ async def publish(payload: PublishRequest, request: Request):
                 "content": payload.content,
                 "platforms": payload.platforms,
                 "media_url": payload.media_url,
-                "status": "scheduled",
+                "status": scheduled_status,
                 "scheduled_at": sched_at,
                 "recurrence_group_id": group_id,
                 "recurrence_index": week_offset,
@@ -155,7 +166,7 @@ async def publish(payload: PublishRequest, request: Request):
             "recurrence_group_id": group_id,
             "repeat_weeks": payload.repeat_weeks,
             "platforms": payload.platforms,
-            "status": "scheduled",
+            "status": scheduled_status,
         }
 
     post = {
@@ -164,7 +175,7 @@ async def publish(payload: PublishRequest, request: Request):
         "content": payload.content,
         "platforms": payload.platforms,
         "media_url": payload.media_url,
-        "status": "scheduled" if is_scheduled else "published",
+        "status": scheduled_status if is_scheduled else "published",
         "scheduled_at": payload.scheduled_at if is_scheduled else None,
         "created_at": datetime.now(timezone.utc),
     }
@@ -196,6 +207,16 @@ async def publish(payload: PublishRequest, request: Request):
             board_id=payload.pinterest_board_id,
             link=payload.pinterest_link,
             title=payload.pinterest_title,
+        )
+    if not is_scheduled and "facebook" in (payload.platforms or []):
+        from routes.oauth_meta import publish_to_facebook  # lazy import (circular safe)
+        dispatch["facebook"] = await publish_to_facebook(
+            user.user_id, payload.content, image_url=payload.media_url,
+        )
+    if not is_scheduled and "instagram" in (payload.platforms or []):
+        from routes.oauth_meta import publish_to_instagram  # lazy import (circular safe)
+        dispatch["instagram"] = await publish_to_instagram(
+            user.user_id, payload.content, image_url=payload.media_url,
         )
     if dispatch:
         await db.posts.update_one({"id": post["id"]}, {"$set": {"dispatch": dispatch}})

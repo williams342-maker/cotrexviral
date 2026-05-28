@@ -44,6 +44,7 @@ from routes import (  # noqa: F401
     agent_chat,      # In-dashboard per-agent chat (Nova/Sam/Kai/Angela)
     analytics,       # Per-post metrics refresh (Pinterest live; others TODO)
     memory,          # Vector memory system (brand profile, posts, agent context)
+    approvals,       # Human-in-the-loop approval workflow
 )
 
 

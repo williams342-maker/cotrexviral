@@ -169,6 +169,20 @@ const Compose = () => {
           payload.pinterest_images = allImages.slice(0, 5);
         }
       }
+      // Instagram requires an image URL (text-only IG posts aren't supported by the API).
+      if (platforms.includes('instagram') && !payload.media_url && !pinImageUrl.trim()) {
+        toast({
+          title: 'Instagram needs an image URL',
+          description: 'Drop an image into the Pinterest "Image URL" field above — Instagram will reuse it.',
+        });
+        setPublishing(false);
+        return;
+      }
+      // If Instagram is selected without Pinterest, still let the FB photo
+      // dispatcher use the Pinterest image as a generic media_url.
+      if (!payload.media_url && pinImageUrl.trim()) {
+        payload.media_url = pinImageUrl.trim();
+      }
       const r = await axios.post(`${API}/channels/publish`, payload, { withCredentials: true });
       const isScheduled = r.data.status === 'scheduled';
       const wasSeries = Array.isArray(r.data.ids) && r.data.ids.length > 1;

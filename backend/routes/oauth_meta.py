@@ -407,3 +407,153 @@ async def instagram_disconnect(request: Request):
                   "updated_at": datetime.now(timezone.utc)}},
     )
     return {"ok": True}
+
+
+# ===========================================================================
+# Publishing helpers — called from routes/channels.py + routes/scheduler.py
+# ===========================================================================
+
+# Facebook + Instagram captions can be very long, but Pages prefer concise
+# posts and Instagram tops out at 2,200 chars. We trim with `…` on overflow
+# to avoid a 400 from the Graph API.
+FB_TEXT_LIMIT = 5000
+IG_CAPTION_LIMIT = 2200
+
+
+def _trim(text: str, limit: int) -> str:
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
+
+
+async def publish_to_facebook(user_id: str, text: str, *,
+                              image_url: str | None = None,
+                              page_id: str | None = None) -> dict:
+    """Post to the user's Facebook Page. Returns {ok, post_id, permalink} or
+    a structured failure dict matching the other publish_to_* helpers.
+
+    Routes through `/{page_id}/feed` for text/link posts, or `/{page_id}/photos`
+    when an image_url is supplied. If `page_id` is not specified, posts to
+    the user's first connected Page.
+    """
+    conn = await db.facebook_connections.find_one({"user_id": user_id}, {"_id": 0})
+    if not conn or not (conn.get("pages") or []):
+        return {"ok": False, "reason": "not_connected"}
+
+    pages = conn["pages"]
+    target = None
+    if page_id:
+        target = next((p for p in pages if p.get("id") == page_id), None)
+        if not target:
+            return {"ok": False, "reason": "page_not_found"}
+    else:
+        target = pages[0]
+    page_token = target.get("access_token")
+    pg_id = target.get("id")
+    if not page_token or not pg_id:
+        return {"ok": False, "reason": "missing_page_token"}
+
+    body_text = _trim(text, FB_TEXT_LIMIT)
+    async with httpx.AsyncClient(timeout=30) as cli:
+        if image_url:
+            r = await cli.post(_graph_url(f"{pg_id}/photos"), data={
+                "url": image_url,
+                "caption": body_text,
+                "access_token": page_token,
+            })
+        else:
+            r = await cli.post(_graph_url(f"{pg_id}/feed"), data={
+                "message": body_text,
+                "access_token": page_token,
+            })
+    if r.status_code not in (200, 201):
+        logger.warning("Facebook publish failed for %s: %s %s",
+                       user_id, r.status_code, r.text[:300])
+        return {"ok": False, "reason": "api_error",
+                "status": r.status_code, "body": r.text[:400]}
+
+    data = r.json() or {}
+    # /feed returns {id: "pageid_postid"}; /photos returns {id, post_id}
+    fb_post_id = data.get("post_id") or data.get("id")
+    return {
+        "ok": True,
+        "post_id": fb_post_id,
+        "page_id": pg_id,
+        "permalink": (f"https://www.facebook.com/{fb_post_id}"
+                      if fb_post_id else None),
+    }
+
+
+async def publish_to_instagram(user_id: str, text: str, *,
+                               image_url: str | None = None,
+                               ig_user_id: str | None = None) -> dict:
+    """Two-step IG Graph publish: create container → /media_publish.
+
+    Instagram REQUIRES an image_url for feed posts — there is no
+    text-only IG post via the API. We return a clear `instagram_requires_image_url`
+    failure so the Compose UI can surface a friendly message.
+    """
+    if not image_url:
+        return {"ok": False, "reason": "instagram_requires_image_url"}
+
+    conn = await db.instagram_connections.find_one({"user_id": user_id}, {"_id": 0})
+    if not conn or not (conn.get("ig_accounts") or []):
+        return {"ok": False, "reason": "not_connected"}
+
+    accounts = conn["ig_accounts"]
+    target = None
+    if ig_user_id:
+        target = next((a for a in accounts if a.get("ig_user_id") == ig_user_id), None)
+        if not target:
+            return {"ok": False, "reason": "ig_account_not_found"}
+    else:
+        target = accounts[0]
+
+    target_ig = target.get("ig_user_id")
+    # Look up the matching Page access token (IG publish uses the Page token).
+    page_id = target.get("page_id")
+    page_token = None
+    for p in (conn.get("pages") or []):
+        if p.get("id") == page_id:
+            page_token = p.get("access_token")
+            break
+    if not page_token or not target_ig:
+        return {"ok": False, "reason": "missing_credentials"}
+
+    caption = _trim(text, IG_CAPTION_LIMIT)
+    async with httpx.AsyncClient(timeout=60) as cli:
+        # Step 1: create media container
+        c = await cli.post(_graph_url(f"{target_ig}/media"), data={
+            "image_url": image_url,
+            "caption": caption,
+            "access_token": page_token,
+        })
+        if c.status_code not in (200, 201):
+            logger.warning("Instagram media container failed for %s: %s %s",
+                           user_id, c.status_code, c.text[:300])
+            return {"ok": False, "reason": "container_failed",
+                    "status": c.status_code, "body": c.text[:400]}
+        creation_id = (c.json() or {}).get("id")
+        if not creation_id:
+            return {"ok": False, "reason": "no_creation_id"}
+
+        # Step 2: publish the container
+        p = await cli.post(_graph_url(f"{target_ig}/media_publish"), data={
+            "creation_id": creation_id,
+            "access_token": page_token,
+        })
+        if p.status_code not in (200, 201):
+            logger.warning("Instagram media_publish failed for %s: %s %s",
+                           user_id, p.status_code, p.text[:300])
+            return {"ok": False, "reason": "publish_failed",
+                    "status": p.status_code, "body": p.text[:400]}
+        ig_post_id = (p.json() or {}).get("id")
+
+    return {
+        "ok": True,
+        "post_id": ig_post_id,
+        "ig_user_id": target_ig,
+        "permalink": (f"https://www.instagram.com/p/{ig_post_id}"
+                      if ig_post_id else None),
+    }
