@@ -35,6 +35,37 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-28 (part 46) **🎯 Marketing OS pivot — Opportunity Signals + Command Center + 5-role chain**
+  - **Architectural pivot landed** (from chat-only to "Autonomous Marketing Operating System"). Built on top of the existing Convene engine instead of swapping to LangGraph/CrewAI — same orchestration runtime, new lens.
+  - **Opportunity Signals scoring** (`routes/trends_engine.py`):
+    - New deterministic `_score_signal(text, meta)` runs on EVERY ingested trend (Reddit + Google Trends) — no LLM call, no extra latency.
+    - Emits structured envelope: `{virality_score: int 0..100, urgency: "now"|"this_week"|"monitor", content_angle: str, recommended_agent: "nova"|"sam"|"kai"|"angela"}` persisted to `cortex_memory.meta.signal`.
+    - Reddit scoring: log-scaled upvotes (`+15 × log10(upvotes+1)` capped at +55).
+    - Google Trends scoring: tiered growth% (≥500% → +55, ≥250% → +40, ≥100% → +25, ≥50% → +15, else +8). Baseline 35 so quiet signals still show up in the feed.
+    - Recommended-agent routing by keyword: 'seo'/'google'/'search'/'keyword'/'ranking' → Sam; 'email'/'newsletter'/'subject line' → Angela; 'tiktok'/'reels'/'trend'/'viral'/'hook'/'influencer' → Kai; otherwise Nova.
+    - Content-angle one-liner templated per source so the Command Center card has a tight creative hint without an extra LLM call.
+  - **New `routes/marketing_os.py`** — the Marketing OS API surface:
+    - **`GET /api/marketing-os/dashboard`** — single round-trip payload for the Command Center: `{roles, stats (4 counters), campaigns (last 10), signals (top 8 by virality), approvals (first 5 pending), runs (last 5), wins (last 5 winning_hook memories)}`. All aggregations fanned out in parallel via `asyncio.gather`.
+    - **`GET /api/marketing-os/signals?limit=`** — full ranked Opportunity Signals feed (virality desc, falls back to created_at when score absent). Limit clamped 1..100.
+    - **`GET /api/marketing-os/runs?limit=`** + **`GET /api/marketing-os/runs/{id}`** — run history.
+    - **`GET /api/marketing-os/roles`** — public catalogue of the 5 canonical roles.
+    - **`POST /api/marketing-os/run/stream`** — SSE — runs the canonical chain on a brief. Strategy(Atlas) → Intelligence(Iris) → Content(Nova) → Distribution(Kai) → Analytics(Angela synthesizes). Reuses the proven `_convene` async generator for the actual orchestration; only adds the `os_started` + `os_persisted` framing events and the run persistence. Supports `roles` subset override and `campaign_id` enrichment (brief is automatically prepended with the campaign goal/audience/pillars when set).
+    - Persists every completed/failed run to a new `marketing_os_runs` collection with the full transcript so the Activity Feed has an audit trail without re-running the chain.
+  - **Frontend `pages/dashboard/CommandCenter.jsx`** (`/dashboard/command-center`):
+    - Hero CTA panel with "Run the OS" button (violet glow) + Signals shortcut.
+    - 4 stat tiles (Active Campaigns / Pending Approvals / Hot Signals / Recent Wins) with role-color accents.
+    - **5-Role strip** — labelled tiles for Strategy/Intelligence/Content/Distribution/Analytics with role-mapped icons (Brain, Sparkles, Megaphone, Users, BarChart3).
+    - **Campaign Board** (3-column kanban: draft / active / completed) with status pills + platform chips.
+    - **Opportunity Signals stack** — top 5 by virality, each card showing urgency pill (ACT NOW / THIS WEEK / MONITOR), virality score, content_angle italic, and recommended-agent pill with quick "Draft →" CTA.
+    - **Approval Inbox** snapshot + **Agent Activity Feed** (recent OS runs with status badge) + **Recent Wins** (emerald-tinted winning_hook memories).
+    - **Run Modal** (`os-run-modal`) — brief textarea + live SSE progress with per-agent rows (⌛ pending → 🔄 running → ✓ done) and a violet "Executive summary" panel below.
+    - Full `data-testid` coverage: `command-center-page`, `stat-{campaigns,approvals,signals,wins}`, `os-roles-strip`, `campaign-board`, `campaign-card-{id}`, `signals-stack`, `signal-card-{id}`, `approval-inbox`, `activity-feed`, `wins-feed`, `os-run-cta`, `os-run-modal`, `os-run-brief`, `os-run-start`, `os-run-progress`, `os-run-close`.
+  - **Sidebar**: "Command Center" added as the **first** item (Command lucide icon). `/dashboard` default redirect changed from `/dashboard/agent` → `/dashboard/command-center`.
+  - **18 new pytest cases** (`tests/test_marketing_os.py`): auth on all endpoints, dashboard shape with all 5 roles + 4 stat counters, signals scoring envelope correctness + recommended-agent routing, signals ranked by virality desc, runs list + 404 on unknown id, run/stream invalid-role 422, run/stream unknown-campaign 404, full SSE happy-path with event order invariant + persistence verification.
+  - **All 45 regression tests still pass** (trends_engine, convene, auto_draft_and_chip, trend_drafts_and_nudge, agent_stream).
+  - **Live curl + UI screenshot verified**: re-ingesting trends produced `meta.signal: {virality_score: 60, urgency: "this_week", recommended_agent: "sam", content_angle: "Search interest for \"saas\" is spiking — own the explainer first."}` for the SaaS keyword. Command Center page rendered end-to-end with all 5 role tiles, campaign kanban, and 5 signal cards live in the right rail.
+
+
 - 2026-02-28 (part 45) **📆 Weekly auto-draft cron + 💸 Per-user spend chip**
   - **Weekly Monday auto-draft** — turns the trends engine from "a feed I check" into "a queue that fills itself":
     - **New module `routes/auto_draft.py`** with the full pipeline:
