@@ -52,15 +52,20 @@ def _extract_handoff(text: str) -> tuple[str, Optional[dict]]:
     """Strip an optional `<<HANDOFF>>agent: question<<END>>` block from the
     middle of a reply. Returns (cleaned_text, {"agent_id": ..., "question": ...}
     or None). Only one handoff per reply — additional matches are left in
-    the text untouched."""
+    the text untouched.
+
+    Resolves the captured token through `_AGENT_LOOKUP` so the LLM can
+    emit either the agent's display name (`iris`) or its internal id
+    (`research`) — both work."""
     if not text:
         return "", None
     m = _HANDOFF_RE.search(text)
     if not m:
         return text, None
-    agent_id = m.group(1).strip().lower()
+    raw_token = m.group(1).strip().lower()
+    agent_id = _AGENT_LOOKUP.get(raw_token)
     question = m.group(2).strip()
-    if not question or agent_id not in AGENTS:
+    if not question or not agent_id:
         return text, None
     cleaned = (text[: m.start()] + text[m.end():]).strip()
     return cleaned, {"agent_id": agent_id, "question": question[:300]}
@@ -231,6 +236,15 @@ AGENTS = {
         ),
     },
 }
+
+
+# Lookup: lowercased display name OR internal id → canonical AGENTS key.
+# The system prompt instructs the LLM to delegate by NAME ("iris", "sam") —
+# we accept either so the parser is forgiving.
+_AGENT_LOOKUP: dict[str, str] = {}
+for _id, _agent in AGENTS.items():
+    _AGENT_LOOKUP[_id] = _id
+    _AGENT_LOOKUP[_agent["name"].lower()] = _id
 
 
 # ---------------------------------------------------------------------------

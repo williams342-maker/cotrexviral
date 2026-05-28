@@ -35,6 +35,20 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 38) **🤝 Multi-agent collaboration — handoff bug fix + UI verification**
+  - **Root cause**: Atlas (Strategy/Claude Opus) was correctly emitting `<<HANDOFF>>iris: <question><<END>>` markers in her replies, but the server's `_extract_handoff()` was rejecting every single one with `agent_id not in AGENTS`. Reason: the system prompt instructs the LLM to delegate by **display name** (`iris`, `sam`, `kai`, `nova`, `angela`), but `AGENTS` is keyed by **internal id** (`research`, `sam`, `kai`, `nova`, `angela`). `iris` was never in the dict → handoff silently dropped, raw marker leaked into the answer, `handoff: null` returned to the UI.
+  - **Fix** in `routes/agent_chat.py`:
+    - Built `_AGENT_LOOKUP: dict[str, str]` mapping both lowercased display names AND internal ids to the canonical agent id. (`"iris" → "research"`, `"atlas" → "strategy"`, etc.)
+    - `_extract_handoff()` now resolves the captured token through this lookup, so either name OR id works. Unknown tokens (typos) still safely reject, leaving the marker in the cleaned text for debugging instead of silently swallowing it.
+  - **Verified live**: Curl test with Atlas → "fetch the top 3 rising AI marketing TikTok trends via Iris" now returns the full `handoff: {agent_id:"research", agent_name:"Iris", question:..., answer:...}` object plus the spliced `Iris reports: …` block in the main answer. Backend log shows two sequential LiteLLM calls: `claude-opus-4-7` (Atlas) → `gemini-2.5-pro` (Iris).
+  - **Frontend UI verified** via Playwright: the cyan `↪ asked Iris` delegation pill (`data-testid="agent-handoff-pill"`) renders next to Atlas's name in the message bubble whenever `message.handoff` is non-null. Screenshot-confirmed on `/dashboard/agent/strategy`.
+  - **11 new pytest cases** (`tests/test_agent_handoff.py`):
+    - `TestExtractHandoffParser` (9): no-marker → None · parses by display name (`iris`→`research`) · parses by internal id · case-insensitive · rejects unknown agent (leaves marker for debug) · rejects empty question · truncates 600-char question to 300 · only first handoff extracted per turn · all 6 agent names resolve to correct ids.
+    - `TestHandoffEndpointShape` (2): live Atlas→Iris round-trip validates the full `handoff` object shape + asserts `<<HANDOFF>>` marker never leaks into the user-facing answer + `"Iris reports"` block appears · sub-agents (Nova) can never produce a `handoff` even if their reply contains the marker (only Atlas has `can_handoff`).
+  - **All 20 agent-chat tests green** (`test_agent_chat.py` + `test_agent_handoff.py`).
+  - **Known infrastructure quirk**: a handoff is two sequential LLM calls (~30-50s combined). When called from the browser via the public ingress, the request can hit a Cloudflare/proxy 100s timeout. Backend itself returns 200 with the full payload. If this becomes a UX issue we'll switch to streaming SSE (already on the roadmap).
+
+
 - 2026-02-28 (part 37) **📡 Reddit OAuth + Trend Ingestion unblocked**
   - **Root cause of the 403**: Reddit blocks anonymous `www.reddit.com/r/*.json` requests from datacenter IPs (AWS/GCP/Emergent infra) at the network layer regardless of User-Agent. Verified: `Mozilla/5.0`, `CortexViralBot/1.0`, even `old.reddit.com` → all 403.
   - **Fix in `routes/trends_engine.py`**: switched Reddit ingestion to the official **OAuth 2.0 application-only** flow (`client_credentials` grant on `https://www.reddit.com/api/v1/access_token` → `https://oauth.reddit.com/r/{sub}/hot`). Free, no user-context required, ~600 req / 10min limit.
