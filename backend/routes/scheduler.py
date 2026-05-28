@@ -191,6 +191,13 @@ async def start_scheduler():
     except Exception:
         logger.exception("scheduler: failed to register refresh_trends")
 
+    # Weekly auto-draft cron (Mon 08:00 UTC) — opt-in per user.
+    try:
+        from routes.auto_draft import register_auto_draft_job
+        register_auto_draft_job(scheduler)
+    except Exception:
+        logger.exception("scheduler: failed to register weekly_auto_drafts")
+
     scheduler.start()
     logger.info("scheduler: started (worker=%s, every 60s)", WORKER_ID)
 

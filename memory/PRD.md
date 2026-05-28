@@ -35,6 +35,36 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 45) **📆 Weekly auto-draft cron + 💸 Per-user spend chip**
+  - **Weekly Monday auto-draft** — turns the trends engine from "a feed I check" into "a queue that fills itself":
+    - **New module `routes/auto_draft.py`** with the full pipeline:
+      • `_draft_from_trend_silent()` — server-side clone of `/trends/draft-post` with no Request/auth (cron context). Reuses Nova + the platform format guidance dict from `trends_engine.py`. Tracks LLM spend via `record_llm_call`.
+      • `_process_user(user_doc)` — fetches the top N recent trend memories, drafts one post per signal via Nova, inserts each as `status: pending_approval` into the `posts` collection with `scheduled_at` = +24h (gives the user an editing window after approval).
+      • `run_weekly_auto_drafts()` — cron entry point. Iterates opted-in users with at least 6-day cooldown since last run; skips paused accounts; updates `last_run_at` + `last_run_count` per user.
+      • `register_auto_draft_job(scheduler)` — attaches a `CronTrigger(day_of_week="mon", hour=8, minute=0, timezone="UTC")` to the existing apscheduler instance.
+    - **Idempotency layered**: per-user `last_run_at` window (6 days) + deterministic `dedupe_key = "auto_draft:{trend_id}:{platform}"` upsert on the posts collection so retries / double-fires never produce duplicate pending posts for the same signal.
+    - **New endpoints**:
+      • `GET /api/trends/auto-draft/settings` — returns config with sensible defaults (`{enabled: false, platform: "linkedin", count: 3, max_count: 5, last_run_at: null}`).
+      • `PUT /api/trends/auto-draft/settings` — partial update; 422 on bad platform / out-of-range count.
+      • `POST /api/trends/auto-draft/run-now` — manual trigger for the calling user only. 422 if disabled · 429 with humanized "try again in Xd Yh" if within cooldown · respects the same dedupe key so admins can dry-run safely.
+    - **Bug fix**: cooldown comparison crashed with "can't subtract offset-naive and offset-aware datetimes" because Mongo strips `tzinfo` on read. Coerces back to UTC before subtracting.
+    - **Frontend `Trends.jsx::AutoDraftCard`**: violet-bordered card at top of page with the magic-wand icon, "ON" green pill when active, platform/count dropdowns + Run-now button when enabled, single toggle switch on the right. Saves on every chip change (toast on save). Run-now toast: *"3 drafts queued · Open Approvals to review and schedule."*
+  - **Per-user spend chip in AgentWorkspace**:
+    - Extended `GET /api/ai/agent/spend-hint` to ALWAYS return `total_cost`, `total_tokens`, `total_calls`, `days` (was previously gated by `show: true`). The `show` flag still controls the nudge banner; the chip just needs the raw numbers.
+    - **New chip at top of the AgentWorkspace right rail** (`data-testid="rail-spend-chip"`) — violet dot · "SPEND THIS MONTH" label · big tabular-nums $X.XX figure · "· 184.3K tok" subtitle · "47 calls · last 30d" detail. Whole chip is a `<Link to="/admin">` so admins can drill into the full breakdown.
+    - Cost format adapts: under $1 shows 4 decimal places ($0.0048), over $1 shows 2 ($1.27). Tokens format K/M.
+    - Auto-hides when both `total_cost` and `total_tokens` are zero (brand-new user sees no clutter).
+  - **11 new pytest cases** (`tests/test_auto_draft_and_chip.py`):
+    - `TestAutoDraftSettings` (5): auth · default shape with `max_count: 5` · partial update preserves other fields · 422 on bad platform · 422 on `count` outside `[1, 5]`.
+    - `TestRunNowGuards` (2): manual trigger 422s when disabled · 429s with "Cooldown active" when last run < 6 days ago.
+    - `TestProcessUserPipeline` (2): live `/run-now` queues `pending_approval` posts with right shape (status, platforms, source, dedupe_key, scheduled_at = +24h ±1h) · running twice for the same signal produces ONE row (dedupe_key upsert).
+    - `TestSpendChipFields` (2): endpoint returns `total_cost`/`total_tokens`/`total_calls`/`days` regardless of `show` state · clean-user zero state (no llm_usage rows) returns all zeros + `show: false`.
+  - **All 86 agent-stack tests pass** across 8 test files.
+  - **Live UI screenshot-verified**:
+    - **AutoDraftCard**: ON state with platform dropdown + count dropdown + Run-now button + active toggle.
+    - **Spend chip**: $1.27 · 184.3K tok · 47 calls · last 30d in the AgentWorkspace right rail, above the existing Metrics section.
+
+
 - 2026-02-28 (part 44) **🎯 Token-accurate LLM cost tracking + 🔗 Compose URL-param plumbing**
   - **Token-accurate cost tracking** — replaces the per-call averages with exact USD computed from real prompt + completion tokens:
     - **`routes/ai.py::send_with_usage(chat, user_message)`** — new helper that mirrors `LlmChat.send_message`'s side-effects (history append, error wrapping in `ChatError`) but also extracts `prompt_tokens`/`completion_tokens`/`total_tokens` from the underlying LiteLLM `response.usage`. Returns `(text, {prompt_tokens, completion_tokens, total_tokens})`.

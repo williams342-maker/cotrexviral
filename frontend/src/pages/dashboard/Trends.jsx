@@ -22,12 +22,15 @@ const Trends = () => {
   const [showConfig, setShowConfig] = useState(false);
   const [draftSubs, setDraftSubs] = useState([]);
   const [draftKws, setDraftKws] = useState([]);
+  const [autoDraft, setAutoDraft] = useState(null);
+  const [autoDraftBusy, setAutoDraftBusy] = useState(false);
 
   const load = async () => {
-    const [t, s, st] = await Promise.all([
+    const [t, s, st, ad] = await Promise.all([
       axios.get(`${API}/trends/recent?limit=50`, { withCredentials: true }).catch(() => null),
       axios.get(`${API}/trends/seeds`, { withCredentials: true }).catch(() => null),
       axios.get(`${API}/trends/status`, { withCredentials: true }).catch(() => null),
+      axios.get(`${API}/trends/auto-draft/settings`, { withCredentials: true }).catch(() => null),
     ]);
     if (t?.data) setTrends(t.data.trends || []);
     if (s?.data) {
@@ -36,6 +39,7 @@ const Trends = () => {
       setDraftKws(s.data.keywords || []);
     }
     if (st?.data) setSourceStatus(st.data);
+    if (ad?.data) setAutoDraft(ad.data);
   };
 
   useEffect(() => { load().finally(() => setLoading(false)); }, []);
@@ -110,6 +114,39 @@ const Trends = () => {
               </p>
             </div>
           </div>
+        )}
+
+        {/* Auto-draft (weekly) toggle card */}
+        {autoDraft && (
+          <AutoDraftCard
+            settings={autoDraft}
+            busy={autoDraftBusy}
+            onSave={async (patch) => {
+              setAutoDraftBusy(true);
+              try {
+                const r = await axios.put(`${API}/trends/auto-draft/settings`, patch, { withCredentials: true });
+                setAutoDraft(r.data);
+                toast({ title: patch.enabled === false ? 'Auto-draft paused' : 'Settings saved' });
+              } catch (e) {
+                toast({ title: 'Could not save', description: e.response?.data?.detail || e.message });
+              }
+              setAutoDraftBusy(false);
+            }}
+            onRunNow={async () => {
+              setAutoDraftBusy(true);
+              try {
+                const r = await axios.post(`${API}/trends/auto-draft/run-now`, {}, { withCredentials: true });
+                toast({
+                  title: `${r.data.drafts_queued} draft${r.data.drafts_queued === 1 ? '' : 's'} queued`,
+                  description: 'Open Approvals to review and schedule.',
+                });
+                load();
+              } catch (e) {
+                toast({ title: 'Run failed', description: e.response?.data?.detail || e.message });
+              }
+              setAutoDraftBusy(false);
+            }}
+          />
         )}
 
         {/* Seeds + counts */}
@@ -191,6 +228,101 @@ const Trends = () => {
 };
 
 const PLATFORMS = ['linkedin', 'twitter', 'instagram', 'tiktok', 'pinterest', 'facebook'];
+
+const AutoDraftCard = ({ settings, busy, onSave, onRunNow }) => {
+  const { enabled, platform = 'linkedin', count = 3, last_run_at: lastRunAt, last_run_count: lastRunCount, max_count: maxCount = 5 } = settings;
+  const fmt = (iso) => {
+    if (!iso) return 'never';
+    const d = new Date(iso);
+    const diff = (Date.now() - d.getTime()) / 86400000;
+    if (diff < 1) return 'less than a day ago';
+    return `${Math.round(diff)}d ago`;
+  };
+
+  return (
+    <div
+      className={`cv-glass rounded-2xl p-4 mb-4 border ${enabled ? 'border-violet-500/30 bg-violet-500/[0.03]' : 'border-white/10'}`}
+      data-testid="trends-auto-draft-card"
+    >
+      <div className="flex items-start gap-3">
+        <div className={`w-9 h-9 rounded-xl shrink-0 inline-flex items-center justify-center border ${enabled ? 'bg-violet-500/20 border-violet-500/40' : 'bg-white/[0.04] border-white/10'}`}>
+          <Wand2 size={16} className={enabled ? 'text-violet-300' : 'text-zinc-400'} />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[13px] font-semibold text-white">Auto-draft top trends every Monday</span>
+            {enabled && (
+              <span className="text-[10px] uppercase tracking-wider font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-2 py-0.5" data-testid="trends-auto-draft-on-pill">ON</span>
+            )}
+          </div>
+          <p className="text-[12px] text-zinc-400 leading-snug mt-0.5">
+            Nova will draft <strong className="text-zinc-200">{count}</strong> {platform} post{count === 1 ? '' : 's'} from your top recent signals and drop them in Approvals for you to review.
+            {lastRunAt && (
+              <> · Last run <strong className="text-zinc-300">{fmt(lastRunAt)}</strong>{lastRunCount > 0 && ` (${lastRunCount} drafts)`}.</>
+            )}
+          </p>
+
+          {enabled && (
+            <div className="flex flex-wrap items-center gap-3 mt-3">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10.5px] uppercase tracking-[0.18em] text-zinc-500 font-semibold pr-1">Platform</span>
+                <select
+                  value={platform}
+                  disabled={busy}
+                  onChange={(e) => onSave({ platform: e.target.value })}
+                  data-testid="trends-auto-draft-platform"
+                  className="bg-zinc-900 border border-zinc-800 rounded-md text-[12px] text-zinc-100 h-7 px-2 outline-none focus:border-violet-500/50"
+                >
+                  {PLATFORMS.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10.5px] uppercase tracking-[0.18em] text-zinc-500 font-semibold pr-1">Count</span>
+                <select
+                  value={count}
+                  disabled={busy}
+                  onChange={(e) => onSave({ count: Number(e.target.value) })}
+                  data-testid="trends-auto-draft-count"
+                  className="bg-zinc-900 border border-zinc-800 rounded-md text-[12px] text-zinc-100 h-7 px-2 outline-none focus:border-violet-500/50"
+                >
+                  {Array.from({ length: maxCount }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onRunNow}
+                data-testid="trends-auto-draft-run-now"
+                className="text-[11.5px] font-semibold bg-white/[0.06] hover:bg-white/[0.10] text-zinc-200 border border-white/10 rounded-md h-7 px-3 inline-flex items-center gap-1.5"
+              >
+                {busy ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                Run now
+              </button>
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onSave({ enabled: !enabled })}
+          data-testid="trends-auto-draft-toggle"
+          aria-label={enabled ? 'Disable auto-draft' : 'Enable auto-draft'}
+          className={`relative shrink-0 w-11 h-6 rounded-full transition-colors ${enabled ? 'bg-violet-500' : 'bg-white/10'}`}
+        >
+          <span
+            className={`absolute top-0.5 ${enabled ? 'left-[22px]' : 'left-0.5'} w-5 h-5 rounded-full bg-white transition-all`}
+          />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const TrendCard = ({ trend }) => {
   const isReddit = (trend.meta?.source) === 'reddit';

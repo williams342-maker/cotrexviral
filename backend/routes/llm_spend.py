@@ -316,16 +316,21 @@ async def user_spend_hint(request: Request, days: int = 30):
         {"$group": {
             "_id":   None,
             "total": {"$sum": "$cost"},
+            "total_tokens": {"$sum": {"$ifNull": ["$total_tokens", 0]}},
             "opus_cost":  {"$sum": {"$cond": [{"$regexMatch": {"input": "$model", "regex": "opus", "options": "i"}}, "$cost", 0]}},
             "opus_calls": {"$sum": {"$cond": [{"$regexMatch": {"input": "$model", "regex": "opus", "options": "i"}}, 1, 0]}},
+            "calls":      {"$sum": 1},
         }},
     ]
     rows = await db.llm_usage.aggregate(pipeline).to_list(length=1)
     if not rows:
         return {"show": False, "days": days, "opus_calls": 0, "opus_cost": 0,
-                "total_cost": 0, "share": 0, "suggestion": None}
+                "total_cost": 0, "total_tokens": 0, "total_calls": 0,
+                "share": 0, "suggestion": None}
     r = rows[0]
     total = float(r.get("total") or 0)
+    total_tokens = int(r.get("total_tokens") or 0)
+    total_calls = int(r.get("calls") or 0)
     opus_cost = float(r.get("opus_cost") or 0)
     opus_calls = int(r.get("opus_calls") or 0)
     share = (opus_cost / total) if total > 0 else 0.0
@@ -351,11 +356,13 @@ async def user_spend_hint(request: Request, days: int = 30):
             "estimated_savings": round(max(0, savings), 2),
         }
     return {
-        "show":       show,
-        "days":       days,
-        "opus_calls": opus_calls,
-        "opus_cost":  round(opus_cost, 4),
-        "total_cost": round(total, 4),
-        "share":      round(share, 3),
-        "suggestion": suggestion,
+        "show":         show,
+        "days":         days,
+        "opus_calls":   opus_calls,
+        "opus_cost":    round(opus_cost, 4),
+        "total_cost":   round(total, 4),
+        "total_tokens": total_tokens,
+        "total_calls":  total_calls,
+        "share":        round(share, 3),
+        "suggestion":   suggestion,
     }

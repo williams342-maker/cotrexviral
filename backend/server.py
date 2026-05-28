@@ -47,6 +47,7 @@ from routes import (  # noqa: F401
     approvals,       # Human-in-the-loop approval workflow
     trends_engine,   # Reddit + Google Trends → memory ingestion
     llm_spend,       # Estimated LLM cost tracking + admin spend dashboard
+    auto_draft,      # Weekly Monday auto-draft from top trend signals
 )
 
 

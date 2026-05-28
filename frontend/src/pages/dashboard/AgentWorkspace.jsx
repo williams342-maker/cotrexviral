@@ -73,7 +73,7 @@ const AgentWorkspace = () => {
       .then((r) => setPrefs(r.data.prefs || {}))
       .catch(() => setPrefs({}));
     axios.get(`${API}/ai/agent/spend-hint`, { withCredentials: true })
-      .then((r) => setSpendHint(r.data?.show ? r.data : null))
+      .then((r) => setSpendHint(r.data || null))
       .catch(() => setSpendHint(null));
   }, []);
 
@@ -357,7 +357,7 @@ const AgentWorkspace = () => {
             </div>
 
             {/* Composer */}
-            {spendHint && !spendHintDismissed && spendHint.suggestion && (
+            {spendHint?.show && !spendHintDismissed && spendHint.suggestion && (
               <div
                 className="mx-4 mt-3 mb-1 rounded-xl border border-amber-500/30 bg-amber-500/[0.05] px-3 py-2.5 flex items-start gap-2.5"
                 data-testid="agent-spend-hint"
@@ -447,6 +447,34 @@ const AgentWorkspace = () => {
 
           {/* RIGHT METRICS RAIL */}
           <aside className="space-y-4" data-testid="agent-metrics-rail">
+            {spendHint && (spendHint.total_cost > 0 || spendHint.total_tokens > 0) && (
+              <Link
+                to="/admin"
+                className="block cv-glass rounded-2xl p-3.5 hover:border-white/10 border border-white/5 transition-colors"
+                data-testid="rail-spend-chip"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+                  <span className="text-[10.5px] uppercase tracking-[0.18em] text-zinc-400 font-semibold">Spend this month</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[20px] font-medium tracking-tight text-white tabular-nums" data-testid="rail-spend-cost">
+                    {`$${(spendHint.total_cost || 0).toFixed(spendHint.total_cost < 1 ? 4 : 2)}`}
+                  </span>
+                  <span className="text-[11px] text-zinc-500" data-testid="rail-spend-tokens">
+                    {spendHint.total_tokens >= 1000
+                      ? `· ${(spendHint.total_tokens / 1000).toFixed(1)}K tok`
+                      : spendHint.total_tokens > 0
+                        ? `· ${spendHint.total_tokens} tok`
+                        : ''}
+                  </span>
+                </div>
+                <div className="text-[11px] text-zinc-500 mt-0.5">
+                  {spendHint.total_calls || 0} call{spendHint.total_calls === 1 ? '' : 's'} · last {spendHint.days || 30}d
+                </div>
+              </Link>
+            )}
+
             <RailHeader label="Metrics" />
             <SparkCard label="AI generations" testId="rail-spark-ai" stroke="#a78bfa" />
             <SparkCard label="Channels live" testId="rail-spark-channels" stroke="#34d399" />
