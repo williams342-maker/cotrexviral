@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import HTTPException, Request
 
-from core import db, api
+from core import db, api, logger
 from deps import get_current_user
 from models import ChannelConnectRequest, PublishRequest, ScheduledUpdate, OptimalTimesRequest
 from routes.ai import _llm, LlmChat, UserMessage  # reuse LLM client
@@ -199,6 +199,25 @@ async def publish(payload: PublishRequest, request: Request):
         )
     if dispatch:
         await db.posts.update_one({"id": post["id"]}, {"$set": {"dispatch": dispatch}})
+
+    # Memory ingest — store the post content + which platforms received it
+    # so subsequent agent prompts can recall it ("write me another like
+    # the one we shipped on TikTok about ...").
+    if not is_scheduled:
+        try:
+            from routes.memory import remember
+            await remember(
+                user.user_id, "post",
+                payload.content,
+                meta={
+                    "post_id": post["id"],
+                    "platform": (payload.platforms or [""])[0],
+                    "platforms": payload.platforms,
+                },
+                dedupe_key=f"post:{post['id']}",
+            )
+        except Exception:
+            logger.exception("Memory ingest of published post failed")
 
     return {
         "ok": True,

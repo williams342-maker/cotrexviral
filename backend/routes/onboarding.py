@@ -122,4 +122,29 @@ async def submit_onboarding(payload: OnboardingPayload, request: Request):
         except Exception:
             logger.exception("Failed to schedule onboarding admin notification")
 
+    # Index the brand profile into the memory system so every agent reply
+    # immediately has access to who this user is. Fire-and-forget — never
+    # block onboarding submission on a memory-layer hiccup.
+    try:
+        from routes.memory import remember
+        profile_bits = [
+            f"Brand: {payload.brand_name.strip()}",
+            f"Website: {website}",
+            f"Niche: {payload.niche}",
+        ]
+        if payload.goals:
+            profile_bits.append("Goals: " + ", ".join(payload.goals))
+        if payload.platforms:
+            profile_bits.append("Platforms: " + ", ".join(payload.platforms))
+        if (payload.challenge or "").strip():
+            profile_bits.append(f"Biggest challenge: {payload.challenge.strip()}")
+        await remember(
+            user.user_id, "brand_profile",
+            ". ".join(profile_bits),
+            meta={"source": "onboarding"},
+            dedupe_key="brand_profile",
+        )
+    except Exception:
+        logger.exception("Memory ingest of brand profile failed")
+
     return {"ok": True, "first_completion": is_first_completion}

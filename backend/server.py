@@ -43,6 +43,7 @@ from routes import (  # noqa: F401
     password_auth,   # Email + password login + reset (alongside Google Auth)
     agent_chat,      # In-dashboard per-agent chat (Nova/Sam/Kai/Angela)
     analytics,       # Per-post metrics refresh (Pinterest live; others TODO)
+    memory,          # Vector memory system (brand profile, posts, agent context)
 )
 
 

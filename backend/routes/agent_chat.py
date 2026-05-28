@@ -187,18 +187,47 @@ async def list_agents(request: Request):
 async def agent_chat(payload: _ChatRequest, request: Request):
     """Send a message to the selected agent. Single LLM call — the agent
     appends an inline `<<FUPS>>[...]<<END>>` block which we strip + parse
-    server-side. Keeps total latency ~6s vs ~100s for a separate meta call."""
+    server-side. Keeps total latency ~6s vs ~100s for a separate meta call.
+
+    Also pulls the top-K relevant memories for the user's prompt and
+    injects them into the system prompt so the agent gets sharper with
+    every interaction."""
     user = await _gated_user(request)
     agent = AGENTS.get(payload.agent_id.lower())
     if not agent:
         raise HTTPException(status_code=404, detail="Unknown agent")
 
+    # Memory retrieval — pull up to 5 relevant memories for THIS prompt.
+    # Best-effort: any error inside the memory layer is swallowed so a
+    # downstream issue can never block a chat reply.
+    memory_block = ""
+    try:
+        from routes.memory import retrieve_relevant, memories_to_prompt_block
+        mems = await retrieve_relevant(user.user_id, payload.message, k=5)
+        memory_block = memories_to_prompt_block(mems)
+    except Exception:
+        pass
+
     session_id = f"agent-{agent['id']}-{user.user_id}"
-    chat = await _llm_for_user(
-        user.user_id, session_id, agent["system"] + _FUPS_INSTRUCTION,
-    )
+    system_prompt = agent["system"] + _FUPS_INSTRUCTION
+    if memory_block:
+        system_prompt = system_prompt + "\n\n" + memory_block
+
+    chat = await _llm_for_user(user.user_id, session_id, system_prompt)
     raw = await chat.send_message(UserMessage(text=payload.message))
     answer, follow_ups = _extract_followups(raw)
+
+    # After a successful reply, save a short conversation summary as a
+    # memory so the next turn (and other agents) can recall what was said.
+    try:
+        from routes.memory import remember
+        summary = f"User asked {agent['name']}: {payload.message[:200]}"
+        await remember(
+            user.user_id, "agent_summary", summary,
+            meta={"agent": agent["id"]},
+        )
+    except Exception:
+        pass
 
     await record_ai_generation(user.user_id, f"agent_chat:{agent['id']}")
     return {

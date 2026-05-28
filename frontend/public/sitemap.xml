@@ -23,6 +23,16 @@
     </image:image>
   </url>
   <url>
+    <loc>https://cortexviral.com/roadmap</loc>
+    <lastmod>2026-05-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://cortexviral.com/cortex-logo.png</image:loc>
+      <image:title>CortexViral — AI viral content generator</image:title>
+    </image:image>
+  </url>
+  <url>
     <loc>https://cortexviral.com/ai-tiktok-post-generator</loc>
     <lastmod>2026-05-26</lastmod>
     <changefreq>weekly</changefreq>
@@ -184,6 +194,16 @@
   </url>
   <url>
     <loc>https://cortexviral.com/blog/going-viral-as-a-small-account</loc>
+    <lastmod>2026-05-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <image:image>
+      <image:loc>https://cortexviral.com/cortex-logo.png</image:loc>
+      <image:title>CortexViral — AI viral content generator</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://cortexviral.com/blog/building-an-ai-marketing-platform-2026</loc>
     <lastmod>2026-05-26</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
