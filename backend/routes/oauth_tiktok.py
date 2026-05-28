@@ -386,3 +386,76 @@ async def tiktok_publish_status(request: Request, publish_id: str):
     if r.status_code != 200:
         raise HTTPException(status_code=502, detail=f"TikTok status fetch failed: {r.text[:300]}")
     return r.json()
+
+
+# ---------------------------------------------------------------------------
+# Analytics — per-video stats (likes, comments, shares, views)
+# ---------------------------------------------------------------------------
+async def fetch_tiktok_post_metrics(
+    user_id: str,
+    publish_id: str | None = None,
+    video_id: str | None = None,
+) -> dict | None:
+    """Returns {likes, comments, shares, views, fetched_at} for a TikTok
+    video. Requires the TikTok video_id — if only the original publish_id
+    is known, we first call /v2/post/publish/status/fetch to resolve it.
+
+    Falls back to None on any failure (no permission, expired token,
+    rate-limit) — caller renders 'Analytics coming soon' chip.
+    """
+    if not publish_id and not video_id:
+        return None
+    conn = await db.tiktok_connections.find_one({"user_id": user_id})
+    if not conn or not conn.get("access_token"):
+        return None
+    token = conn["access_token"]
+
+    # 1. Resolve video_id from publish_id if we don't have it yet.
+    if not video_id and publish_id:
+        async with httpx.AsyncClient(timeout=15) as cli:
+            sr = await cli.post(
+                TIKTOK_STATUS_URL,
+                json={"publish_id": publish_id},
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json; charset=UTF-8",
+                },
+            )
+        if sr.status_code != 200:
+            return None
+        sdata = ((sr.json() or {}).get("data") or {})
+        # `publicaly_available_post_id` is what TikTok returns once the
+        # video is processed and live.
+        ids = sdata.get("publicaly_available_post_id") or sdata.get("public_post_id") or []
+        if isinstance(ids, list) and ids:
+            video_id = ids[0]
+        else:
+            return None
+
+    # 2. Fetch the stats via /v2/video/query/
+    params = {"fields": "id,view_count,like_count,comment_count,share_count"}
+    async with httpx.AsyncClient(timeout=15) as cli:
+        r = await cli.post(
+            "https://open.tiktokapis.com/v2/video/query/",
+            params=params,
+            json={"filters": {"video_ids": [video_id]}},
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+        )
+    if r.status_code != 200:
+        logger.info("TikTok analytics %s for video %s: %s",
+                    r.status_code, video_id, r.text[:200])
+        return None
+    body = ((r.json() or {}).get("data") or {}).get("videos") or []
+    if not body:
+        return None
+    v = body[0]
+    return {
+        "views": int(v.get("view_count") or 0),
+        "likes": int(v.get("like_count") or 0),
+        "comments": int(v.get("comment_count") or 0),
+        "shares": int(v.get("share_count") or 0),
+        "fetched_at": datetime.now(timezone.utc),
+    }

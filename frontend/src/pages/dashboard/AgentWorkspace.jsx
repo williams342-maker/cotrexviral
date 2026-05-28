@@ -5,7 +5,7 @@ import {
   Send, Loader2, Sparkles, Share2, ArrowUp, Bot,
   TrendingUp, Users, Image as ImageIcon, FileText,
   Music2, Linkedin, MessageCircle as Pinterest, Facebook,
-  Instagram, Twitter, AlertCircle,
+  Instagram, Twitter, AlertCircle, Brain, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useAuth, API } from '../../context/AuthContext';
@@ -94,7 +94,12 @@ const AgentWorkspace = () => {
         ...t,
         [activeId]: [
           ...newMsgs,
-          { role: 'agent', content: res.data.answer, follow_ups: res.data.follow_ups || [] },
+          {
+            role: 'agent',
+            content: res.data.answer,
+            follow_ups: res.data.follow_ups || [],
+            memories_used: res.data.memories_used || [],
+          },
         ],
       }));
     } catch (err) {
@@ -337,6 +342,9 @@ const MessageBubble = ({ message, tone, agentName, onFollowUp }) => {
         {!isUser && (
           <div className="text-[11.5px] font-semibold text-white mb-1">{agentName}</div>
         )}
+        {!isUser && (message.memories_used || []).length > 0 && (
+          <MemoryChip memories={message.memories_used} />
+        )}
         <div
           className={`rounded-2xl px-4 py-3 text-[13.5px] leading-relaxed ${
             isUser
@@ -363,6 +371,42 @@ const MessageBubble = ({ message, tone, agentName, onFollowUp }) => {
           </div>
         )}
       </div>
+    </div>
+  );
+};
+
+const MemoryChip = ({ memories }) => {
+  const [open, setOpen] = useState(false);
+  const kindCounts = memories.reduce((acc, m) => {
+    acc[m.kind] = (acc[m.kind] || 0) + 1;
+    return acc;
+  }, {});
+  const summary = Object.entries(kindCounts).map(([k, n]) => `${n} ${k.replace('_', ' ')}`).join(' · ');
+
+  return (
+    <div className="mb-2" data-testid="agent-memory-chip">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-violet-300 bg-white/[0.025] hover:bg-violet-500/10 border border-white/5 hover:border-violet-500/30 rounded-full px-2.5 py-1 transition-colors"
+        data-testid="agent-memory-chip-toggle"
+      >
+        <Brain size={10} className="text-violet-400" />
+        <span>Using <strong className="text-white">{memories.length}</strong> memor{memories.length === 1 ? 'y' : 'ies'}</span>
+        <span className="text-zinc-500 truncate max-w-[180px]">· {summary}</span>
+        {open ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+      </button>
+      {open && (
+        <div className="mt-2 ml-1 space-y-1.5" data-testid="agent-memory-chip-list">
+          {memories.map((m) => (
+            <div key={m.id} className="flex items-start gap-2 text-[11.5px] text-zinc-400 bg-white/[0.02] border border-white/5 rounded-lg px-2.5 py-1.5">
+              <span className="shrink-0 text-violet-300 font-semibold">{Math.round((m.score || 0) * 100)}%</span>
+              <span className="shrink-0 text-zinc-500 uppercase tracking-wider text-[9.5px] font-bold">{m.kind}</span>
+              <span className="flex-1 min-w-0 truncate text-zinc-300" title={m.preview}>{m.preview}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

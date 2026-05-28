@@ -241,3 +241,36 @@ async def publish_to_linkedin(user_id: str, text: str) -> dict:
         return {"ok": True, "linkedin_post_id": post_id}
     logger.error("LinkedIn publish failed %s: %s", r.status_code, r.text[:400])
     return {"ok": False, "reason": "api_error", "status": r.status_code, "body": r.text[:400]}
+
+
+# ---------------------------------------------------------------------------
+# Analytics — per-post like/comment counts via /rest/socialActions
+# ---------------------------------------------------------------------------
+async def fetch_linkedin_post_metrics(user_id: str, post_urn: str) -> dict | None:
+    """Returns {likes, comments, fetched_at} for a LinkedIn share. Calls the
+    public `/rest/socialActions/{urn}` endpoint which returns aggregate
+    like/comment totals. Returns None on any failure so the caller can fall
+    back to "Analytics coming soon"."""
+    if not post_urn:
+        return None
+    conn = await db.linkedin_connections.find_one({"user_id": user_id}, {"_id": 0})
+    if not conn or not conn.get("access_token"):
+        return None
+
+    url = f"https://api.linkedin.com/rest/socialActions/{post_urn}"
+    headers = {
+        "Authorization": f"Bearer {conn['access_token']}",
+        "LinkedIn-Version": LINKEDIN_API_VERSION,
+        "X-Restli-Protocol-Version": "2.0.0",
+    }
+    async with httpx.AsyncClient(timeout=15) as cli:
+        r = await cli.get(url, headers=headers)
+    if r.status_code != 200:
+        logger.info("LinkedIn analytics %s for %s: %s", r.status_code, post_urn, r.text[:200])
+        return None
+    body = r.json() or {}
+    return {
+        "likes": int((body.get("likesSummary") or {}).get("totalLikes", 0)),
+        "comments": int((body.get("commentsSummary") or {}).get("aggregatedTotalComments", 0)),
+        "fetched_at": datetime.now(timezone.utc),
+    }

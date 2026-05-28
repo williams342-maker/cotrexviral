@@ -103,11 +103,7 @@ const PostMetricsRow = ({ post }) => {
         const d = dispatch[plat] || {};
         if (plat === 'pinterest' && m) {
           return (
-            <a
-              key={plat}
-              href={d.permalink}
-              target="_blank"
-              rel="noopener noreferrer"
+            <a key={plat} href={d.permalink} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center gap-3 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl px-3 py-2 text-[12px] text-neutral-800 transition-colors"
               data-testid="post-metrics-pinterest"
             >
@@ -119,13 +115,57 @@ const PostMetricsRow = ({ post }) => {
             </a>
           );
         }
+        if (plat === 'linkedin' && m) {
+          return (
+            <div key={plat} className="inline-flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-[12px] text-neutral-800" data-testid="post-metrics-linkedin">
+              <span className="text-[10.5px] uppercase tracking-wider font-bold text-blue-700">LinkedIn</span>
+              <span className="inline-flex items-center gap-1">❤ {(m.likes || 0).toLocaleString()}</span>
+              <span className="inline-flex items-center gap-1">💬 {(m.comments || 0).toLocaleString()}</span>
+            </div>
+          );
+        }
+        if (plat === 'facebook' && m) {
+          return (
+            <a key={plat} href={d.permalink} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-3 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl px-3 py-2 text-[12px] text-neutral-800 transition-colors"
+              data-testid="post-metrics-facebook"
+            >
+              <span className="text-[10.5px] uppercase tracking-wider font-bold text-sky-700">Facebook</span>
+              <span className="inline-flex items-center gap-1"><Eye size={11} className="text-neutral-500" /> {(m.impressions || 0).toLocaleString()}</span>
+              <span className="inline-flex items-center gap-1">👥 {(m.engaged_users || 0).toLocaleString()}</span>
+              <span className="inline-flex items-center gap-1">❤ {(m.reactions || 0).toLocaleString()}</span>
+              {d.permalink && <ExternalLink size={11} className="text-neutral-400" />}
+            </a>
+          );
+        }
+        if (plat === 'instagram' && m) {
+          return (
+            <a key={plat} href={d.permalink} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-3 bg-fuchsia-50 hover:bg-fuchsia-100 border border-fuchsia-200 rounded-xl px-3 py-2 text-[12px] text-neutral-800 transition-colors"
+              data-testid="post-metrics-instagram"
+            >
+              <span className="text-[10.5px] uppercase tracking-wider font-bold text-fuchsia-700">Instagram</span>
+              <span className="inline-flex items-center gap-1"><Eye size={11} className="text-neutral-500" /> {(m.impressions || 0).toLocaleString()}</span>
+              <span className="inline-flex items-center gap-1">📡 {(m.reach || 0).toLocaleString()}</span>
+              <span className="inline-flex items-center gap-1"><Bookmark size={11} className="text-neutral-500" /> {(m.saved || 0).toLocaleString()}</span>
+              {d.permalink && <ExternalLink size={11} className="text-neutral-400" />}
+            </a>
+          );
+        }
+        if (plat === 'tiktok' && m) {
+          return (
+            <div key={plat} className="inline-flex items-center gap-3 bg-neutral-900 border border-neutral-700 rounded-xl px-3 py-2 text-[12px] text-neutral-100" data-testid="post-metrics-tiktok">
+              <span className="text-[10.5px] uppercase tracking-wider font-bold text-rose-300">TikTok</span>
+              <span className="inline-flex items-center gap-1"><Eye size={11} /> {(m.views || 0).toLocaleString()}</span>
+              <span className="inline-flex items-center gap-1">❤ {(m.likes || 0).toLocaleString()}</span>
+              <span className="inline-flex items-center gap-1">💬 {(m.comments || 0).toLocaleString()}</span>
+              <span className="inline-flex items-center gap-1">↗ {(m.shares || 0).toLocaleString()}</span>
+            </div>
+          );
+        }
         if (d.ok) {
           return (
-            <span
-              key={plat}
-              className="inline-flex items-center gap-2 bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-[12px] text-neutral-500"
-              data-testid={`post-metrics-${plat}-pending`}
-            >
+            <span key={plat} className="inline-flex items-center gap-2 bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-[12px] text-neutral-500" data-testid={`post-metrics-${plat}-pending`}>
               <span className="text-[10.5px] uppercase tracking-wider font-bold text-neutral-600">{plat}</span>
               <span className="text-neutral-400">Analytics coming soon</span>
             </span>

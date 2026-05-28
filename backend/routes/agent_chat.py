@@ -238,10 +238,21 @@ async def agent_chat(payload: _ChatRequest, request: Request):
     # Best-effort: any error inside the memory layer is swallowed so a
     # downstream issue can never block a chat reply.
     memory_block = ""
+    used_memories: list[dict] = []
     try:
         from routes.memory import retrieve_relevant, memories_to_prompt_block
         mems = await retrieve_relevant(user.user_id, payload.message, k=5)
         memory_block = memories_to_prompt_block(mems)
+        # Strip embeddings + truncate to a chip-friendly preview shape
+        used_memories = [
+            {
+                "id": m.get("id"),
+                "kind": m.get("kind"),
+                "preview": (m.get("text") or "")[:160],
+                "score": m.get("score"),
+            }
+            for m in mems
+        ]
     except Exception:
         pass
 
@@ -271,4 +282,5 @@ async def agent_chat(payload: _ChatRequest, request: Request):
         "agent_id": agent["id"],
         "answer": answer,
         "follow_ups": follow_ups,
+        "memories_used": used_memories,
     }

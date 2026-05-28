@@ -557,3 +557,88 @@ async def publish_to_instagram(user_id: str, text: str, *,
         "permalink": (f"https://www.instagram.com/p/{ig_post_id}"
                       if ig_post_id else None),
     }
+
+
+# ---------------------------------------------------------------------------
+# Analytics — Graph API /{post-id}/insights
+# ---------------------------------------------------------------------------
+async def fetch_facebook_post_metrics(user_id: str, fb_post_id: str) -> dict | None:
+    """Returns {impressions, engaged_users, reactions, fetched_at} for a
+    Facebook Page post. Uses /{post-id}/insights with the standard metric
+    suite that any Page can read with `read_insights` scope."""
+    if not fb_post_id:
+        return None
+    conn = await db.facebook_connections.find_one({"user_id": user_id}, {"_id": 0})
+    if not conn or not (conn.get("pages") or []):
+        return None
+    # FB post IDs are of the form "{page_id}_{post_id}" — extract the page
+    # to find the right page token.
+    page_id_from_post = fb_post_id.split("_", 1)[0] if "_" in fb_post_id else None
+    page_token = None
+    for p in conn["pages"]:
+        if p.get("id") == page_id_from_post or len(conn["pages"]) == 1:
+            page_token = p.get("access_token")
+            break
+    if not page_token:
+        return None
+
+    params = {
+        "metric": "post_impressions,post_engaged_users,post_reactions_by_type_total",
+        "access_token": page_token,
+    }
+    async with httpx.AsyncClient(timeout=15) as cli:
+        r = await cli.get(_graph_url(f"{fb_post_id}/insights"), params=params)
+    if r.status_code != 200:
+        logger.info("Facebook analytics %s for %s: %s", r.status_code, fb_post_id, r.text[:200])
+        return None
+    data = (r.json() or {}).get("data") or []
+    out = {"impressions": 0, "engaged_users": 0, "reactions": 0}
+    for row in data:
+        name = row.get("name")
+        values = row.get("values") or []
+        val = values[0].get("value") if values else 0
+        if name == "post_impressions":
+            out["impressions"] = int(val or 0)
+        elif name == "post_engaged_users":
+            out["engaged_users"] = int(val or 0)
+        elif name == "post_reactions_by_type_total":
+            # `value` here is a dict like {"like": 12, "love": 3, ...}
+            if isinstance(val, dict):
+                out["reactions"] = int(sum(int(v or 0) for v in val.values()))
+    out["fetched_at"] = datetime.now(timezone.utc)
+    return out
+
+
+async def fetch_instagram_post_metrics(user_id: str, ig_media_id: str) -> dict | None:
+    """Returns {impressions, reach, saved, likes, comments, fetched_at} for
+    an IG Business / Creator post. Uses /{media-id}/insights."""
+    if not ig_media_id:
+        return None
+    conn = await db.instagram_connections.find_one({"user_id": user_id}, {"_id": 0})
+    if not conn or not (conn.get("pages") or []):
+        return None
+    # Use the first connected Page token — IG media is owned by exactly one
+    # Page within the user's connection so this is safe.
+    page_token = (conn["pages"][0] or {}).get("access_token")
+    if not page_token:
+        return None
+
+    params = {
+        "metric": "impressions,reach,saved,likes,comments",
+        "access_token": page_token,
+    }
+    async with httpx.AsyncClient(timeout=15) as cli:
+        r = await cli.get(_graph_url(f"{ig_media_id}/insights"), params=params)
+    if r.status_code != 200:
+        logger.info("Instagram analytics %s for %s: %s", r.status_code, ig_media_id, r.text[:200])
+        return None
+    data = (r.json() or {}).get("data") or []
+    out = {"impressions": 0, "reach": 0, "saved": 0, "likes": 0, "comments": 0}
+    for row in data:
+        name = row.get("name")
+        values = row.get("values") or []
+        val = values[0].get("value") if values else 0
+        if name in out:
+            out[name] = int(val or 0)
+    out["fetched_at"] = datetime.now(timezone.utc)
+    return out

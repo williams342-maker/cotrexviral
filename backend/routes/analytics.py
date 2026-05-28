@@ -55,10 +55,58 @@ async def _fetch_for_post(post: dict) -> dict:
         except Exception:
             logger.exception("Failed Pinterest analytics fetch for post %s", post.get("id"))
 
-    # LinkedIn — TODO
-    # TikTok   — TODO
-    # Facebook — TODO
-    # Instagram — TODO
+    # LinkedIn — share URN → likes + comments
+    li_dispatch = dispatch.get("linkedin") or {}
+    li_urn = li_dispatch.get("linkedin_post_id")
+    if li_urn and li_dispatch.get("ok"):
+        try:
+            from routes.oauth_linkedin import fetch_linkedin_post_metrics
+            data = await fetch_linkedin_post_metrics(post["user_id"], li_urn)
+            if data:
+                out["linkedin"] = data
+        except Exception:
+            logger.exception("Failed LinkedIn analytics fetch for post %s", post.get("id"))
+
+    # Facebook — page-post insights
+    fb_dispatch = dispatch.get("facebook") or {}
+    fb_post_id = fb_dispatch.get("post_id")
+    if fb_post_id and fb_dispatch.get("ok"):
+        try:
+            from routes.oauth_meta import fetch_facebook_post_metrics
+            data = await fetch_facebook_post_metrics(post["user_id"], fb_post_id)
+            if data:
+                out["facebook"] = data
+        except Exception:
+            logger.exception("Failed Facebook analytics fetch for post %s", post.get("id"))
+
+    # Instagram — media insights
+    ig_dispatch = dispatch.get("instagram") or {}
+    ig_media_id = ig_dispatch.get("post_id")
+    if ig_media_id and ig_dispatch.get("ok"):
+        try:
+            from routes.oauth_meta import fetch_instagram_post_metrics
+            data = await fetch_instagram_post_metrics(post["user_id"], ig_media_id)
+            if data:
+                out["instagram"] = data
+        except Exception:
+            logger.exception("Failed Instagram analytics fetch for post %s", post.get("id"))
+
+    # TikTok — video stats (publish_id may need resolving to video_id)
+    tt_dispatch = dispatch.get("tiktok") or {}
+    tt_publish_id = tt_dispatch.get("tiktok_publish_id")
+    tt_video_id = tt_dispatch.get("tiktok_video_id")
+    if (tt_publish_id or tt_video_id) and tt_dispatch.get("ok"):
+        try:
+            from routes.oauth_tiktok import fetch_tiktok_post_metrics
+            data = await fetch_tiktok_post_metrics(
+                post["user_id"],
+                publish_id=tt_publish_id,
+                video_id=tt_video_id,
+            )
+            if data:
+                out["tiktok"] = data
+        except Exception:
+            logger.exception("Failed TikTok analytics fetch for post %s", post.get("id"))
 
     return out
 
