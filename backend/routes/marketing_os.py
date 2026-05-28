@@ -104,11 +104,19 @@ async def os_dashboard(request: Request):
     counts_task_pending = db.posts.count_documents(
         {"user_id": uid, "status": "pending_approval"},
     )
+    counts_task_brand_voice = db.cortex_memory.count_documents(
+        {"user_id": uid, "kind": "brand_voice"},
+    )
+    counts_task_total_wins = db.cortex_memory.count_documents(
+        {"user_id": uid, "kind": "winning_hook"},
+    )
 
     (campaigns, signals_raw, approvals, runs, wins,
-     active_camp_count, pending_count) = await asyncio.gather(
+     active_camp_count, pending_count, brand_voice_count,
+     total_wins_count) = await asyncio.gather(
         campaigns_task, signals_task, approvals_task, runs_task, wins_task,
         counts_task_active, counts_task_pending,
+        counts_task_brand_voice, counts_task_total_wins,
     )
 
     # Rank signals by virality (fall back to created_at when score absent
@@ -126,6 +134,8 @@ async def os_dashboard(request: Request):
             "pending_approvals": pending_count,
             "signals_hot":       signals_hot,
             "recent_wins":       len(wins),
+            "brand_voice_count": brand_voice_count,
+            "total_wins_count":  total_wins_count,
         },
         "campaigns": campaigns,
         "signals":   signals_top,
