@@ -4,10 +4,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Sparkles, Loader2, Layers, Eye, Heart, MousePointer,
   Inbox, Calendar as CalendarIcon, FileText, Play, Edit3, Save, X,
-  Send, TrendingUp, Activity, ChevronDown, ChevronUp,
+  Send, TrendingUp, Activity, ChevronDown, ChevronUp, GitCompare,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import RunOSModal from '../../components/RunOSModal';
+import { wordDiff } from '../../utils/diff';
 import { API } from '../../context/AuthContext';
 import { useToast } from '../../hooks/use-toast';
 
@@ -135,6 +136,13 @@ const CampaignDetail = () => {
   const [historyLoading, setHistoryLoading] = useState(false);
   // Set of run-ids currently expanded inside the accordion.
   const [expandedRuns, setExpandedRuns] = useState(new Set());
+  // Set of run-ids currently in "diff vs. latest" mode (only valid
+  // when there IS a latest_run_summary to diff against).
+  const [diffRuns, setDiffRuns] = useState(new Set());
+  // Holds the brief to pre-seed into the Run modal when the user hits
+  // "Re-run with this" on a historical row. Falls back to the default
+  // 30-day brief when null.
+  const [runOverrideBrief, setRunOverrideBrief] = useState(null);
 
   const load = async () => {
     try {
@@ -183,6 +191,25 @@ const CampaignDetail = () => {
       if (next.has(rid)) next.delete(rid); else next.add(rid);
       return next;
     });
+  };
+
+  const toggleDiff = (rid) => {
+    setDiffRuns((prev) => {
+      const next = new Set(prev);
+      if (next.has(rid)) next.delete(rid); else next.add(rid);
+      return next;
+    });
+    // Auto-expand the row when switching to diff mode.
+    setExpandedRuns((prev) => {
+      const next = new Set(prev);
+      next.add(rid);
+      return next;
+    });
+  };
+
+  const reRunHistorical = (row) => {
+    setRunOverrideBrief(row.brief || '');
+    setRunOpen(true);
   };
 
   const fmt = (n) => {
@@ -494,6 +521,10 @@ const CampaignDetail = () => {
                     .slice(0, 5)
                     .map((r) => {
                       const open = expandedRuns.has(r.id);
+                      const diffOn = diffRuns.has(r.id) && !!data.latest_run_summary;
+                      const diffTokens = diffOn
+                        ? wordDiff(r.summary || '', data.latest_run_summary || '')
+                        : null;
                       return (
                         <div
                           key={r.id}
@@ -519,19 +550,76 @@ const CampaignDetail = () => {
                             </span>
                           </button>
                           {open && (
-                            <div className="px-3 pb-3 -mt-1">
-                              <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-1">
-                                Brief
+                            <div className="px-3 pb-3 -mt-1 space-y-2.5">
+                              {/* Action row: diff toggle + re-run */}
+                              <div className="flex items-center gap-1.5 pt-1">
+                                {data.latest_run_summary && r.summary && (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleDiff(r.id)}
+                                    className={`text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 ${
+                                      diffOn
+                                        ? 'border-violet-500/50 bg-violet-500/15 text-violet-200'
+                                        : 'border-white/10 text-zinc-400 hover:bg-white/5'
+                                    }`}
+                                    data-testid={`history-diff-toggle-${r.id}`}
+                                    title="Compare this run's summary against the latest pinned summary"
+                                  >
+                                    <GitCompare size={10} /> {diffOn ? 'Diff on' : 'Diff vs. latest'}
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => reRunHistorical(r)}
+                                  className="text-[10px] px-2 py-0.5 rounded border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 flex items-center gap-1 ml-auto"
+                                  data-testid={`history-rerun-${r.id}`}
+                                  title="Re-open the Run modal pre-seeded with this brief"
+                                >
+                                  <Play size={10} /> Re-run with this
+                                </button>
                               </div>
-                              <div className="text-[11px] text-zinc-400 italic leading-relaxed mb-2 whitespace-pre-wrap">
-                                {r.brief || '(no brief)'}
-                              </div>
-                              <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-1">
-                                Summary
-                              </div>
-                              <div className="text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap">
-                                {r.summary || '(no summary — chain may have failed)'}
-                              </div>
+
+                              {/* Body — either the plain brief+summary or the diff view */}
+                              {diffOn ? (
+                                <div>
+                                  <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-1 flex items-center gap-2">
+                                    <span>Diff</span>
+                                    <span className="text-emerald-400">+ added in latest</span>
+                                    <span className="text-rose-400">– removed since this run</span>
+                                  </div>
+                                  <div
+                                    className="text-xs leading-relaxed whitespace-pre-wrap font-mono rounded-md border border-white/5 bg-black/30 p-2.5"
+                                    data-testid={`history-diff-body-${r.id}`}
+                                  >
+                                    {diffTokens.map((tk, i) => {
+                                      if (tk.type === 'eq')
+                                        return <span key={i} className="text-zinc-400">{tk.text}</span>;
+                                      if (tk.type === 'add')
+                                        return <span key={i} className="text-emerald-300 bg-emerald-500/10 rounded-sm">{tk.text}</span>;
+                                      return <span key={i} className="text-rose-300 bg-rose-500/10 line-through rounded-sm">{tk.text}</span>;
+                                    })}
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <div>
+                                    <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-1">
+                                      Brief
+                                    </div>
+                                    <div className="text-[11px] text-zinc-400 italic leading-relaxed whitespace-pre-wrap">
+                                      {r.brief || '(no brief)'}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-1">
+                                      Summary
+                                    </div>
+                                    <div className="text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap">
+                                      {r.summary || '(no summary — chain may have failed)'}
+                                    </div>
+                                  </div>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>
@@ -629,11 +717,15 @@ const CampaignDetail = () => {
 
       <RunOSModal
         open={runOpen}
-        onClose={() => setRunOpen(false)}
+        onClose={() => { setRunOpen(false); setRunOverrideBrief(null); }}
         onComplete={load}
         campaignId={data.id}
         campaignName={data.name}
-        initialBrief={`Plan the next 30 days of marketing for the "${data.name}" campaign. Goal: ${data.custom_goal || data.goal}.${data.audience ? ` Audience: ${data.audience}.` : ''}`}
+        initialBrief={
+          runOverrideBrief != null
+            ? runOverrideBrief
+            : `Plan the next 30 days of marketing for the "${data.name}" campaign. Goal: ${data.custom_goal || data.goal}.${data.audience ? ` Audience: ${data.audience}.` : ''}`
+        }
       />
     </DashboardLayout>
   );
