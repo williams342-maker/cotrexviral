@@ -386,3 +386,172 @@ class TestLangGraphOrchestrator:
         # Older runs lack the field — guard.
         if "framework" in latest:
             assert latest["framework"] == "langgraph"
+
+
+
+# ---------------------------------------------------------------------
+# Human-in-the-loop — approve / reject endpoints
+# ---------------------------------------------------------------------
+class TestHITLEndpoints:
+    """Validates the /api/marketing-os/runs/{id}/approve and /reject
+    endpoints. The full happy path (live LLM) is exercised in the
+    skip-distribution suite via a synthetic paused row to avoid burning
+    LLM budget here."""
+
+    def test_approve_requires_auth(self):
+        r = httpx.post(
+            f"{API_URL}/api/marketing-os/runs/anything/approve",
+            json={}, timeout=10,
+        )
+        assert r.status_code == 401
+
+    def test_reject_requires_auth(self):
+        r = httpx.post(
+            f"{API_URL}/api/marketing-os/runs/anything/reject",
+            json={}, timeout=10,
+        )
+        assert r.status_code == 401
+
+    def test_approve_unknown_run_id_404(self):
+        r = httpx.post(
+            f"{API_URL}/api/marketing-os/runs/DOES_NOT_EXIST/approve",
+            headers=H, json={}, timeout=10,
+        )
+        assert r.status_code == 404
+
+    def test_approve_wrong_status_409(self):
+        """If the run isn't in 'awaiting_approval', /approve must
+        409. Use a synthetic completed run to test the guard without
+        invoking the LLM."""
+        import asyncio
+        from motor.motor_asyncio import AsyncIOMotorClient
+        import os as _os
+        from datetime import datetime, timezone
+
+        async def _setup():
+            from dotenv import load_dotenv
+            load_dotenv("/app/backend/.env")
+            cli = AsyncIOMotorClient(_os.environ["MONGO_URL"])
+            d = cli[_os.environ["DB_NAME"]]
+            rid = "test_hitl_409_completed_run"
+            await d.marketing_os_runs.delete_many({"id": rid})
+            await d.marketing_os_runs.insert_one({
+                "id":         rid,
+                "user_id":    USER_ID,
+                "brief":      "synthetic completed run",
+                "brief_text": "synthetic completed run",
+                "status":     "completed",  # NOT awaiting_approval
+                "transcript": [],
+                "framework":  "langgraph",
+                "created_at": datetime.now(timezone.utc),
+            })
+            cli.close()
+            return rid
+
+        rid = asyncio.get_event_loop().run_until_complete(_setup())
+        r = httpx.post(
+            f"{API_URL}/api/marketing-os/runs/{rid}/approve",
+            headers=H, json={}, timeout=10,
+        )
+        assert r.status_code == 409
+        # Reject should give the same guard.
+        r2 = httpx.post(
+            f"{API_URL}/api/marketing-os/runs/{rid}/reject",
+            headers=H, json={}, timeout=10,
+        )
+        assert r2.status_code == 409
+
+
+# ---------------------------------------------------------------------
+# Memory-perf admin endpoint
+# ---------------------------------------------------------------------
+class TestMemoryPerf:
+    def test_memory_perf_requires_admin(self):
+        r = httpx.get(f"{API_URL}/api/admin/memory-perf", timeout=10)
+        assert r.status_code == 401
+
+    def test_memory_perf_shape(self):
+        r = httpx.get(f"{API_URL}/api/admin/memory-perf", headers=H, timeout=10)
+        assert r.status_code == 200
+        d = r.json()
+        # Required fields for the admin dashboard / migration trigger.
+        for key in (
+            "samples", "window_size", "avg_ms", "p50_ms", "p95_ms", "p99_ms",
+            "p95_threshold_ms", "migration_triggered", "capacity_triggered",
+            "total_memories", "distinct_users", "top_user_memory_count",
+        ):
+            assert key in d, f"missing {key} in memory-perf response"
+        assert d["window_size"] == 1000
+        assert d["p95_threshold_ms"] == 100.0
+        assert isinstance(d["migration_triggered"], bool)
+        assert isinstance(d["capacity_triggered"], bool)
+
+
+
+class TestHITLLiveFlow:
+    """Live end-to-end test of the HITL flow on the canonical chain.
+    Gated on LLM budget — skips on 429 / budget exceeded."""
+
+    def test_canonical_chain_pauses_at_approval_gate(self):
+        """Canonical run with `requires_approval=true` should emit
+        `awaiting_approval` after Content (3 agents in) and persist
+        the run as `awaiting_approval`. NO `agent_started` for Kai."""
+        _comp("growth")
+        with httpx.stream(
+            "POST", f"{API_URL}/api/marketing-os/run/stream", headers=H,
+            json={
+                "brief": "Launch a tiny indie SaaS",
+                "mode": "fast",
+                "requires_approval": True,
+            },
+            timeout=240,
+        ) as r:
+            if r.status_code != 200:
+                pytest.skip(f"Run stream returned {r.status_code}")
+            blob = "".join(r.iter_text())
+        if "budget" in blob.lower() and "error" in blob.lower():
+            pytest.skip("LLM budget exceeded")
+
+        events = _parse_sse(blob)
+        names = [ev for ev, _ in events]
+
+        # Required vocab: os_started → 3 × agent_done → awaiting_approval → os_persisted.
+        assert "os_started" in names
+        assert "awaiting_approval" in names, f"missing awaiting_approval in {names}"
+        assert "os_persisted" in names
+
+        # No Kai (Distribution) — agents that ran should be strategy, research, nova only.
+        agent_done_events = [d for ev, d in events if ev == "agent_done"]
+        agent_ids_run = [d.get("agent_id") for d in agent_done_events]
+        assert "kai" not in agent_ids_run, f"Kai ran despite the gate: {agent_ids_run}"
+        # No `complete` either — we paused before the summariser.
+        assert "complete" not in names, "Summariser ran despite the gate"
+
+        # Persisted as awaiting_approval.
+        run_id = dict(events).get("os_started", {}).get("run_id")
+        assert run_id, "os_started should carry run_id"
+        got = httpx.get(f"{API_URL}/api/marketing-os/runs/{run_id}", headers=H, timeout=10)
+        assert got.status_code == 200, got.text
+        doc = got.json()
+        assert doc.get("status") == "awaiting_approval"
+        assert doc.get("requires_approval") is True
+
+        # Now /reject — should skip Kai, run only Angela summariser.
+        with httpx.stream(
+            "POST", f"{API_URL}/api/marketing-os/runs/{run_id}/reject",
+            headers=H, json={"mode": "fast"}, timeout=180,
+        ) as r2:
+            if r2.status_code != 200:
+                pytest.skip(f"reject returned {r2.status_code}")
+            blob2 = "".join(r2.iter_text())
+        events2 = _parse_sse(blob2)
+        names2 = [ev for ev, _ in events2]
+        # Reject path: NO agent_done for kai. summarising + complete present.
+        agent_ids_run2 = [d.get("agent_id") for ev, d in events2 if ev == "agent_done"]
+        assert "kai" not in agent_ids_run2, f"reject still ran Kai: {agent_ids_run2}"
+        assert "complete" in names2
+
+        # Original run should now be resolved.
+        re_check = httpx.get(f"{API_URL}/api/marketing-os/runs/{run_id}", headers=H, timeout=10).json()
+        assert re_check.get("status") == "resolved"
+        assert re_check.get("resolved_as") == "rejected"

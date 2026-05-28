@@ -29,6 +29,7 @@ const RunOSModal = ({
   const [progress, setProgress] = useState([]);
   const [summary, setSummary] = useState('');
   const [error, setError] = useState('');
+  const [requireApproval, setRequireApproval] = useState(false);
   const { toast } = useToast();
 
   // Reset whenever the modal opens with a new brief/campaign so consecutive
@@ -40,6 +41,7 @@ const RunOSModal = ({
     setSummary('');
     setError('');
     setRunning(false);
+    setRequireApproval(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialBrief, campaignId]);
 
@@ -60,6 +62,7 @@ const RunOSModal = ({
     try {
       const body = { brief: brief.trim() };
       if (campaignId) body.campaign_id = campaignId;
+      if (requireApproval) body.requires_approval = true;
       const res = await fetch(`${API}/marketing-os/run/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -166,7 +169,21 @@ const RunOSModal = ({
         />
 
         {progress.length === 0 ? (
-          <div className="mt-4 flex justify-end gap-2">
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+            <label
+              className="flex items-center gap-2 text-[11px] text-zinc-400 mr-auto cursor-pointer select-none"
+              title="When ON, the chain pauses after Content. You'll get an Approve/Reject prompt before Distribution publishes anything."
+              data-testid="os-run-require-approval-label"
+            >
+              <input
+                type="checkbox"
+                checked={requireApproval}
+                onChange={(e) => setRequireApproval(e.target.checked)}
+                className="accent-amber-500 w-3.5 h-3.5"
+                data-testid="os-run-require-approval"
+              />
+              Require approval before Distribution
+            </label>
             <button onClick={close} className="px-4 py-2 rounded-lg border border-white/10 text-zinc-300 hover:bg-white/5 text-sm">Cancel</button>
             <button onClick={start} className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium flex items-center gap-2" data-testid="os-run-start">
               <Play size={14} /> Run

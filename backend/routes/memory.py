@@ -38,7 +38,9 @@ MongoDB collection `cortex_memory`:
 import asyncio
 import logging
 import math
+import time
 import uuid
+from collections import deque
 from datetime import datetime, timezone
 from typing import Iterable, Optional
 
@@ -47,6 +49,26 @@ from pydantic import BaseModel, Field
 
 from core import db, api
 from deps import get_current_user
+
+
+# ---------------------------------------------------------------------------
+# Lightweight p95 instrumentation for `retrieve_relevant`.
+# In-process rolling window (no Mongo writes on the hot path). Read via
+# `GET /api/admin/memory-perf`. Reset on process restart — that's fine,
+# we sample continuously and the threshold check fires the moment p95
+# crosses 100 ms (which is one of the migration triggers documented in
+# /app/memory/VECTOR_DB_EVALUATION.md §6).
+# ---------------------------------------------------------------------------
+_RETRIEVE_LATENCIES_MS: "deque[float]" = deque(maxlen=1000)
+_RETRIEVE_LATENCIES_BY_KIND: dict = {}  # for future per-kind breakdown
+
+
+def _percentile(values: list[float], pct: float) -> float:
+    if not values:
+        return 0.0
+    s = sorted(values)
+    k = max(0, min(len(s) - 1, int(round((pct / 100.0) * (len(s) - 1)))))
+    return s[k]
 
 logger = logging.getLogger(__name__)
 
@@ -174,39 +196,50 @@ async def retrieve_relevant(
 ) -> list[dict]:
     """Top-K cosine-similar memories for `query`. Filters by `kinds` if
     given (e.g. ["post", "hook"]). Memories with score below `min_score`
-    are dropped to avoid polluting the prompt with irrelevant noise."""
-    if not query or not query.strip():
-        return []
-    q_vec = await embed_text(query[:1500])
-    if not q_vec:
-        return []
+    are dropped to avoid polluting the prompt with irrelevant noise.
 
-    filt: dict = {"user_id": user_id}
-    if kinds:
-        filt["kind"] = {"$in": kinds}
+    Latency is sampled into an in-process rolling window
+    (`_RETRIEVE_LATENCIES_MS`, last 1000 calls) so the admin
+    /memory-perf endpoint can surface p50/p95/p99. When p95 crosses
+    100 ms we're at one of the migration triggers documented in
+    `/app/memory/VECTOR_DB_EVALUATION.md`."""
+    started = time.perf_counter()
+    try:
+        if not query or not query.strip():
+            return []
+        q_vec = await embed_text(query[:1500])
+        if not q_vec:
+            return []
 
-    # MongoDB without Atlas Vector Search → we score in app. Bounded fetch
-    # so the loop stays O(N) for N≤ a few thousand memories per user.
-    rows = await db.cortex_memory.find(
-        filt, {"_id": 0, "embedding": 1, "text": 1, "kind": 1,
-               "meta": 1, "id": 1, "created_at": 1},
-    ).limit(2000).to_list(length=2000)
+        filt: dict = {"user_id": user_id}
+        if kinds:
+            filt["kind"] = {"$in": kinds}
 
-    scored = []
-    for r in rows:
-        sc = _cosine(q_vec, r.get("embedding") or [])
-        if sc < min_score:
-            continue
-        scored.append((sc, r))
-    scored.sort(key=lambda x: x[0], reverse=True)
+        # MongoDB without Atlas Vector Search → we score in app. Bounded fetch
+        # so the loop stays O(N) for N≤ a few thousand memories per user.
+        rows = await db.cortex_memory.find(
+            filt, {"_id": 0, "embedding": 1, "text": 1, "kind": 1,
+                   "meta": 1, "id": 1, "created_at": 1},
+        ).limit(2000).to_list(length=2000)
 
-    out = []
-    for sc, r in scored[:k]:
-        r = {**r}
-        r.pop("embedding", None)
-        r["score"] = round(float(sc), 4)
-        out.append(r)
-    return out
+        scored = []
+        for r in rows:
+            sc = _cosine(q_vec, r.get("embedding") or [])
+            if sc < min_score:
+                continue
+            scored.append((sc, r))
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        out = []
+        for sc, r in scored[:k]:
+            r = {**r}
+            r.pop("embedding", None)
+            r["score"] = round(float(sc), 4)
+            out.append(r)
+        return out
+    finally:
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        _RETRIEVE_LATENCIES_MS.append(elapsed_ms)
 
 
 def memories_to_prompt_block(memories: list[dict]) -> str:
@@ -535,3 +568,61 @@ async def reindex_memories(request: Request):
         inserted += 1
 
     return {"ok": True, "indexed": inserted}
+
+
+
+# ---------------------------------------------------------------------------
+# Admin: retrieval latency observability — surfaces the migration trigger
+# documented in /app/memory/VECTOR_DB_EVALUATION.md §6.
+# ---------------------------------------------------------------------------
+@api.get("/admin/memory-perf")
+async def memory_perf(request: Request):
+    """Returns the in-process rolling window of `retrieve_relevant`
+    latencies with p50/p95/p99 + the migration-trigger flag.
+
+    Sampled in-process; resets on backend restart. No Mongo writes on
+    the hot path, so this is safe to call frequently from the admin
+    dashboard."""
+    from deps import require_admin
+    await require_admin(request)
+    samples = list(_RETRIEVE_LATENCIES_MS)
+    n = len(samples)
+    p50 = _percentile(samples, 50)
+    p95 = _percentile(samples, 95)
+    p99 = _percentile(samples, 99)
+    avg = (sum(samples) / n) if n else 0.0
+
+    # 100 ms p95 is the migration trigger from VECTOR_DB_EVALUATION.md
+    # §6. Once we cross it, the admin UI can surface a banner pointing
+    # at the migration plan.
+    p95_threshold_ms = 100.0
+    migration_triggered = (n >= 50) and (p95 >= p95_threshold_ms)
+
+    total_memories = await db.cortex_memory.count_documents({})
+    distinct_users = len(await db.cortex_memory.distinct("user_id"))
+
+    # Top 3 users by memory count — if any crosses 5000, that's also
+    # a migration trigger.
+    top_users = await db.cortex_memory.aggregate([
+        {"$group": {"_id": "$user_id", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 3},
+    ]).to_list(length=3)
+    top_user_count = top_users[0]["count"] if top_users else 0
+    capacity_triggered = top_user_count >= 5000
+
+    return {
+        "samples":            n,
+        "window_size":        _RETRIEVE_LATENCIES_MS.maxlen,
+        "avg_ms":             round(avg, 2),
+        "p50_ms":             round(p50, 2),
+        "p95_ms":             round(p95, 2),
+        "p99_ms":             round(p99, 2),
+        "p95_threshold_ms":   p95_threshold_ms,
+        "migration_triggered": migration_triggered,
+        "capacity_triggered":  capacity_triggered,
+        "total_memories":     total_memories,
+        "distinct_users":     distinct_users,
+        "top_user_memory_count": top_user_count,
+        "migration_doc":      "/app/memory/VECTOR_DB_EVALUATION.md",
+    }

@@ -202,6 +202,11 @@ class _RunRequest(BaseModel):
     # If set, the run is linked to an existing campaign and the brief is
     # enriched with the campaign goal/audience/pillars.
     campaign_id: Optional[str] = Field(default=None, max_length=64)
+    # When True, pauses the graph after Content and waits for a manual
+    # /approve or /reject call before running Distribution. The pause
+    # state is persisted to `marketing_os_runs` with
+    # status='awaiting_approval'.
+    requires_approval: bool = False
 
 
 def _sse(event: str, data: dict) -> str:
@@ -322,6 +327,7 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
         last_model = ""
         last_mode = ""
         encountered_error = None
+        awaiting_approval = False
 
         # Frame the run with the canonical roles up front so the UI can
         # render all 5 tiles even before the first agent finishes.
@@ -331,6 +337,7 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
             "chain":      chain_for_run,
             "summarizer": summarizer_id,
             "skip_distribution": skip_distribution,
+            "requires_approval": payload.requires_approval,
         })
 
         try:
@@ -341,6 +348,7 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
                 skip_distribution=skip_distribution,
                 roles=user_roles,
                 run_id=run_id,
+                requires_approval=payload.requires_approval,
             ):
                 if ev == "graph_started":
                     continue  # we already emitted os_started with the run_id
@@ -354,6 +362,8 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
                     summary_text = data.get("summary") or ""
                     last_model = data.get("model") or ""
                     last_mode = data.get("mode") or ""
+                if ev == "awaiting_approval":
+                    awaiting_approval = True
                 if ev == "error":
                     encountered_error = data.get("message") or "unknown error"
                 yield _sse(ev, data)
@@ -361,22 +371,33 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
             encountered_error = str(e)[:300]
             yield _sse("error", {"message": encountered_error})
 
-        # Persist the run row (success OR failure path).
+        # Decide the persistent status. `awaiting_approval` is a paused
+        # run that the user can /approve or /reject later.
+        if encountered_error:
+            status = "failed"
+        elif awaiting_approval:
+            status = "awaiting_approval"
+        else:
+            status = "completed"
+
+        # Persist the run row (success OR failure OR awaiting_approval).
         try:
             await db.marketing_os_runs.insert_one({
                 "id":          run_id,
                 "user_id":     user.user_id,
                 "brief":       payload.brief[:1500],
+                "brief_text":  brief_text,  # enriched brief for /approve resume
                 "campaign_id": campaign_id,
                 "chain":       chain_for_run,
                 "summarizer":  summarizer_id,
-                "status":      "failed" if encountered_error else "completed",
+                "status":      status,
                 "error":       encountered_error,
                 "transcript":  transcript,
                 "summary":     summary_text,
                 "model":       last_model,
                 "mode":        last_mode,
                 "skip_distribution": skip_distribution,
+                "requires_approval": payload.requires_approval,
                 "framework":   "langgraph",
                 "created_at":  started_at,
                 "finished_at": datetime.now(timezone.utc),
@@ -399,7 +420,7 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
             except Exception:
                 logger.exception("Failed to pin run %s onto campaign %s", run_id, campaign_id)
 
-        yield _sse("os_persisted", {"run_id": run_id, "status": "failed" if encountered_error else "completed"})
+        yield _sse("os_persisted", {"run_id": run_id, "status": status})
 
     return StreamingResponse(
         event_stream(), media_type="text/event-stream",
@@ -412,3 +433,171 @@ async def list_roles(request: Request):
     """Public catalogue of the 5 canonical Marketing OS roles."""
     await get_current_user(request)
     return {"roles": CANONICAL_ROLES}
+
+
+
+# ---------------------------------------------------------------------------
+# Human-in-the-loop approve / reject — resumes a paused run.
+# The /approve path runs Distribution + Summariser on the saved
+# transcript; /reject runs only the Summariser (skips Distribution).
+# Both stream their continuation in the same SSE shape so the frontend
+# can re-attach to the run with no special-casing.
+# ---------------------------------------------------------------------------
+class _ApprovalRequest(BaseModel):
+    # Optional override: re-route to a different mode on resume (e.g.
+    # if the user wants Distribution to use Haiku/fast instead of
+    # whatever the original run used).
+    mode: Optional[str] = Field(default=None, max_length=24)
+
+
+@api.post("/marketing-os/runs/{run_id}/approve")
+async def approve_run(run_id: str, payload: _ApprovalRequest, request: Request):
+    """Resume a paused run: run Distribution + Summariser on the saved
+    transcript and persist a NEW run row (`derived_from: run_id`) with
+    the final summary."""
+    return await _resume_run(run_id, payload, request, approve=True)
+
+
+@api.post("/marketing-os/runs/{run_id}/reject")
+async def reject_run(run_id: str, payload: _ApprovalRequest, request: Request):
+    """Resume a paused run but SKIP Distribution: run only the
+    Summariser on the saved transcript. Useful when the user reviews
+    the content draft and decides not to publish."""
+    return await _resume_run(run_id, payload, request, approve=False)
+
+
+async def _resume_run(run_id: str, payload: _ApprovalRequest, request: Request,
+                      approve: bool):
+    from routes.ai import _gated_user
+    user = await _gated_user(request)
+
+    paused = await db.marketing_os_runs.find_one(
+        {"id": run_id, "user_id": user.user_id}, {"_id": 0},
+    )
+    if not paused:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if paused.get("status") != "awaiting_approval":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Run is in status '{paused.get('status')}', expected 'awaiting_approval'",
+        )
+
+    transcript = paused.get("transcript") or []
+    brief_text = paused.get("brief_text") or paused.get("brief") or ""
+    campaign_id = paused.get("campaign_id")
+    summarizer_id = paused.get("summarizer") or "angela"
+    chain_for_run = paused.get("chain") or list(ROLE_CHAIN_AGENT_IDS)
+    started_at = datetime.now(timezone.utc)
+    new_run_id = str(uuid.uuid4())
+
+    async def event_stream():
+        summary_text = ""
+        last_model = ""
+        last_mode = ""
+        encountered_error = None
+        new_transcript = list(transcript)
+
+        yield _sse("os_started", {
+            "run_id":     new_run_id,
+            "roles":      CANONICAL_ROLES,
+            "chain":      chain_for_run,
+            "summarizer": summarizer_id,
+            "skip_distribution": not approve,
+            "resumed_from": run_id,
+            "decision":    "approved" if approve else "rejected",
+        })
+
+        try:
+            async for ev, data in run_os_graph(
+                user_id=user.user_id,
+                brief=brief_text,
+                mode=payload.mode or paused.get("mode"),
+                skip_distribution=not approve,
+                run_id=new_run_id,
+                resume_transcript=transcript,
+                approved=approve,
+            ):
+                if ev == "graph_started":
+                    continue
+                if ev == "agent_done":
+                    new_transcript.append({
+                        "agent_id":   data.get("agent_id"),
+                        "agent_name": data.get("agent_name"),
+                        "answer":     data.get("answer"),
+                    })
+                if ev == "complete":
+                    summary_text = data.get("summary") or ""
+                    last_model = data.get("model") or ""
+                    last_mode = data.get("mode") or ""
+                if ev == "error":
+                    encountered_error = data.get("message") or "unknown error"
+                yield _sse(ev, data)
+        except Exception as e:
+            encountered_error = str(e)[:300]
+            yield _sse("error", {"message": encountered_error})
+
+        final_status = "failed" if encountered_error else "completed"
+
+        # Mark the original paused run as resolved so it doesn't keep
+        # showing the Approve/Reject pill in the UI.
+        try:
+            await db.marketing_os_runs.update_one(
+                {"id": run_id, "user_id": user.user_id},
+                {"$set": {
+                    "status":        "resolved",
+                    "resolved_as":   "approved" if approve else "rejected",
+                    "resolved_at":   datetime.now(timezone.utc),
+                    "resolved_into": new_run_id,
+                }},
+            )
+        except Exception:
+            logger.exception("Failed to resolve paused run %s", run_id)
+
+        # Persist the resumed run as a new row.
+        try:
+            await db.marketing_os_runs.insert_one({
+                "id":          new_run_id,
+                "user_id":     user.user_id,
+                "brief":       paused.get("brief"),
+                "brief_text":  brief_text,
+                "campaign_id": campaign_id,
+                "chain":       chain_for_run,
+                "summarizer":  summarizer_id,
+                "status":      final_status,
+                "error":       encountered_error,
+                "transcript":  new_transcript,
+                "summary":     summary_text,
+                "model":       last_model,
+                "mode":        last_mode,
+                "skip_distribution": not approve,
+                "requires_approval": False,   # already resolved
+                "derived_from": run_id,
+                "derived_decision": "approved" if approve else "rejected",
+                "framework":   "langgraph",
+                "created_at":  started_at,
+                "finished_at": datetime.now(timezone.utc),
+            })
+        except Exception:
+            logger.exception("Failed to persist resumed run %s", new_run_id)
+
+        # Re-pin onto the campaign if applicable.
+        if campaign_id and summary_text and not encountered_error:
+            try:
+                await db.campaigns.update_one(
+                    {"id": campaign_id, "user_id": user.user_id},
+                    {"$set": {
+                        "latest_run_id":      new_run_id,
+                        "latest_run_summary": summary_text[:1200],
+                        "latest_run_at":      datetime.now(timezone.utc),
+                        "updated_at":         datetime.now(timezone.utc),
+                    }},
+                )
+            except Exception:
+                logger.exception("Failed to pin run %s onto campaign %s", new_run_id, campaign_id)
+
+        yield _sse("os_persisted", {"run_id": new_run_id, "status": final_status})
+
+    return StreamingResponse(
+        event_stream(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

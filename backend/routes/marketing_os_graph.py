@@ -89,6 +89,13 @@ class OSState(TypedDict, total=False):
     last_mode:     str
     skip_distribution: bool
     error:         Optional[str]
+    # Human-in-the-loop gate before Distribution. When True, the graph
+    # pauses after Content, emits an `awaiting_approval` event, and the
+    # outer handler persists status='awaiting_approval'. A separate
+    # /approve or /reject endpoint resumes the chain (see
+    # `resume_after_approval` below).
+    requires_approval: bool
+    approved:          bool
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +309,28 @@ def _build_summarizer_node(agent_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Approval-gate node — emits an `awaiting_approval` event and ends the
+# run. Resumption happens via `resume_after_approval()` which feeds the
+# saved transcript back into a fresh graph invocation with `approved`
+# flipped to True (so `_route_after_content` skips this node).
+# ---------------------------------------------------------------------------
+async def _approval_gate_node(state: OSState) -> dict:
+    run_id = state["run_id"]
+    transcript = state.get("transcript", []) or []
+    await _emit(run_id, "awaiting_approval", {
+        "run_id":    run_id,
+        "next_role": "distribution",
+        "reason":    "Manual approval required before Distribution publishes.",
+        "transcript_len": len(transcript),
+    })
+    # Returning an empty update so the checkpointer persists exactly
+    # the state we paused on. The outer handler will see `paused=True`
+    # and write a `status: "awaiting_approval"` row instead of
+    # `completed`.
+    return {"approved": False}
+
+
+# ---------------------------------------------------------------------------
 # Conditional edge — skip Distribution when the run is content-only.
 # ---------------------------------------------------------------------------
 def _route_after_content(state: OSState) -> str:
@@ -313,6 +342,11 @@ def _route_after_content(state: OSState) -> str:
         return "summariser"   # short-circuit on upstream LLM failure
     if state.get("skip_distribution"):
         return "summariser"
+    # Human-in-the-loop gate — pause if the user opted in and hasn't
+    # explicitly approved yet. The graph emits `awaiting_approval` and
+    # ends; a follow-up /approve call resumes via `resume_after_approval`.
+    if state.get("requires_approval") and not state.get("approved"):
+        return "approval_gate"
     return "distribution"
 
 
@@ -343,6 +377,7 @@ def _build_canonical_graph():
     builder.add_node("content",      _build_role_node("nova",         step_total=4))
     builder.add_node("distribution", _build_role_node("kai",          step_total=4))
     builder.add_node("summariser",   _build_summarizer_node("angela"))
+    builder.add_node("approval_gate", _approval_gate_node)
 
     builder.add_edge(START, "strategy")
     builder.add_conditional_edges("strategy", _route_after_strategy, {
@@ -352,11 +387,14 @@ def _build_canonical_graph():
         "content": "content", "summariser": "summariser",
     })
     builder.add_conditional_edges("content", _route_after_content, {
-        "distribution": "distribution", "summariser": "summariser",
+        "distribution": "distribution",
+        "summariser":   "summariser",
+        "approval_gate": "approval_gate",
     })
     builder.add_conditional_edges("distribution", _route_after_distribution, {
         "summariser": "summariser",
     })
+    builder.add_edge("approval_gate", END)
     builder.add_edge("summariser", END)
 
     # MongoDBSaver requires a sync pymongo client + works for the
@@ -418,6 +456,9 @@ async def run_os_graph(
     skip_distribution: bool = False,
     roles: Optional[list[str]] = None,
     run_id: Optional[str] = None,
+    requires_approval: bool = False,
+    resume_transcript: Optional[list[dict]] = None,
+    approved: bool = False,
 ):
     """Drives the canonical 5-role graph (or a user-specified subset).
 
@@ -433,6 +474,14 @@ async def run_os_graph(
     `run_id` is optional — when omitted, we generate a fresh uuid4.
     The caller can pass one in so the outer `os_started` SSE event and
     persisted row use the same id from the start.
+
+    `requires_approval` opts into the human-in-the-loop gate before
+    Distribution. When set AND `approved=False`, the graph pauses after
+    Content and emits `awaiting_approval`. The caller persists the
+    transcript and exposes /approve + /reject endpoints. Those
+    endpoints call this function again with `resume_transcript`
+    pre-seeded and `approved=True` (or `skip_distribution=True` for
+    reject), so only Distribution + Summariser run.
     """
     if not run_id:
         run_id = str(uuid.uuid4())
@@ -451,6 +500,9 @@ async def run_os_graph(
         runner = asyncio.create_task(_run_canonical(
             run_id=run_id, user_id=user_id, brief=brief, mode=mode,
             skip_distribution=skip_distribution,
+            requires_approval=requires_approval,
+            resume_transcript=resume_transcript,
+            approved=approved,
         ))
 
     # Drain the queue until the runner signals completion. Sentinel
@@ -472,10 +524,33 @@ async def run_os_graph(
                 pass
 
 
-async def _run_canonical(*, run_id, user_id, brief, mode, skip_distribution):
+async def _run_canonical(*, run_id, user_id, brief, mode, skip_distribution,
+                         requires_approval=False, resume_transcript=None,
+                         approved=False):
     """Invokes the compiled StateGraph and pushes a sentinel onto the
-    queue when finished."""
+    queue when finished.
+
+    Resume semantics: when `resume_transcript` is set (= /approve or
+    /reject is calling us), we BYPASS the graph entirely and run just
+    Distribution (if approved + not skipped) + Summariser as direct
+    node calls. The upstream Strategy/Intelligence/Content nodes don't
+    re-run — saves ~20-40s of cheap LLM calls per gated run.
+
+    This is a deliberate trade against using LangGraph's native
+    interrupt()/Command(resume=...) machinery. The native approach
+    would be cleaner semantically but requires careful checkpoint
+    plumbing across SSE request boundaries; this direct-call path is
+    half the code and identical in observable behaviour.
+    """
     try:
+        if resume_transcript is not None:
+            await _run_resume(
+                run_id=run_id, user_id=user_id, brief=brief, mode=mode,
+                transcript=resume_transcript,
+                run_distribution=not skip_distribution,
+            )
+            return
+
         graph = get_canonical_graph()
         initial: OSState = {
             "run_id":  run_id,
@@ -486,6 +561,8 @@ async def _run_canonical(*, run_id, user_id, brief, mode, skip_distribution):
             "summary": "",
             "skip_distribution": bool(skip_distribution),
             "error":   None,
+            "requires_approval": bool(requires_approval),
+            "approved": False,
         }
         config = {"configurable": {"thread_id": run_id}}
         await graph.ainvoke(initial, config=config)
@@ -496,6 +573,35 @@ async def _run_canonical(*, run_id, user_id, brief, mode, skip_distribution):
         q = _RUN_QUEUES.get(run_id)
         if q is not None:
             await q.put(("__END__", None))
+
+
+async def _run_resume(*, run_id, user_id, brief, mode, transcript: list[dict],
+                      run_distribution: bool):
+    """Direct-call resume path — used by /approve and /reject endpoints.
+    Skips the graph; runs at most Distribution + Summariser. Pre-seeds
+    state with the prior transcript so the synthesiser has full context."""
+    state: OSState = {
+        "run_id":  run_id,
+        "user_id": user_id,
+        "brief":   brief,
+        "mode":    mode,
+        "transcript": list(transcript),
+        "summary": "",
+        "skip_distribution": not run_distribution,
+        "error":   None,
+        "requires_approval": False,
+        "approved": True,
+    }
+    if run_distribution:
+        node = _build_role_node("kai", step_total=4)
+        update = await node(state)
+        state.update(update)  # type: ignore[arg-type]
+        if state.get("error"):
+            return
+    # Always summarise on resume — that's the whole point of running it.
+    sum_node = _build_summarizer_node("angela")
+    update = await sum_node(state)
+    state.update(update)  # type: ignore[arg-type]
 
 
 async def _run_dynamic_chain(*, run_id, user_id, brief, mode, roles: list[str]):

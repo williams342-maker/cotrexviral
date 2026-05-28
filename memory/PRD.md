@@ -35,6 +35,29 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-28 (part 50) **🛑 LangGraph Human-in-the-Loop gate + 📏 `retrieve_relevant` p95 instrumentation**
+  - **Human-in-the-loop gate before Distribution** — leverages the explicit StateGraph topology shipped in part 48:
+    - New `approval_gate` graph node + conditional edge in `routes/marketing_os_graph.py`. When the user opts in via `requires_approval=true` on the run request, the canonical chain runs Strategy → Intelligence → Content → emits an `awaiting_approval` SSE event → ends. Kai (Distribution) is NOT invoked.
+    - **`POST /api/marketing-os/runs/{id}/approve`** — resumes the paused run via a direct-call path (`_run_resume`) that runs ONLY Kai + Angela on the saved transcript. Saves ~20-40s of LLM time vs. naive re-invocation. Persists a NEW run row with `derived_from: <paused_id>` + `derived_decision: "approved"`, and marks the original as `status: "resolved"`, `resolved_as: "approved"`, `resolved_into: <new_id>`.
+    - **`POST /api/marketing-os/runs/{id}/reject`** — same mechanics, but `run_distribution=false` so only Angela synthesises on the existing transcript. Original row resolved with `resolved_as: "rejected"`.
+    - Guard: both endpoints 404 unknown run, 409 if status ≠ `awaiting_approval`.
+    - Two new fields on `marketing_os_runs` rows: `requires_approval: bool` + `brief_text` (the LLM-enriched brief, kept so `/approve` doesn't have to rebuild it from scratch).
+  - **Frontend (`RunOSModal.jsx` + `CommandCenter.jsx`)**:
+    - New **"Require approval before Distribution"** checkbox in the Run-OS modal footer (`data-testid="os-run-require-approval"`).
+    - Agent Activity feed cards now render the amber `awaiting_approval` status pill plus an inline **Approve / Reject** action row when the run is paused (`data-testid="activity-approve-{id}"` + `activity-reject-{id}"`). Single-flight via `resolvingId` so users can't double-fire. Drains the SSE response server-side then reloads the dashboard.
+    - Resolved runs (post-decision) render with a muted zinc pill — visually distinct from `completed`/`failed` so the user knows which runs went through the gate.
+  - **p95 instrumentation on `retrieve_relevant`** (`routes/memory.py`):
+    - In-process `deque(maxlen=1000)` rolling window. Sampled inside a `try/finally` wrapper around the existing implementation — no Mongo writes on the hot path, no impact on retrieval latency itself.
+    - **`GET /api/admin/memory-perf`** — admin-only. Returns `{samples, window_size, avg_ms, p50_ms, p95_ms, p99_ms, p95_threshold_ms (100), migration_triggered, capacity_triggered, total_memories, distinct_users, top_user_memory_count}`. Two boolean flags fire automatically when the documented migration triggers cross their thresholds (100 ms p95 or 5K memories on a single user — see `/app/memory/VECTOR_DB_EVALUATION.md` §6).
+    - Live-verified in this session: p95 = 19.7 ms on 267 memories. Plenty of headroom; flags off.
+  - **7 new pytest cases**:
+    - `TestHITLEndpoints` (4): auth on approve + reject · 404 unknown run id · **409 when run is in 'completed' status** (using a synthetic Mongo-inserted row so we don't burn an LLM call).
+    - `TestMemoryPerf` (2): auth required · response shape (12 required fields, threshold + flag types).
+    - `TestHITLLiveFlow` (1): **end-to-end live LLM test** — canonical chain with `requires_approval=true` pauses after Content (3 agents, NO Kai, NO summariser); `/reject` resumes and runs ONLY Angela (no Kai); original row updates to `status: "resolved"`, `resolved_as: "rejected"`. Skips cleanly on LLM budget cap.
+  - **All 56 marketing-OS pytest cases pass** (49 prior + 7 new) — full regression green.
+  - **Use case unlocked**: a paused run lets a human review Atlas's strategy + Iris's research + Nova's draft before Kai writes the distribution plan that publishes to connected channels. This is the single most-requested compliance gate before the OS goes autonomous.
+
+
 - 2026-05-28 (part 49) **⏭ Distribution-skipped pill + 📐 Vector DB evaluation doc**
   - **UI polish — "dist skipped" pill** rendered next to the run-status pill anywhere a Marketing OS run is listed:
     - `CampaignDetail.jsx` history accordion rows (`data-testid="history-skip-distribution-{run_id}"`) — visible inline with the existing completed/failed status.
