@@ -35,6 +35,13 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-28 (part 53) **📊 CSV export of `retrieve_relevant` latency samples**
+  - **Backend**: new endpoint `GET /api/admin/memory-perf/samples.csv` — admin-only, dumps the in-process rolling deque as a 2-column CSV (`index,latency_ms`) with `Content-Disposition: attachment; filename=memory_perf_samples.csv` so browsers download it directly. Always includes the header row even when the window is empty.
+  - **Frontend**: small *Export CSV* button on the `MemoryPerfCallout` in both states — neutral pill on the healthy state, violet outline next to the *Open migration plan* CTA on the triggered state (`data-testid="memory-perf-csv-export-healthy"` / `memory-perf-csv-export-triggered"`).
+  - **2 new pytest cases** (`TestMemoryPerf::test_memory_perf_samples_csv_requires_admin` + `…_shape`) — auth-gated, content-type, content-disposition, header row, integer/float parsing on each data row. All 4 memory-perf tests pass.
+  - **Why**: ops folks now have a histogrammable dataset to inspect the distribution (e.g. is p95 spiking from a heavy tail or shifted everywhere?) before pulling the trigger on the vector DB migration. ~5 lines of new server code + a single anchor on the admin overview.
+
+
 - 2026-05-28 (part 52) **🎬 Run-OS modal resume mode — live Approve/Reject progress**
   - **`RunOSModal` now supports two modes** in one component:
     - **Fresh run** (existing): textarea + "Require approval" checkbox + Run button → `POST /api/marketing-os/run/stream`.

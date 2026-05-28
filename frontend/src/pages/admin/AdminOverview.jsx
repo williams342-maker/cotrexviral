@@ -453,6 +453,14 @@ const MemoryPerfCallout = ({ perf }) => {
             {' '}{perf.total_memories} memories across {perf.distinct_users} users
           </div>
         </div>
+        <a
+          href={`${API}/admin/memory-perf/samples.csv`}
+          className="text-[11px] px-2 py-1 rounded border border-neutral-300 text-neutral-600 hover:bg-neutral-100"
+          data-testid="memory-perf-csv-export-healthy"
+          title="Download the rolling latency window as CSV (for histogramming / pre-migration tuning)"
+        >
+          Export CSV
+        </a>
         <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold">OK</span>
       </div>
     );
@@ -505,6 +513,14 @@ const MemoryPerfCallout = ({ perf }) => {
               data-testid="memory-perf-open-eval-doc"
             >
               Open migration plan <ArrowUpRight size={12} />
+            </a>
+            <a
+              href={`${API}/admin/memory-perf/samples.csv`}
+              className="px-3 py-1.5 rounded-lg border border-violet-400/60 text-violet-700 hover:bg-violet-50 text-[12px] font-medium"
+              data-testid="memory-perf-csv-export-triggered"
+              title="Download the rolling latency window as CSV for histogramming / pre-migration tuning"
+            >
+              Export latency CSV
             </a>
             <span className="text-[11px] text-neutral-500 italic">{perf.migration_doc}</span>
           </div>

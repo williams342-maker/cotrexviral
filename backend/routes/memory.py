@@ -626,3 +626,22 @@ async def memory_perf(request: Request):
         "top_user_memory_count": top_user_count,
         "migration_doc":      "/app/memory/VECTOR_DB_EVALUATION.md",
     }
+
+
+
+@api.get("/admin/memory-perf/samples.csv")
+async def memory_perf_samples_csv(request: Request):
+    """Dump the rolling latency window as CSV — useful when ops folks
+    want to histogram the distribution before kicking off the vector
+    DB migration. Two columns: `index, latency_ms`."""
+    from deps import require_admin
+    from fastapi.responses import Response
+    await require_admin(request)
+    samples = list(_RETRIEVE_LATENCIES_MS)
+    rows = ["index,latency_ms"]
+    rows.extend(f"{i},{ms:.3f}" for i, ms in enumerate(samples))
+    return Response(
+        content="\n".join(rows) + "\n",
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=memory_perf_samples.csv"},
+    )

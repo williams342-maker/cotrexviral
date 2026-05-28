@@ -486,6 +486,31 @@ class TestMemoryPerf:
         assert isinstance(d["migration_triggered"], bool)
         assert isinstance(d["capacity_triggered"], bool)
 
+    def test_memory_perf_samples_csv_requires_admin(self):
+        r = httpx.get(f"{API_URL}/api/admin/memory-perf/samples.csv", timeout=10)
+        assert r.status_code == 401
+
+    def test_memory_perf_samples_csv_shape(self):
+        r = httpx.get(
+            f"{API_URL}/api/admin/memory-perf/samples.csv",
+            headers=H, timeout=10,
+        )
+        assert r.status_code == 200
+        ct = r.headers.get("content-type", "")
+        assert "text/csv" in ct, f"expected text/csv, got {ct}"
+        # Content-Disposition: attachment + filename so the browser downloads
+        # rather than rendering inline.
+        cd = r.headers.get("content-disposition", "")
+        assert "attachment" in cd and ".csv" in cd, f"bad content-disposition: {cd}"
+        body = r.text.splitlines()
+        # Header row required even when the window is empty.
+        assert body[0] == "index,latency_ms"
+        # If samples exist, each row should be `int,float`.
+        for line in body[1:]:
+            idx, ms = line.split(",")
+            int(idx)         # raises on malformed
+            float(ms)
+
 
 
 class TestHITLLiveFlow:
