@@ -45,6 +45,7 @@ from routes import (  # noqa: F401
     analytics,       # Per-post metrics refresh (Pinterest live; others TODO)
     memory,          # Vector memory system (brand profile, posts, agent context)
     approvals,       # Human-in-the-loop approval workflow
+    trends_engine,   # Reddit + Google Trends → memory ingestion
 )
 
 

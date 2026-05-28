@@ -177,6 +177,20 @@ async def start_scheduler():
     except Exception:
         logger.exception("scheduler: failed to register refresh_post_metrics")
 
+    # Trend ingestion — every 6h, offset 5 min from analytics to spread load.
+    try:
+        from routes.trends_engine import refresh_trends_for_all_users
+        scheduler.add_job(
+            refresh_trends_for_all_users,
+            trigger=IntervalTrigger(hours=6),
+            id="refresh_trends",
+            max_instances=1,
+            coalesce=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(minutes=7),
+        )
+    except Exception:
+        logger.exception("scheduler: failed to register refresh_trends")
+
     scheduler.start()
     logger.info("scheduler: started (worker=%s, every 60s)", WORKER_ID)
 

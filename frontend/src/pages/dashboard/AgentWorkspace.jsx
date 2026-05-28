@@ -99,6 +99,7 @@ const AgentWorkspace = () => {
             content: res.data.answer,
             follow_ups: res.data.follow_ups || [],
             memories_used: res.data.memories_used || [],
+            handoff: res.data.handoff || null,
           },
         ],
       }));
@@ -135,8 +136,8 @@ const AgentWorkspace = () => {
 
   return (
     <DashboardLayout
-      title="Agents"
-      subtitle="Talk to your AI marketing specialists. Each one keeps memory of your past conversations."
+      title="Your AI Growth Team"
+      subtitle="Six specialists, one team. Each one keeps memory of your past conversations and gets sharper every week."
     >
       <div className="cv-dash-scope" data-testid="agent-workspace">
 
@@ -340,7 +341,14 @@ const MessageBubble = ({ message, tone, agentName, onFollowUp }) => {
       )}
       <div className={`max-w-[78%] ${isUser ? 'order-1' : ''}`}>
         {!isUser && (
-          <div className="text-[11.5px] font-semibold text-white mb-1">{agentName}</div>
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="text-[11.5px] font-semibold text-white">{agentName}</span>
+            {message.handoff && (
+              <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-2 py-0.5" data-testid="agent-handoff-pill">
+                ↪ asked {message.handoff.agent_name}
+              </span>
+            )}
+          </div>
         )}
         {!isUser && (message.memories_used || []).length > 0 && (
           <MemoryChip memories={message.memories_used} />

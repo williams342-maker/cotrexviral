@@ -1,8 +1,8 @@
 """Per-agent AI chat for the in-dashboard agent workspace.
 
-Each of the four CortexViral specialists (Nova, Sam, Kai, Angela) gets a
-dedicated system prompt + an isolated, persistent LLM session keyed by
-`agent-{agent_id}-{user_id}` so the conversation memory survives across
+Each of the six CortexViral specialists (Atlas, Iris, Nova, Sam, Kai, Angela)
+gets a dedicated system prompt + an isolated, persistent LLM session keyed
+by `agent-{agent_id}-{user_id}` so the conversation memory survives across
 page reloads.
 
 Follow-up chips are extracted via an inline format trick: every agent
@@ -11,8 +11,14 @@ after its answer. We parse that out server-side and return a clean answer
 + chips array — so the SPA gets both in a single LLM call (~6s instead of
 the ~100s a separate meta call would take).
 
+Multi-agent collaboration: Atlas (Strategy) and other agents can mid-reply
+delegate to another specialist via `<<HANDOFF>>iris: <question><<END>>`.
+The server detects the marker, invokes that other agent, and splices the
+result back into the original answer as a "[Iris reports: …]" inline
+block. One delegation per turn, single LLM round-trip per agent.
+
 Endpoints:
-  POST /api/ai/agent/chat  body {agent_id, message}  → {answer, follow_ups}
+  POST /api/ai/agent/chat  body {agent_id, message}  → {answer, follow_ups, memories_used, handoff}
   GET  /api/ai/agent/profile?agent_id=...            → {agent} static metadata
 """
 import json
@@ -26,6 +32,7 @@ from core import api
 from deps import get_current_user
 from routes.ai import _llm_for_user, _gated_user
 from routes.plans import record_ai_generation
+from routes.model_router import for_agent, for_task
 from emergentintegrations.llm.chat import UserMessage
 
 
@@ -39,6 +46,24 @@ _FUPS_RE = re.compile(
     r"<<\s*FUPS\s*>>\s*(\[.*?\])\s*(?:<<\s*END\s*>>)?\s*$",
     re.DOTALL | re.IGNORECASE,
 )
+
+
+def _extract_handoff(text: str) -> tuple[str, Optional[dict]]:
+    """Strip an optional `<<HANDOFF>>agent: question<<END>>` block from the
+    middle of a reply. Returns (cleaned_text, {"agent_id": ..., "question": ...}
+    or None). Only one handoff per reply — additional matches are left in
+    the text untouched."""
+    if not text:
+        return "", None
+    m = _HANDOFF_RE.search(text)
+    if not m:
+        return text, None
+    agent_id = m.group(1).strip().lower()
+    question = m.group(2).strip()
+    if not question or agent_id not in AGENTS:
+        return text, None
+    cleaned = (text[: m.start()] + text[m.end():]).strip()
+    return cleaned, {"agent_id": agent_id, "question": question[:300]}
 
 
 def _extract_followups(raw: str) -> tuple[str, list[str]]:
@@ -69,6 +94,27 @@ _FUPS_INSTRUCTION = (
     "Each follow-up should be phrased as a first-person request to you "
     "(<=110 chars each), naturally extending the conversation. Never repeat a "
     "follow-up the user already asked. Always include exactly 3."
+)
+
+# Handoff sentinel — Atlas (Strategy) is the orchestrator; she can ask Iris
+# for live trend data, Sam for an SEO brief, or Angela for an email flow
+# mid-reply. The agent emits `<<HANDOFF>>iris: <question><<END>>` BEFORE the
+# <<FUPS>> block; we parse it, run the second agent, splice the answer back.
+_HANDOFF_RE = re.compile(
+    r"<<\s*HANDOFF\s*>>\s*(\w+)\s*:\s*(.+?)\s*<<\s*END\s*>>",
+    re.DOTALL | re.IGNORECASE,
+)
+
+_HANDOFF_INSTRUCTION = (
+    "\n\nMULTI-AGENT MODE: when a sub-task is outside your specialty, you "
+    "MAY delegate to another agent ONCE per reply by appending the "
+    "following marker BEFORE the <<FUPS>> line:\n"
+    "<<HANDOFF>>agent_id: <single specific question><<END>>\n"
+    "Available agents to delegate to: iris (research/trends), sam (SEO), "
+    "kai (social listening), angela (email), nova (digital marketing). "
+    "Use a handoff ONLY when the other agent's specialty would genuinely "
+    "improve your answer. Keep the question under 200 chars. The system "
+    "will run that agent and splice their reply into your message."
 )
 
 
@@ -257,12 +303,41 @@ async def agent_chat(payload: _ChatRequest, request: Request):
         pass
 
     session_id = f"agent-{agent['id']}-{user.user_id}"
+    # Atlas (Strategy) is the only agent that gets the handoff capability —
+    # she orchestrates. Sub-agents stay focused on their specialty so we
+    # don't get infinite delegation loops.
+    can_handoff = agent["id"] == "strategy"
     system_prompt = agent["system"] + _FUPS_INSTRUCTION
+    if can_handoff:
+        system_prompt += _HANDOFF_INSTRUCTION
     if memory_block:
         system_prompt = system_prompt + "\n\n" + memory_block
 
-    chat = await _llm_for_user(user.user_id, session_id, system_prompt)
+    # Model routing — picks the right LLM family for the agent's task type.
+    provider, model = for_agent(agent["id"])
+    chat = await _llm_for_user(
+        user.user_id, session_id, system_prompt,
+        provider=provider, model=model,
+    )
     raw = await chat.send_message(UserMessage(text=payload.message))
+
+    # Optional handoff: strip + run the delegated agent. We do this BEFORE
+    # follow-up extraction so the chips still parse cleanly.
+    handoff_info = None
+    handoff_done = None
+    if can_handoff:
+        raw, handoff_info = _extract_handoff(raw)
+        if handoff_info:
+            try:
+                handoff_done = await _run_handoff(user.user_id, handoff_info)
+                if handoff_done:
+                    raw = raw.rstrip() + (
+                        f"\n\n📡 **{handoff_done['agent_name']} reports:**\n"
+                        f"{handoff_done['answer']}\n"
+                    )
+            except Exception:
+                pass
+
     answer, follow_ups = _extract_followups(raw)
 
     # After a successful reply, save a short conversation summary as a
@@ -283,4 +358,39 @@ async def agent_chat(payload: _ChatRequest, request: Request):
         "answer": answer,
         "follow_ups": follow_ups,
         "memories_used": used_memories,
+        "handoff": handoff_done,  # {agent_id, agent_name, question, answer} or None
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handoff runner — call a SECOND agent in a fresh session, return short reply
+# ---------------------------------------------------------------------------
+async def _run_handoff(user_id: str, handoff: dict) -> Optional[dict]:
+    """Run a sub-agent in a one-shot ephemeral session (no FUPS/HANDOFF
+    instructions, no memory block, single LLM call). Returns a short reply
+    body or None if the call failed."""
+    sub = AGENTS.get(handoff["agent_id"])
+    if not sub:
+        return None
+    # Ephemeral session id so this exchange doesn't pollute the sub-agent's
+    # main conversation memory with the user.
+    import secrets as _sec
+    session_id = f"handoff-{sub['id']}-{user_id}-{_sec.token_hex(4)}"
+    # Compact system prompt: the agent's persona + a brevity instruction.
+    system = (
+        sub["system"]
+        + "\n\nIMPORTANT: this is a handoff request from another agent. "
+        "Reply in 3-5 bullets, under 120 words total. Be specific. "
+        "Do NOT add any closing follow-ups or chips — just the answer."
+    )
+    provider, model = for_agent(sub["id"])
+    from routes.ai import _llm_for_user as _llm
+    chat = await _llm(user_id, session_id, system,
+                      provider=provider, model=model)
+    answer = await chat.send_message(UserMessage(text=handoff["question"]))
+    return {
+        "agent_id": sub["id"],
+        "agent_name": sub["name"],
+        "question": handoff["question"],
+        "answer": (answer or "").strip(),
     }

@@ -27,7 +27,7 @@ const CVHero = ({ onGetStarted }) => {
             data-testid="cv-hero-badge"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 cv-pulse" />
-            AI-Powered Growth System
+            Hire your AI marketing employees
           </motion.div>
 
           <motion.h1
@@ -36,8 +36,8 @@ const CVHero = ({ onGetStarted }) => {
             transition={{ duration: 0.7, delay: 0.05 }}
             className="cv-display text-5xl sm:text-6xl lg:text-7xl font-semibold text-white leading-[0.95]"
           >
-            Create Viral Content{' '}
-            <span className="cv-gradient-text">Using AI in Minutes.</span>
+            Your AI Growth Team,{' '}
+            <span className="cv-gradient-text">working 24/7.</span>
           </motion.h1>
 
           <motion.p
@@ -46,9 +46,9 @@ const CVHero = ({ onGetStarted }) => {
             transition={{ duration: 0.7, delay: 0.15 }}
             className="mt-6 max-w-2xl text-[17px] leading-relaxed text-zinc-400"
           >
-            CortexViral is an <strong className="text-zinc-200">AI viral content generator</strong> that writes,
-            schedules, and grows your social media across TikTok, Instagram, X, LinkedIn, and YouTube —
-            all from one inbox. Built for creators, startups, and brands that want compounding growth.
+            CortexViral gives you <strong className="text-zinc-200">six AI marketing employees</strong> — Strategy, Research, Content, SEO, Social, Email —
+            that plan campaigns, research trends, write posts, and publish across TikTok, Instagram, LinkedIn, Pinterest, and Facebook.
+            One inbox. Compounding growth. No new hires.
           </motion.p>
 
           <motion.div

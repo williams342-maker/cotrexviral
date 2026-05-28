@@ -66,21 +66,25 @@ async def _user_context_block(user_id: str) -> str:
 
 
 async def _llm_for_user(user_id: str, session_id: str, system: str,
-                        model: str = "gpt-5"):
+                        model: str = "gpt-5",
+                        provider: str = "openai"):
     """Wrap _llm with the user's onboarding context block. Use this for every
-    user-facing AI generation so output is niche-aware."""
+    user-facing AI generation so output is niche-aware. `provider` + `model`
+    can be overridden by the per-task router (see `model_router.py`)."""
     ctx = await _user_context_block(user_id)
-    return _llm(session_id, system + ctx, model=model)
+    return _llm(session_id, system + ctx, model=model, provider=provider)
 
 
-def _llm(session_id: str, system: str, model: str = "gpt-5"):
+def _llm(session_id: str, system: str,
+         model: str = "gpt-5",
+         provider: str = "openai"):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="LLM key not configured")
     chat = LlmChat(
         api_key=EMERGENT_LLM_KEY,
         session_id=session_id,
         system_message=system,
-    ).with_model("openai", model)
+    ).with_model(provider, model)
     return chat
 
 

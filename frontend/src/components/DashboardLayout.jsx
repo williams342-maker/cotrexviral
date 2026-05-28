@@ -8,6 +8,7 @@ import BroadcastBanner from './BroadcastBanner';
 const items = [
   { to: '/dashboard/agent', label: 'Agents', icon: Bot, exact: true },
   { to: '/dashboard/memory', label: 'Memory', icon: Brain },
+  { to: '/dashboard/trends', label: 'Trends', icon: TrendingUp },
   { to: '/dashboard/approvals', label: 'Approvals', icon: CheckSquare },
   { to: '/dashboard/overview', label: 'Overview', icon: LayoutDashboard },
   { to: '/dashboard/main', label: 'Activity', icon: Activity },
