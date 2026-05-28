@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Sparkles, Loader2, Layers, Eye, Heart, MousePointer,
   Inbox, Calendar as CalendarIcon, FileText, Play, Edit3, Save, X,
-  Send, TrendingUp, Activity,
+  Send, TrendingUp, Activity, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import RunOSModal from '../../components/RunOSModal';
@@ -128,6 +128,13 @@ const CampaignDetail = () => {
   const [editMode, setEditMode] = useState(false);
   const [editFields, setEditFields] = useState({ audience: '', content_pillars: '', notes: '' });
   const [runOpen, setRunOpen] = useState(false);
+  // Run history for this campaign — lazy-loaded the first time the
+  // user expands the accordion to save a roundtrip on initial paint.
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState(null);  // null = not loaded
+  const [historyLoading, setHistoryLoading] = useState(false);
+  // Set of run-ids currently expanded inside the accordion.
+  const [expandedRuns, setExpandedRuns] = useState(new Set());
 
   const load = async () => {
     try {
@@ -151,6 +158,32 @@ const CampaignDetail = () => {
   };
 
   useEffect(() => { load(); /* eslint-disable-line */ }, [id]);
+
+  // Lazy-load run history when the accordion is first opened.
+  const toggleHistory = async () => {
+    const next = !historyOpen;
+    setHistoryOpen(next);
+    if (next && history === null && !historyLoading) {
+      setHistoryLoading(true);
+      try {
+        const r = await axios.get(`${API}/marketing-os/runs?campaign_id=${id}&limit=10`, { withCredentials: true });
+        setHistory(r.data.runs || []);
+      } catch (e) {
+        setHistory([]);
+        toast({ title: 'Could not load history', description: e.response?.data?.detail || e.message });
+      } finally {
+        setHistoryLoading(false);
+      }
+    }
+  };
+
+  const toggleRunExpand = (rid) => {
+    setExpandedRuns((prev) => {
+      const next = new Set(prev);
+      if (next.has(rid)) next.delete(rid); else next.add(rid);
+      return next;
+    });
+  };
 
   const fmt = (n) => {
     if (n == null) return '0';
@@ -421,6 +454,91 @@ const CampaignDetail = () => {
             </div>
             <div className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap line-clamp-[10]" data-testid="campaign-latest-run-summary">
               {data.latest_run_summary}
+            </div>
+
+            {/* Run history accordion — lazy-loaded, lists previous 10
+                runs for this campaign so the team can compare what they
+                said yesterday vs. last week. */}
+            <div className="mt-4 pt-3 border-t border-violet-500/10">
+              <button
+                type="button"
+                onClick={toggleHistory}
+                className="w-full flex items-center gap-2 text-left text-xs text-zinc-400 hover:text-white"
+                data-testid="campaign-history-toggle"
+              >
+                {historyOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                <span className="font-semibold uppercase tracking-widest text-[10px]">
+                  Previous OS runs
+                </span>
+                {history && history.length > 0 && (
+                  <span className="text-[10px] text-zinc-500">· {history.length}</span>
+                )}
+              </button>
+
+              {historyOpen && (
+                <div className="mt-3 space-y-1.5" data-testid="campaign-history-list">
+                  {historyLoading && (
+                    <div className="text-[11px] text-zinc-500 italic flex items-center gap-1.5 py-1">
+                      <Loader2 size={11} className="animate-spin" /> Loading…
+                    </div>
+                  )}
+                  {history && history.length === 0 && (
+                    <div className="text-[11px] text-zinc-500 italic py-1">
+                      No earlier runs. Hit <span className="text-violet-300">Re-run</span> above to add one.
+                    </div>
+                  )}
+                  {history && history
+                    // Hide the run that's currently pinned as the "latest"
+                    // — it's already shown at the top of the card.
+                    .filter((r) => r.id !== data.latest_run_id)
+                    .slice(0, 5)
+                    .map((r) => {
+                      const open = expandedRuns.has(r.id);
+                      return (
+                        <div
+                          key={r.id}
+                          className="rounded-md border border-white/5 bg-zinc-950/40"
+                          data-testid={`campaign-history-row-${r.id}`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleRunExpand(r.id)}
+                            className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-white/[0.02]"
+                          >
+                            {open ? <ChevronUp size={11} className="text-zinc-500" /> : <ChevronDown size={11} className="text-zinc-500" />}
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold uppercase tracking-wider ${
+                              r.status === 'completed'
+                                ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10'
+                                : 'border-rose-500/30 text-rose-300 bg-rose-500/10'
+                            }`}>{r.status}</span>
+                            <span className="text-[11px] text-zinc-300 truncate flex-1">
+                              {(r.summary || r.brief || '(no summary)').replace(/\n/g, ' ').slice(0, 90)}
+                            </span>
+                            <span className="text-[10px] text-zinc-500 shrink-0">
+                              {r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}
+                            </span>
+                          </button>
+                          {open && (
+                            <div className="px-3 pb-3 -mt-1">
+                              <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-1">
+                                Brief
+                              </div>
+                              <div className="text-[11px] text-zinc-400 italic leading-relaxed mb-2 whitespace-pre-wrap">
+                                {r.brief || '(no brief)'}
+                              </div>
+                              <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-1">
+                                Summary
+                              </div>
+                              <div className="text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap">
+                                {r.summary || '(no summary — chain may have failed)'}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
           </div>
         )}

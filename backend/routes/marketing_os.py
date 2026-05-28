@@ -160,11 +160,14 @@ async def list_signals(request: Request, limit: int = 20):
 # Run history
 # ---------------------------------------------------------------------------
 @api.get("/marketing-os/runs")
-async def list_runs(request: Request, limit: int = 20):
+async def list_runs(request: Request, limit: int = 20, campaign_id: Optional[str] = None):
     user = await get_current_user(request)
     limit = max(1, min(100, int(limit or 20)))
+    q: dict = {"user_id": user.user_id}
+    if campaign_id:
+        q["campaign_id"] = campaign_id
     rows = await db.marketing_os_runs.find(
-        {"user_id": user.user_id}, {"_id": 0, "transcript": 0},
+        q, {"_id": 0, "transcript": 0},
     ).sort("created_at", -1).limit(limit).to_list(length=limit)
     return {"runs": rows, "count": len(rows)}
 
