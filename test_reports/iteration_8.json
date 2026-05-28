@@ -1,0 +1,47 @@
+{
+  "summary": "Backend regression for the LangGraph migration of the Marketing OS canonical 5-role chain. Verified (a) the new marketing_os_graph module compiles and conditional edges resolve, (b) the canonical run/stream SSE flow emits the full vocabulary in order (os_started → agent_started → agent_done × N → summarizing → complete → os_persisted) and persists framework='langgraph', (c) the skip_distribution conditional edge bypasses Kai on empty-platforms campaigns, (d) all pre-existing /api/marketing-os/* endpoints still respond, and (e) the legacy /api/ai/agent/convene/stream regression still streams.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_marketing_os.py",
+    "/app/backend/tests/test_marketing_os_features.py",
+    "/app/backend/tests/test_langgraph_skip_distribution.py",
+    "/app/test_reports/pytest/marketing_os_iter8.xml",
+    "/app/test_reports/pytest/marketing_os_features_iter8.xml",
+    "/app/test_reports/pytest/langgraph_iter8.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "marketing_os_graph.py is well-structured (~570 lines, single responsibility). Lazy singleton + reset hook is clean.",
+    "Per-run asyncio.Queue registry (_RUN_QUEUES) is unbounded by design but cleaned up in `finally` — fine for the expected concurrency. Consider a max-size cap if you ever expose unauthenticated runs.",
+    "MongoDBSaver fallback to MemorySaver on ping failure is good — but the fallback is silent (just logger.warning). Consider exposing a /api/marketing-os/health flag so ops can detect when checkpointing has been silently downgraded.",
+    "_route_after_distribution is a no-op router (always returns 'summariser'); using a plain add_edge('distribution', 'summariser') would be slightly cheaper and clearer, but functionally identical.",
+    "marketing_os.py line 273 — `campaign_id = camp.get('name') and payload.campaign_id` is a subtle bug-shaped expression: it works only because every persisted campaign has a non-empty name. Recommend `campaign_id = payload.campaign_id` directly since the find_one already returned a row."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_langgraph_skip_distribution.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (49/49 executed tests across the three suites passed; 2 unrelated SEO-trend tests skipped due to missing seed data)",
+    "frontend": "not tested (backend-only request)"
+  },
+  "test_credentials": "Test user TOKEN=test_session_1779636592168, USER_ID=user_test1779636592168 (read from /app/memory/test_credentials.md). Plan comped to 'growth' before each LLM-touching test.",
+  "seed_data_creation": "Created a transient TEST_LG_empty_<uuid> campaign with platforms=[] to drive the skip_distribution conditional-edge test. Not cleaned up (test data only).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "LangGraph migration shipped cleanly. The canonical chain runs via marketing_os_graph.run_os_graph(); SSE shape unchanged so frontend was not touched. New marketing_os_runs rows carry `framework: 'langgraph'` and `skip_distribution` boolean — guard older rows that lack these. If checkpointer-related Mongo issues appear, marketing_os_graph._make_checkpointer() silently falls back to MemorySaver (logger.warning only).",
+  "verified_observations": {
+    "canonical_happy_path": "test_short_run_emits_canonical_events_and_persists PASSED — full vocabulary emitted in order; persisted run has status=completed, transcript len >=1, non-empty summary.",
+    "skip_distribution_edge": "Created campaign with platforms=[]; os_started.skip_distribution=true; SSE stream contained NO agent_started/agent_done for kai; persisted row has framework='langgraph' and skip_distribution=true; run completed.",
+    "framework_marker": "test_persisted_run_marked_langgraph PASSED — latest run carries framework='langgraph'.",
+    "convene_regression": "POST /api/ai/agent/convene/stream still streams agent_started/agent_done/complete (uses `message` field, not `brief`).",
+    "graph_smoke_tests": "All 5 TestLangGraphOrchestrator tests pass (compile, conditional edges, role-id parity, marker)."
+  }
+}

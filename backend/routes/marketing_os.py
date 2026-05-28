@@ -1,11 +1,12 @@
 """Marketing OS — the "autonomous marketing operating system" layer.
 
-This module is the orchestration + dashboard surface for the new
-"Marketing Command Center" UX. It deliberately re-uses the existing
-agent infrastructure (Convene SSE pipeline, llm_spend, memory, trends,
-campaigns, feedback_loop) instead of introducing a new framework — the
-business value is the *5-role canonical chain* + the unified dashboard
-endpoint, not a swap of the runtime.
+This module is the API surface for the new "Marketing Command Center"
+UX. Orchestration is delegated to `marketing_os_graph.py` which uses
+**LangGraph** to compose the canonical 5-role chain as an explicit
+`StateGraph` with conditional edges (e.g. "skip Distribution when no
+platforms are connected"). The graph keeps the same SSE event
+vocabulary the previous linear `_convene` chain emitted, so the
+frontend renders both implementations identically.
 
 Five canonical roles (mapped to existing agents):
     Strategy      → Atlas   (strategy)
@@ -17,11 +18,13 @@ Five canonical roles (mapped to existing agents):
 Endpoints:
     GET   /api/marketing-os/dashboard            consolidated Command Center payload
     GET   /api/marketing-os/signals              opportunity signals, ranked by virality
-    POST  /api/marketing-os/run/stream           SSE — runs the 5-role chain
+    POST  /api/marketing-os/run/stream           SSE — runs the 5-role chain via LangGraph
     GET   /api/marketing-os/runs                 history of recent runs
 
 A "run" is persisted to the `marketing_os_runs` collection so the
 activity feed and post-mortems work without re-running the LLM chain.
+LangGraph itself also writes per-step checkpoints to
+`langgraph_checkpoints` for resumability.
 """
 import asyncio
 import logging
@@ -35,22 +38,15 @@ from pydantic import BaseModel, Field
 
 from core import api, db
 from deps import get_current_user
+from routes.marketing_os_graph import (
+    CANONICAL_ROLES, ROLE_TO_AGENT, AGENT_TO_ROLE, DEFAULT_CHAIN, run_os_graph,
+)
 
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# The canonical 5-role chain
-# ---------------------------------------------------------------------------
-CANONICAL_ROLES: list[dict] = [
-    {"role": "strategy",     "agent_id": "strategy", "label": "Strategy",     "color": "blue"},
-    {"role": "intelligence", "agent_id": "research", "label": "Intelligence", "color": "indigo"},
-    {"role": "content",      "agent_id": "nova",     "label": "Content",     "color": "emerald"},
-    {"role": "distribution", "agent_id": "kai",      "label": "Distribution", "color": "rose"},
-    {"role": "analytics",    "agent_id": "angela",   "label": "Analytics",   "color": "violet"},
-]
-ROLE_CHAIN_AGENT_IDS = [r["agent_id"] for r in CANONICAL_ROLES[:-1]]  # last = summarizer
-ROLE_SUMMARIZER_AGENT_ID = CANONICAL_ROLES[-1]["agent_id"]
+ROLE_CHAIN_AGENT_IDS = list(DEFAULT_CHAIN)  # strategy → research → nova → kai
+ROLE_SUMMARIZER_AGENT_ID = "angela"
 
 
 # ---------------------------------------------------------------------------
@@ -231,36 +227,33 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
     historical record.
     """
     from routes.ai import _gated_user
-    from routes.agent_chat import _convene, _AGENT_LOOKUP, _ConveneRequest
 
     user = await _gated_user(request)
 
-    # Resolve optional role subset → agent-id chain.
+    # Resolve optional role subset. Validation happens here so the
+    # client gets a clean 422 before we start streaming.
+    user_roles: Optional[list[str]] = None
     if payload.roles:
         agent_chain: list[str] = []
         for r in payload.roles:
             key = r.strip().lower()
-            # Accept either role name ("strategy") or agent id ("nova").
-            role_match = next(
-                (cr for cr in CANONICAL_ROLES if cr["role"] == key or cr["agent_id"] == key),
-                None,
-            )
-            if not role_match:
+            if key in ROLE_TO_AGENT:
+                agent_chain.append(ROLE_TO_AGENT[key])
+            elif key in AGENT_TO_ROLE:
+                agent_chain.append(key)
+            else:
                 raise HTTPException(status_code=422, detail=f"Unknown role: {r}")
-            agent_chain.append(role_match["agent_id"])
-        # Dedupe + ensure summarizer isn't in the chain (it'd run twice).
+        # Dedupe in-order.
         seen: set[str] = set()
         agent_chain = [a for a in agent_chain if not (a in seen or seen.add(a))]
         if not agent_chain:
             raise HTTPException(status_code=422, detail="At least one role required")
-        summarizer_id = (
-            ROLE_SUMMARIZER_AGENT_ID
-            if agent_chain[-1] != ROLE_SUMMARIZER_AGENT_ID
-            else "strategy"
-        )
-        chain_for_run = [a for a in agent_chain if a != summarizer_id]
+        user_roles = agent_chain
+        chain_for_run = [a for a in agent_chain if a != ROLE_SUMMARIZER_AGENT_ID]
+        summarizer_id = ROLE_SUMMARIZER_AGENT_ID
         if not chain_for_run:
             chain_for_run = [agent_chain[0]]
+            summarizer_id = "strategy" if agent_chain[0] != "strategy" else "angela"
     else:
         chain_for_run = list(ROLE_CHAIN_AGENT_IDS)  # strategy → research → nova → kai
         summarizer_id = ROLE_SUMMARIZER_AGENT_ID    # angela synthesises
@@ -269,6 +262,7 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
     # its goal/audience/pillars to the brief so the chain has context.
     brief_text = payload.brief.strip()
     campaign_id = None
+    skip_distribution = False
     if payload.campaign_id:
         camp = await db.campaigns.find_one(
             {"id": payload.campaign_id, "user_id": user.user_id},
@@ -285,17 +279,20 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
         if camp.get("platforms"):
             ctx_parts.append("Platforms: " + ", ".join(camp["platforms"]))
         brief_text = "\n".join(ctx_parts) + "\n\nBrief:\n" + brief_text
+        # Graph conditional edge: skip Kai (Distribution) when the
+        # campaign has no platforms attached. Saves a 5-15s LLM call on
+        # research/draft-only runs.
+        if not camp.get("platforms") and not user_roles:
+            skip_distribution = True
 
-    # If the chain includes Nova (Content role) — which is the default —
-    # inject the user's top winning hooks into the brief so the content
-    # step doesn't have to rely on embedding retrieval to find them.
-    # Constrained by platform when the campaign declares one; otherwise
-    # cross-platform.
+    # If Nova (Content role) is in the chain — which is the default —
+    # inject the user's top winning hooks + brand-voice anchors into
+    # the brief so the content step doesn't have to rely on embedding
+    # retrieval to find them. Constrained by platform when the campaign
+    # declares one; otherwise cross-platform.
     if "nova" in chain_for_run:
         try:
             from routes.feedback_loop import winning_hooks_prompt_block, brand_voice_prompt_block
-            # If the campaign declared exactly ONE platform, scope to it
-            # (cleaner signal); otherwise pull globally.
             single_platform = ""
             if payload.campaign_id:
                 camp_doc = await db.campaigns.find_one(
@@ -310,49 +307,43 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
             )
             if wb:
                 brief_text += wb
-            # Promoted brand-voice anchors are cross-platform — they
-            # express the user's chosen voice, not a per-platform win.
             bv = await brand_voice_prompt_block(user.user_id, limit=5)
             if bv:
                 brief_text += bv
         except Exception:
             logger.exception("winning-hooks/brand-voice injection failed (continuing)")
 
-    run_id = str(uuid.uuid4())
     started_at = datetime.now(timezone.utc)
-
-    # Build a Convene-shaped payload so we can lean on the existing engine.
-    convene_payload = _ConveneRequest(
-        message=brief_text,
-        agents=chain_for_run,
-        summarizer=summarizer_id,
-        mode=payload.mode,
-    )
+    run_id = str(uuid.uuid4())
 
     async def event_stream():
-        # Frame the first event with our run metadata so the UI can
-        # display the persistent run_id (lets the user re-open the
-        # transcript later from the activity feed).
-        yield _sse("os_started", {
-            "run_id":    run_id,
-            "roles":     CANONICAL_ROLES,
-            "chain":     chain_for_run,
-            "summarizer": summarizer_id,
-        })
-
         transcript: list[dict] = []
         summary_text = ""
         last_model = ""
         last_mode = ""
+        encountered_error = None
+
+        # Frame the run with the canonical roles up front so the UI can
+        # render all 5 tiles even before the first agent finishes.
+        yield _sse("os_started", {
+            "run_id":     run_id,
+            "roles":      CANONICAL_ROLES,
+            "chain":      chain_for_run,
+            "summarizer": summarizer_id,
+            "skip_distribution": skip_distribution,
+        })
+
         try:
-            async for ev, data in _convene(
-                user, chain_for_run, summarizer_id, convene_payload,
+            async for ev, data in run_os_graph(
+                user_id=user.user_id,
+                brief=brief_text,
+                mode=payload.mode,
+                skip_distribution=skip_distribution,
+                roles=user_roles,
+                run_id=run_id,
             ):
-                # Convene emits ("started", ...) — rename to keep the
-                # outer "os_started" we already emitted, but pass everything
-                # else through unchanged.
-                if ev == "started":
-                    continue
+                if ev == "graph_started":
+                    continue  # we already emitted os_started with the run_id
                 if ev == "agent_done":
                     transcript.append({
                         "agent_id":   data.get("agent_id"),
@@ -363,29 +354,14 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
                     summary_text = data.get("summary") or ""
                     last_model = data.get("model") or ""
                     last_mode = data.get("mode") or ""
+                if ev == "error":
+                    encountered_error = data.get("message") or "unknown error"
                 yield _sse(ev, data)
         except Exception as e:
-            yield _sse("error", {"message": str(e)[:300]})
-            try:
-                await db.marketing_os_runs.insert_one({
-                    "id":          run_id,
-                    "user_id":     user.user_id,
-                    "brief":       payload.brief[:1500],
-                    "campaign_id": campaign_id,
-                    "chain":       chain_for_run,
-                    "summarizer":  summarizer_id,
-                    "status":      "failed",
-                    "error":       str(e)[:500],
-                    "transcript":  transcript,
-                    "summary":     "",
-                    "created_at":  started_at,
-                    "finished_at": datetime.now(timezone.utc),
-                })
-            except Exception:
-                logger.exception("Failed to persist failed run %s", run_id)
-            return
+            encountered_error = str(e)[:300]
+            yield _sse("error", {"message": encountered_error})
 
-        # Persist the completed run.
+        # Persist the run row (success OR failure path).
         try:
             await db.marketing_os_runs.insert_one({
                 "id":          run_id,
@@ -394,21 +370,22 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
                 "campaign_id": campaign_id,
                 "chain":       chain_for_run,
                 "summarizer":  summarizer_id,
-                "status":      "completed",
+                "status":      "failed" if encountered_error else "completed",
+                "error":       encountered_error,
                 "transcript":  transcript,
                 "summary":     summary_text,
                 "model":       last_model,
                 "mode":        last_mode,
+                "skip_distribution": skip_distribution,
+                "framework":   "langgraph",
                 "created_at":  started_at,
                 "finished_at": datetime.now(timezone.utc),
             })
         except Exception:
             logger.exception("Failed to persist run %s", run_id)
 
-        # If the run was tied to a campaign, pin the latest summary onto
-        # the campaign doc so the detail page surfaces "what the team
-        # last said about this campaign" without an extra fetch.
-        if campaign_id and summary_text:
+        # Pin the latest summary on the campaign doc for the detail page.
+        if campaign_id and summary_text and not encountered_error:
             try:
                 await db.campaigns.update_one(
                     {"id": campaign_id, "user_id": user.user_id},
@@ -422,7 +399,7 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
             except Exception:
                 logger.exception("Failed to pin run %s onto campaign %s", run_id, campaign_id)
 
-        yield _sse("os_persisted", {"run_id": run_id})
+        yield _sse("os_persisted", {"run_id": run_id, "status": "failed" if encountered_error else "completed"})
 
     return StreamingResponse(
         event_stream(), media_type="text/event-stream",
