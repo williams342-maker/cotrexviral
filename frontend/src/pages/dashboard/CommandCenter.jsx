@@ -568,9 +568,13 @@ const CommandCenter = () => {
                             draggable
                             onDragStart={(e) => onCardDragStart(e, c.id)}
                             onDragEnd={onCardDragEnd}
+                            onClick={() => { if (!draggingId) navigate(`/dashboard/campaigns/${c.id}`); }}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/dashboard/campaigns/${c.id}`); }}
                             data-testid={`campaign-card-${c.id}`}
                             className={`rounded-md border border-white/5 bg-zinc-900/60 p-2 cursor-grab active:cursor-grabbing select-none transition-opacity ${
-                              draggingId === c.id ? 'opacity-40' : 'hover:bg-zinc-900/90'
+                              draggingId === c.id ? 'opacity-40' : 'hover:bg-zinc-900/90 hover:border-cyan-500/30'
                             }`}
                           >
                             <div className="text-xs text-white font-medium truncate">{c.name}</div>
