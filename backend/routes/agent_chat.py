@@ -21,11 +21,13 @@ Endpoints:
   POST /api/ai/agent/chat  body {agent_id, message}  → {answer, follow_ups, memories_used, handoff}
   GET  /api/ai/agent/profile?agent_id=...            → {agent} static metadata
 """
+import asyncio
 import json
 import re
 from typing import Optional
 
 from fastapi import HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from core import api
@@ -301,22 +303,100 @@ async def agent_chat(payload: _ChatRequest, request: Request):
 
     Also pulls the top-K relevant memories for the user's prompt and
     injects them into the system prompt so the agent gets sharper with
-    every interaction."""
+    every interaction.
+
+    For long-running chats (slow Opus + handoff to Iris) use the
+    `/ai/agent/chat/stream` SSE endpoint instead — same orchestration,
+    just emits keepalive events so the request never trips a 100s
+    ingress timeout from the browser."""
     user = await _gated_user(request)
     agent = AGENTS.get(payload.agent_id.lower())
     if not agent:
         raise HTTPException(status_code=404, detail="Unknown agent")
 
-    # Memory retrieval — pull up to 5 relevant memories for THIS prompt.
-    # Best-effort: any error inside the memory layer is swallowed so a
-    # downstream issue can never block a chat reply.
+    final = None
+    async for event, data in _orchestrate(user, agent, payload):
+        if event == "complete":
+            final = data
+    return final
+
+
+@api.post("/ai/agent/chat/stream")
+async def agent_chat_stream(payload: _ChatRequest, request: Request):
+    """Streaming variant of `/ai/agent/chat`. Emits Server-Sent Events
+    describing each stage of the orchestration:
+
+      event: started     data: {agent_id, mode, model}
+      event: memories    data: {memories_used: [...]}
+      event: thinking    data: {phase: "primary"|"handoff", agent: "Iris"}
+      event: handoff     data: {agent_id, agent_name, question}
+      event: complete    data: {answer, follow_ups, memories_used,
+                                handoff, mode, model}
+      event: error       data: {message}
+
+    The connection also receives `: keepalive` comments roughly every 10s
+    while a synchronous LLM call is in progress — this prevents the
+    Cloudflare/Emergent ingress from closing the request after its 100s
+    idle timeout when Atlas does a slow handoff to Iris (~60s total)."""
+    user = await _gated_user(request)
+    agent = AGENTS.get(payload.agent_id.lower())
+    if not agent:
+        raise HTTPException(status_code=404, detail="Unknown agent")
+
+    async def event_stream():
+        try:
+            async for event, data in _orchestrate(user, agent, payload):
+                yield _sse(event, data)
+        except Exception as e:
+            yield _sse("error", {"message": str(e)[:300]})
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        # Required for nginx-style proxies to flush each chunk instead of
+        # buffering the whole response into one block.
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(
+        event_stream(), media_type="text/event-stream", headers=headers,
+    )
+
+
+def _sse(event: str, data: dict) -> str:
+    """Format one SSE record. Always JSON-encodes the data payload so the
+    frontend can `JSON.parse` uniformly."""
+    return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
+async def _orchestrate(user, agent: dict, payload: "_ChatRequest"):
+    """Run one full agent turn and yield (event_name, data) tuples.
+
+    Stages:
+      started → memories → thinking(primary) → [handoff → thinking(handoff)]
+      → complete
+
+    While a synchronous LLM call is awaited, we periodically yield empty
+    `keepalive` events (~every 10s) so the underlying SSE stream never
+    goes idle long enough for the ingress proxy to close it.
+    """
+    # Resolve mode + memory block up front so the `started` event can
+    # surface them to the UI immediately.
+    provider, model, task_used = resolve_user_mode(payload.mode, agent["id"])
+
+    yield ("started", {
+        "agent_id": agent["id"],
+        "agent_name": agent["name"],
+        "mode": task_used,
+        "model": model,
+    })
+
+    # Memory retrieval — best-effort.
     memory_block = ""
     used_memories: list[dict] = []
     try:
         from routes.memory import retrieve_relevant, memories_to_prompt_block
         mems = await retrieve_relevant(user.user_id, payload.message, k=5)
         memory_block = memories_to_prompt_block(mems)
-        # Strip embeddings + truncate to a chip-friendly preview shape
         used_memories = [
             {
                 "id": m.get("id"),
@@ -329,69 +409,94 @@ async def agent_chat(payload: _ChatRequest, request: Request):
     except Exception:
         pass
 
+    yield ("memories", {"memories_used": used_memories})
+
     session_id = f"agent-{agent['id']}-{user.user_id}"
-    # Atlas (Strategy) is the only agent that gets the handoff capability —
-    # she orchestrates. Sub-agents stay focused on their specialty so we
-    # don't get infinite delegation loops.
-    can_handoff = agent["id"] == "strategy"
-    system_prompt = agent["system"] + _FUPS_INSTRUCTION
-    if can_handoff:
-        system_prompt += _HANDOFF_INSTRUCTION
+    system_prompt = (
+        agent["system"] + _FUPS_INSTRUCTION + _HANDOFF_INSTRUCTION
+    )
     if memory_block:
         system_prompt = system_prompt + "\n\n" + memory_block
 
-    # Model routing — picks the right LLM family for the agent's task type.
-    # User can override via the `mode` field (Auto/Fast/Deep/Creative).
-    provider, model, task_used = resolve_user_mode(payload.mode, agent["id"])
     chat = await _llm_for_user(
         user.user_id, session_id, system_prompt,
         provider=provider, model=model,
     )
-    raw = await chat.send_message(UserMessage(text=payload.message))
 
-    # Optional handoff: strip + run the delegated agent. We do this BEFORE
-    # follow-up extraction so the chips still parse cleanly.
-    handoff_info = None
+    # Primary LLM call — interleave keepalive pings so the stream stays
+    # warm even when Opus takes 20-30s to think.
+    yield ("thinking", {"phase": "primary", "agent": agent["name"]})
+    primary_task = asyncio.create_task(chat.send_message(UserMessage(text=payload.message)))
+    async for ping in _keepalive_while(primary_task):
+        yield ping
+    raw = primary_task.result()
+
+    # Optional handoff
     handoff_done = None
-    if can_handoff:
-        raw, handoff_info = _extract_handoff(raw)
-        if handoff_info:
-            try:
-                handoff_done = await _run_handoff(user.user_id, handoff_info)
-                if handoff_done:
-                    raw = raw.rstrip() + (
-                        f"\n\n📡 **{handoff_done['agent_name']} reports:**\n"
-                        f"{handoff_done['answer']}\n"
-                    )
-            except Exception:
-                pass
+    raw, handoff_info = _extract_handoff(raw)
+    if handoff_info and handoff_info["agent_id"] == agent["id"]:
+        handoff_info = None  # reject self-handoff
+    if handoff_info:
+        sub_agent = AGENTS.get(handoff_info["agent_id"]) or {}
+        yield ("handoff", {
+            "agent_id": handoff_info["agent_id"],
+            "agent_name": sub_agent.get("name", handoff_info["agent_id"]),
+            "question": handoff_info["question"],
+        })
+        yield ("thinking", {
+            "phase": "handoff",
+            "agent": sub_agent.get("name", handoff_info["agent_id"]),
+        })
+        try:
+            ho_task = asyncio.create_task(_run_handoff(user.user_id, handoff_info))
+            async for ping in _keepalive_while(ho_task):
+                yield ping
+            handoff_done = ho_task.result()
+            if handoff_done:
+                raw = raw.rstrip() + (
+                    f"\n\n📡 **{handoff_done['agent_name']} reports:**\n"
+                    f"{handoff_done['answer']}\n"
+                )
+        except Exception:
+            handoff_done = None
 
     answer, follow_ups = _extract_followups(raw)
 
-    # After a successful reply, save a short conversation summary as a
-    # memory so the next turn (and other agents) can recall what was said.
+    # Persist a short conversation summary as memory — best-effort.
     try:
         from routes.memory import remember
-        summary = f"User asked {agent['name']}: {payload.message[:200]}"
         await remember(
-            user.user_id, "agent_summary", summary,
+            user.user_id, "agent_summary",
+            f"User asked {agent['name']}: {payload.message[:200]}",
             meta={"agent": agent["id"]},
         )
     except Exception:
         pass
 
     await record_ai_generation(user.user_id, f"agent_chat:{agent['id']}")
-    return {
+    yield ("complete", {
         "agent_id": agent["id"],
         "answer": answer,
         "follow_ups": follow_ups,
         "memories_used": used_memories,
-        "handoff": handoff_done,  # {agent_id, agent_name, question, answer} or None
-        # Surface the routing decision so the UI can show "Deep · opus" pill
-        # and the user knows which model produced this reply.
+        "handoff": handoff_done,
         "mode": task_used,
         "model": model,
-    }
+    })
+
+
+async def _keepalive_while(task: asyncio.Task, every: float = 10.0):
+    """Yield `("keepalive", {})` events every `every` seconds while
+    `task` is still running. Awaits the task before returning so the
+    caller can read `.result()`. Cancels/propagates on error."""
+    while not task.done():
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=every)
+        except asyncio.TimeoutError:
+            yield ("keepalive", {})
+    # surface exceptions
+    if task.exception():
+        raise task.exception()
 
 
 # ---------------------------------------------------------------------------

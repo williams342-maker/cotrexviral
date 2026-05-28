@@ -35,6 +35,35 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 40) **🔀 SSE streaming + 🤝 Universal agent handoff**
+  - **Why**: A handoff (Atlas → Iris) is two sequential LLM calls (~30-50s combined) and was hitting Cloudflare's ~100s ingress idle timeout from the browser even though the backend ran fine. The fix is server-sent events with periodic keepalive pings, AND it lets us show the user *what's happening* during the wait.
+  - **Universal handoff**: flipped `can_handoff = True` for every agent (was Atlas-only). Now Sam can ask Iris for keyword trends, Angela can ask Nova for positioning, Kai can ask Sam for SEO context, etc. Single delegation per turn (no chains). Server-side self-handoff guard rejects an agent delegating to itself — would just waste an LLM call in an ephemeral session.
+  - **New endpoint `POST /api/ai/agent/chat/stream`** (`routes/agent_chat.py`):
+    - Returns `text/event-stream` (SSE) with the following event vocabulary:
+      • `started`   `{agent_id, agent_name, mode, model}` — immediate, so the UI can render "Thinking · deep mode" instantly.
+      • `memories`  `{memories_used: [...]}` — after the vector-memory fetch.
+      • `thinking`  `{phase: "primary"|"handoff", agent: "Iris"}` — right before each LLM call.
+      • `handoff`   `{agent_id, agent_name, question}` — only when a delegation actually fired.
+      • `keepalive` (sent as a `: keepalive` comment) — every ~10s while the LLM is busy.
+      • `complete`  `{answer, follow_ups, memories_used, handoff, mode, model}` — final payload, same shape as the non-streaming endpoint.
+      • `error`     `{message}` — graceful error frame instead of a torn connection.
+    - Refactored shared orchestration into `_orchestrate(user, agent, payload)` — an async generator yielding `(event_name, data)` tuples. Both the streaming endpoint and the original `POST /api/ai/agent/chat` consume it, so we only ship orchestration logic once.
+    - `_keepalive_while(task, every=10)` helper interleaves `keepalive` events while a synchronous LLM call is in progress. Uses `asyncio.shield` so the timeout doesn't cancel the underlying coroutine.
+    - Response headers set `Cache-Control: no-cache` and `X-Accel-Buffering: no` (the latter required for nginx-style proxies to flush each chunk instead of buffering the whole response).
+  - **Backwards compatible**: the original `POST /api/ai/agent/chat` still exists and returns the same JSON shape — handy for batch scripts / external API consumers / pytest. It just consumes the same generator under the hood and assembles the final dict.
+  - **Frontend (`AgentWorkspace.jsx`)**:
+    - Replaced the axios POST with a `fetch()` + `ReadableStream` reader. Parses each SSE record, updates a live `busyText` state ("Connecting…" → "Thinking · deep mode" → "Recalling 3 memories…" → "Delegating to Iris…" → "Iris is researching…" → final answer rendered).
+    - Typing indicator now reads `<spinner> Iris is researching…` instead of the previous static "Atlas is thinking…" — feels alive even on slow handoffs.
+    - 402 / cap-reached / network errors all still surface as toasts; user message rolls back so they don't lose what they typed.
+  - **5 new pytest cases** (`tests/test_agent_stream.py`):
+    - `TestStreamAuth` (2): 401 anon · 404 unknown agent.
+    - `TestStreamHappyPath` (2): event ordering invariant (`started → memories → thinking → complete`), `complete` payload mirrors the non-streaming shape with `mode="fast"` + Haiku model id.
+    - `started` event carries `{agent_id, agent_name, mode, model}` immediately.
+  - **Updated handoff tests** (`test_agent_handoff.py`): replaced the "only Atlas can handoff" test with `test_self_handoff_rejected` (delegating to self → handoff filtered to None) and `test_any_agent_can_handoff` (Sam → Iris works).
+  - **All 38 agent tests green** (`test_agent_chat.py` + `test_agent_handoff.py` + `test_model_router.py` + `test_agent_stream.py`).
+  - **Live UI screenshot-verified**: Atlas → Iris handoff via SSE renders the cyan delegation pill, grey "deep" mode pill, memory chip, and spliced "Iris reports:" block all correctly.
+
+
 - 2026-02-28 (part 39) **🎛️ Model routing layer — per-task user override**
   - **What changed**: Previously the LLM family was hard-coded per agent (Atlas → Opus, Iris → Gemini, others → Sonnet). Now the user can override on a per-turn basis via a compact "Mode" selector above the chat composer.
   - **Backend (`routes/model_router.py`)**:

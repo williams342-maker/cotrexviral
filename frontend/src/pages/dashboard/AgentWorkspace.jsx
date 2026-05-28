@@ -82,6 +82,10 @@ const AgentWorkspace = () => {
   const tone = AGENT_TONES[activeAgent?.color || 'violet'];
   const messages = threads[activeId] || [];
 
+  // Live status text shown beside the spinner while the agent is working.
+  // Updated from SSE events as the orchestration progresses.
+  const [busyText, setBusyText] = useState('');
+
   const send = async (overrideText) => {
     const text = (overrideText ?? input).trim();
     if (!text || busy) return;
@@ -89,41 +93,103 @@ const AgentWorkspace = () => {
     setThreads((t) => ({ ...t, [activeId]: newMsgs }));
     setInput('');
     setBusy(true);
+    setBusyText('Connecting…');
+
+    // Use the SSE streaming endpoint so long handoffs (Atlas → Iris,
+    // ~60s combined) never trip a 100s ingress timeout. Keepalive events
+    // emitted from the server keep the request warm; we also surface
+    // each orchestration stage in the spinner subtitle so the user sees
+    // what's happening instead of staring at "thinking…" for a minute.
+    let reply = null;
+    let httpStatus = 0;
+    let errorMsg = null;
     try {
-      const res = await axios.post(
-        `${API}/ai/agent/chat`,
-        { agent_id: activeId, message: text, mode },
-        { withCredentials: true },
-      );
+      const resp = await fetch(`${API}/ai/agent/chat/stream`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        body: JSON.stringify({ agent_id: activeId, message: text, mode }),
+      });
+      httpStatus = resp.status;
+      if (!resp.ok) {
+        // 401 / 402 / 404 / 500 → fall through to the error branch with
+        // the JSON detail if present.
+        try {
+          const j = await resp.json();
+          errorMsg = j?.detail?.message || j?.detail || j?.message || `HTTP ${resp.status}`;
+        } catch (_) {
+          errorMsg = `HTTP ${resp.status}`;
+        }
+        throw new Error(errorMsg);
+      }
+      const reader = resp.body.getReader();
+      const dec = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += dec.decode(value, { stream: true });
+        // SSE records are blank-line separated.
+        let idx;
+        while ((idx = buffer.indexOf('\n\n')) >= 0) {
+          const record = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          if (!record.trim() || record.startsWith(':')) continue; // keepalive comment
+          let ev = null;
+          let data = null;
+          for (const line of record.split('\n')) {
+            if (line.startsWith('event: ')) ev = line.slice('event: '.length).trim();
+            else if (line.startsWith('data: ')) {
+              try { data = JSON.parse(line.slice('data: '.length)); }
+              catch { data = null; }
+            }
+          }
+          if (ev === 'started') setBusyText(`Thinking · ${data?.mode || 'auto'} mode`);
+          else if (ev === 'memories') {
+            const n = (data?.memories_used || []).length;
+            if (n > 0) setBusyText(`Recalling ${n} memor${n === 1 ? 'y' : 'ies'}…`);
+          }
+          else if (ev === 'thinking') {
+            setBusyText(data?.phase === 'handoff' ? `${data.agent} is researching…` : `${data?.agent || 'Agent'} is thinking…`);
+          }
+          else if (ev === 'handoff') setBusyText(`Delegating to ${data?.agent_name}…`);
+          else if (ev === 'keepalive') {/* nothing — connection still warm */}
+          else if (ev === 'complete') reply = data;
+          else if (ev === 'error') { errorMsg = data?.message || 'Stream error'; }
+        }
+      }
+      if (!reply && !errorMsg) errorMsg = 'Stream ended without a complete event.';
+      if (errorMsg) throw new Error(errorMsg);
+
       setThreads((t) => ({
         ...t,
         [activeId]: [
           ...newMsgs,
           {
             role: 'agent',
-            content: res.data.answer,
-            follow_ups: res.data.follow_ups || [],
-            memories_used: res.data.memories_used || [],
-            handoff: res.data.handoff || null,
-            mode: res.data.mode || null,
-            model: res.data.model || null,
+            content: reply.answer,
+            follow_ups: reply.follow_ups || [],
+            memories_used: reply.memories_used || [],
+            handoff: reply.handoff || null,
+            mode: reply.mode || null,
+            model: reply.model || null,
           },
         ],
       }));
     } catch (err) {
-      const detail = err.response?.data?.detail;
-      const code = err.response?.data?.code || err.response?.status;
-      if (code === 402 || (typeof detail === 'object' && detail?.code === 'plan_cap_exceeded')) {
+      const msg = errorMsg || err.message || 'Could not reach agent';
+      if (httpStatus === 402 || /cap/i.test(msg)) {
         toast({ title: 'Monthly AI cap reached', description: 'Upgrade your plan to keep chatting.' });
         navigate('/pricing');
       } else {
-        toast({ title: 'Could not reach agent', description: detail || err.message });
+        toast({ title: 'Could not reach agent', description: msg });
       }
-      // Rollback the user message so they don't lose what they typed
+      // Rollback the user message so they don't lose what they typed.
       setThreads((t) => ({ ...t, [activeId]: messages }));
       setInput(text);
     }
     setBusy(false);
+    setBusyText('');
   };
 
   const onComposerKey = (e) => {
@@ -241,7 +307,10 @@ const AgentWorkspace = () => {
               )}
               {busy && (
                 <div className="flex items-center gap-2 text-[12.5px] text-zinc-500" data-testid="agent-typing">
-                  <Loader2 size={13} className="animate-spin" /> {activeAgent?.name || 'Agent'} is thinking…
+                  <Loader2 size={13} className="animate-spin" />
+                  <span data-testid="agent-typing-status">
+                    {busyText || `${activeAgent?.name || 'Agent'} is thinking…`}
+                  </span>
                 </div>
               )}
             </div>

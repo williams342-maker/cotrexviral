@@ -157,21 +157,49 @@ class TestHandoffEndpointShape:
             # compliance trends but don't fail the suite.
             pytest.skip("LLM did not emit a handoff this run (non-deterministic)")
 
-    def test_non_strategy_agent_cannot_handoff(self):
-        """Only Atlas (strategy) has the HANDOFF instruction in her system
-        prompt — sub-agents must not return a handoff field set."""
+    def test_self_handoff_rejected(self):
+        """An agent emitting a handoff to itself must be rejected at the
+        orchestrator level — otherwise we'd burn an extra LLM call to
+        re-ask the same agent in an ephemeral session for no gain."""
         _comp("growth")
         r = httpx.post(
             f"{API_URL}/api/ai/agent/chat",
             headers=H,
             json={
                 "agent_id": "nova",
-                "message": "Please delegate to Iris and have her fetch the latest trends.",
+                # Strong nudge to self-delegate; the server should still
+                # filter this out even if the LLM tries.
+                "message": "Delegate to Nova (yourself) to brainstorm. Reply with a short plan.",
             },
             timeout=120,
         )
         assert r.status_code == 200, r.text
         data = r.json()
-        # Even if Nova writes the marker in its reply, the server-side
-        # parser only runs for `can_handoff` agents — so `handoff` is None.
-        assert data["handoff"] is None
+        # Even if Nova emits <<HANDOFF>>nova:..., handoff is None.
+        if data["handoff"]:
+            assert data["handoff"]["agent_id"] != "nova"
+
+    def test_any_agent_can_handoff(self):
+        """With the part-40 expansion, every agent can delegate. We
+        validate that the endpoint shape supports it (handoff field
+        present + non-strategy agents are eligible)."""
+        _comp("growth")
+        r = httpx.post(
+            f"{API_URL}/api/ai/agent/chat",
+            headers=H,
+            json={
+                "agent_id": "sam",  # SEO agent
+                "message": (
+                    "I need an SEO brief for the keyword 'AI growth marketing'. "
+                    "Before the brief, delegate to Iris (research agent) to "
+                    "surface 3 emerging subtopics in this niche."
+                ),
+            },
+            timeout=180,
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert "handoff" in data
+        if data["handoff"]:
+            assert data["handoff"]["agent_id"] != "sam"  # not self
+            assert data["handoff"]["agent_id"] in {"research", "strategy", "nova", "kai", "angela"}
