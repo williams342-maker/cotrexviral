@@ -35,6 +35,15 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-28 (part 51) **🟣 Vector DB migration callout on Admin Overview**
+  - **New `MemoryPerfCallout` component** in `AdminOverview.jsx` — polls `/api/admin/memory-perf` on dashboard load and renders one of two states:
+    - **Healthy** (default — current state, p95 = 19.7 ms on 282 memories): compact slate card with an emerald "OK" badge + p95/p50/samples/memories tabular-nums summary. Zero visual urgency, just situational awareness. `data-testid="memory-perf-card-healthy"`.
+    - **Triggered** (when `migration_triggered=true` from p95 ≥ 100 ms, OR `capacity_triggered=true` from any user ≥ 5K memories): violet gradient callout with a `Database` icon, `P95 TRIGGER` or `CAPACITY TRIGGER` badge, the threshold reason in plain English, and a CTA button that surfaces the migration plan (§7 of the eval doc — copies the path to clipboard + shows the 4-step plan in an alert as a fallback when the GitHub URL placeholder isn't set). `data-testid="memory-perf-migration-callout"` + `memory-perf-open-eval-doc"`.
+  - **Placement**: between "Email health" and "LLM model spend" sections so it sits with the other ops/cost signals — admins scanning the overview encounter it during their normal sweep, not as a buried diagnostic.
+  - **No backend changes** — re-uses the part-50 `/api/admin/memory-perf` endpoint as-is.
+  - **Effect**: turns the in-memory rolling metric into an actionable signal. The day p95 crosses 100 ms or any user crosses 5K memories, the admin overview lights up with a violet "migration recommended" panel and one click reveals the exact 4-step plan. No more monthly manual aggregation queries to check capacity.
+
+
 - 2026-05-28 (part 50) **🛑 LangGraph Human-in-the-Loop gate + 📏 `retrieve_relevant` p95 instrumentation**
   - **Human-in-the-loop gate before Distribution** — leverages the explicit StateGraph topology shipped in part 48:
     - New `approval_gate` graph node + conditional edge in `routes/marketing_os_graph.py`. When the user opts in via `requires_approval=true` on the run request, the canonical chain runs Strategy → Intelligence → Content → emits an `awaiting_approval` SSE event → ends. Kai (Distribution) is NOT invoked.

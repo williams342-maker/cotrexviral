@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { API } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
-import { Users, Shield, ShieldCheck, FileText, Send, Inbox, BarChart3, Ticket as TicketIcon, Loader2, Sparkles, Crown, Zap, TrendingUp, Eye, UserPlus, Wand2, CreditCard, Mail, AlertCircle, DollarSign } from 'lucide-react';
+import { Users, Shield, ShieldCheck, FileText, Send, Inbox, BarChart3, Ticket as TicketIcon, Loader2, Sparkles, Crown, Zap, TrendingUp, Eye, UserPlus, Wand2, CreditCard, Mail, AlertCircle, DollarSign, Database, ArrowUpRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const AdminOverview = () => {
@@ -13,6 +13,7 @@ const AdminOverview = () => {
   const [emailHealth, setEmailHealth] = useState(null);
   const [llmSpend, setLlmSpend] = useState(null);
   const [spendDays, setSpendDays] = useState(30);
+  const [memoryPerf, setMemoryPerf] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,6 +23,7 @@ const AdminOverview = () => {
       axios.get(`${API}/admin/funnel?days=30`, { withCredentials: true }).then((r) => setFunnel(r.data)).catch(() => {}),
       axios.get(`${API}/admin/email/health?hours=24`, { withCredentials: true }).then((r) => setEmailHealth(r.data)).catch(() => {}),
       axios.get(`${API}/admin/llm-spend?days=30`, { withCredentials: true }).then((r) => setLlmSpend(r.data)).catch(() => {}),
+      axios.get(`${API}/admin/memory-perf`, { withCredentials: true }).then((r) => setMemoryPerf(r.data)).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, []);
 
@@ -137,6 +139,8 @@ const AdminOverview = () => {
       <Section title="Email health (last 24h)">
         <EmailHealthCard health={emailHealth} />
       </Section>
+
+      <MemoryPerfCallout perf={memoryPerf} />
 
       <Section title="LLM model spend (estimated)">
         <LlmSpendCard
@@ -422,6 +426,95 @@ const EmailHealthCard = ({ health }) => {
     </div>
   );
 };
+
+
+/* ----------------------- Memory perf migration callout -------------------------- */
+const MemoryPerfCallout = ({ perf }) => {
+  // Render NOTHING while loading or if the endpoint failed — this is
+  // purely a "you have a new problem" callout, no need to take up
+  // dashboard real estate otherwise.
+  if (!perf) return null;
+  const triggered = perf.migration_triggered || perf.capacity_triggered;
+  if (!triggered) {
+    // Still expose the metric in a compact slate card so an admin can
+    // see the headroom without digging — but with zero visual urgency.
+    return (
+      <div
+        className="bg-white rounded-2xl p-4 border border-neutral-200/70 flex items-center gap-3 text-[12.5px] text-neutral-500"
+        data-testid="memory-perf-card-healthy"
+      >
+        <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+          <Database size={14} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="text-neutral-700 font-medium">Memory retrieval healthy</div>
+          <div className="text-neutral-500 tabular-nums">
+            p95 {perf.p95_ms?.toFixed?.(1) ?? '0.0'} ms · p50 {perf.p50_ms?.toFixed?.(1) ?? '0.0'} ms · {perf.samples} samples ·
+            {' '}{perf.total_memories} memories across {perf.distinct_users} users
+          </div>
+        </div>
+        <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold">OK</span>
+      </div>
+    );
+  }
+  // Triggered — render the violet "migration recommended" callout.
+  const reason = perf.migration_triggered
+    ? `Retrieval p95 has crossed ${perf.p95_threshold_ms} ms (currently ${perf.p95_ms?.toFixed?.(1)} ms over ${perf.samples} samples)`
+    : `Top user now holds ${perf.top_user_memory_count?.toLocaleString?.()} memories — the documented capacity trigger`;
+  return (
+    <div
+      className="rounded-2xl border border-violet-300/60 bg-gradient-to-br from-violet-50 via-white to-violet-50 p-5"
+      data-testid="memory-perf-migration-callout"
+    >
+      <div className="flex items-start gap-4">
+        <span className="w-10 h-10 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center shrink-0">
+          <Database size={18} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] uppercase tracking-widest text-violet-600 font-bold">Vector DB migration recommended</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded border border-violet-400/50 bg-violet-100 text-violet-700 font-semibold">
+              {perf.migration_triggered ? 'P95 TRIGGER' : 'CAPACITY TRIGGER'}
+            </span>
+          </div>
+          <div className="text-[13.5px] text-neutral-800 leading-relaxed">
+            {reason}. The 2-hour <span className="font-semibold">Mongo Atlas <code className="text-violet-700 bg-violet-100 px-1 rounded text-[12px]">$vectorSearch</code></span> migration is the recommended next step — no second datastore, drop-in replacement, fully reversible by feature flag.
+          </div>
+          <div className="mt-2 text-[12px] text-neutral-600 tabular-nums">
+            p95 <span className="font-semibold text-violet-700">{perf.p95_ms?.toFixed?.(1) ?? '0.0'} ms</span> (threshold {perf.p95_threshold_ms} ms) · p99 {perf.p99_ms?.toFixed?.(1) ?? '0.0'} ms ·
+            {' '}{perf.total_memories?.toLocaleString?.()} memories · top user {perf.top_user_memory_count?.toLocaleString?.()} rows · {perf.samples} samples
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <a
+              href="https://github.com/your-org/cortexviral/blob/main/memory/VECTOR_DB_EVALUATION.md"
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => {
+                // Fallback: copy the path to clipboard if no external repo URL is set.
+                e.preventDefault();
+                try {
+                  navigator.clipboard.writeText('/app/memory/VECTOR_DB_EVALUATION.md');
+                } catch { /* ignore */ }
+                window.alert(
+                  'Migration plan: /app/memory/VECTOR_DB_EVALUATION.md\n\n'
+                  + '§7 has the 4-step migration plan (strategy interface → MongoVectorSearchBackend → search index → feature flag rollout). '
+                  + 'Total effort: ~half a day.',
+                );
+              }}
+              className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-[12px] font-medium flex items-center gap-1.5"
+              data-testid="memory-perf-open-eval-doc"
+            >
+              Open migration plan <ArrowUpRight size={12} />
+            </a>
+            <span className="text-[11px] text-neutral-500 italic">{perf.migration_doc}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 
 
 /* ----------------------------------- LLM spend ---------------------------------- */
