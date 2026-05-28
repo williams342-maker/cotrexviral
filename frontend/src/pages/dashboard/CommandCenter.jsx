@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Command, Sparkles, Zap, TrendingUp, CheckSquare, Trophy,
   ChevronRight, Play, Activity, Loader2, Flame, ArrowRight, Bot,
-  Layers, Users, BarChart3, Megaphone, Brain, Plus, Check, Star,
+  Layers, Users, BarChart3, Megaphone, Brain, Plus, Check, Star, SkipForward,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import RunOSModal from '../../components/RunOSModal';
@@ -770,11 +770,22 @@ const CommandCenter = () => {
                 (data?.runs || []).map((r) => (
                   <div key={r.id} className="rounded-lg border border-white/5 bg-zinc-950/50 p-2.5">
                     <div className="text-xs text-zinc-200 line-clamp-2 leading-snug">{r.brief || '(no brief)'}</div>
-                    <div className="flex items-center justify-between mt-1.5">
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded border ${
-                        r.status === 'completed' ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10' : 'border-rose-500/30 text-rose-300 bg-rose-500/10'
-                      }`}>{r.status}</span>
-                      <span className="text-[10px] text-zinc-500">{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</span>
+                    <div className="flex items-center justify-between mt-1.5 gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded border shrink-0 ${
+                          r.status === 'completed' ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10' : 'border-rose-500/30 text-rose-300 bg-rose-500/10'
+                        }`}>{r.status}</span>
+                        {r.skip_distribution && (
+                          <span
+                            className="text-[9px] px-1.5 py-0.5 rounded border shrink-0 border-amber-500/30 text-amber-300 bg-amber-500/10 flex items-center gap-0.5"
+                            title="Distribution role was skipped — no platforms connected on this campaign."
+                            data-testid={`activity-skip-distribution-${r.id}`}
+                          >
+                            <SkipForward size={9} /> dist skipped
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-zinc-500 shrink-0">{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</span>
                     </div>
                   </div>
                 ))

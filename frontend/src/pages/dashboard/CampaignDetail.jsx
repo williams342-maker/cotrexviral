@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Sparkles, Loader2, Layers, Eye, Heart, MousePointer,
   Inbox, Calendar as CalendarIcon, FileText, Play, Edit3, Save, X,
-  Send, TrendingUp, Activity, ChevronDown, ChevronUp, GitCompare,
+  Send, TrendingUp, Activity, ChevronDown, ChevronUp, GitCompare, SkipForward,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import RunOSModal from '../../components/RunOSModal';
@@ -615,6 +615,15 @@ const CampaignDetail = () => {
                                 ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10'
                                 : 'border-rose-500/30 text-rose-300 bg-rose-500/10'
                             }`}>{r.status}</span>
+                            {r.skip_distribution && (
+                              <span
+                                className="text-[9px] px-1.5 py-0.5 rounded border font-semibold uppercase tracking-wider border-amber-500/30 text-amber-300 bg-amber-500/10 flex items-center gap-0.5"
+                                title="The Distribution role (Kai) was skipped — this campaign has no platforms connected. The graph's conditional edge routed straight to Analytics."
+                                data-testid={`history-skip-distribution-${r.id}`}
+                              >
+                                <SkipForward size={9} /> dist skipped
+                              </span>
+                            )}
                             <span className="text-[11px] text-zinc-300 truncate flex-1">
                               {(r.summary || r.brief || '(no summary)').replace(/\n/g, ' ').slice(0, 90)}
                             </span>

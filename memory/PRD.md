@@ -35,6 +35,18 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-28 (part 49) **⏭ Distribution-skipped pill + 📐 Vector DB evaluation doc**
+  - **UI polish — "dist skipped" pill** rendered next to the run-status pill anywhere a Marketing OS run is listed:
+    - `CampaignDetail.jsx` history accordion rows (`data-testid="history-skip-distribution-{run_id}"`) — visible inline with the existing completed/failed status.
+    - `CommandCenter.jsx` Agent Activity feed cards (`data-testid="activity-skip-distribution-{run_id}"`).
+    - Both use the amber-tinted pill style with the `SkipForward` lucide icon. Tooltip explains *"Distribution role was skipped — no platforms connected on this campaign."* No backend changes needed: the existing `GET /api/marketing-os/runs` response was already projecting the `skip_distribution` boolean (it only stripped `transcript`), so the field flows through automatically. Older runs that pre-date the LangGraph migration won't have the field and simply won't render the pill — graceful by omission.
+  - **Vector DB evaluation `/app/memory/VECTOR_DB_EVALUATION.md`** (~150 lines):
+    - **Decision: do NOT migrate yet.** Current `fastembed` + Mongo p95 is ~25-40 ms with 267 rows — same order of magnitude as fully-managed options at this scale.
+    - Compared 4 options: **stay** (recommended), Mongo Atlas `$vectorSearch` (2 hr migration, no second datastore — recommended when triggers fire), pgvector (~6-8 hr, only worth it if we move to Postgres for analytics joins anyway), Pinecone (~4 hr, two-store sync overhead).
+    - **Specific migration triggers** documented: (1) any user crosses 5,000 memories, (2) `retrieve_relevant` p95 > 100 ms, (3) analytics requirement that needs SQL JOINs across memories/campaigns/posts, (4) sustained >50 QPS on the vector store.
+    - **Phased migration plan** (4 steps, ~half a day total) included for when one of the triggers fires.
+
+
 - 2026-05-28 (part 48) **🕸️ P0 — Orchestration migration to LangGraph (explicit StateGraph, conditional edges, MongoDB checkpointer)**
   - **What changed**: the Marketing OS canonical 5-role chain (Strategy → Intelligence → Content → Distribution → Analytics) is now an explicit `langgraph.StateGraph` instead of a hand-rolled linear `_convene` loop. The custom `_convene` engine remains for the per-agent "Convene the team" modal on the AI Team page (different UX, different shape) — only the Marketing OS `/run/stream` was migrated.
   - **New module `routes/marketing_os_graph.py`** (~570 lines, single responsibility):
