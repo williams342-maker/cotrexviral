@@ -7,6 +7,7 @@ import {
   Send,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
+import RunOSModal from '../../components/RunOSModal';
 import { API } from '../../context/AuthContext';
 import { useToast } from '../../hooks/use-toast';
 
@@ -126,6 +127,7 @@ const CampaignDetail = () => {
   const [generating, setGenerating] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editFields, setEditFields] = useState({ audience: '', content_pillars: '', notes: '' });
+  const [runOpen, setRunOpen] = useState(false);
 
   const load = async () => {
     try {
@@ -262,6 +264,13 @@ const CampaignDetail = () => {
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
+            <button
+              onClick={() => setRunOpen(true)}
+              className="h-9 px-3 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium flex items-center gap-1.5 shadow-[0_4px_20px_rgb(124_58_237_/_0.35)]"
+              data-testid="campaign-run-os-btn"
+            >
+              <Play size={12} /> Run the OS
+            </button>
           </div>
         </div>
 
@@ -457,6 +466,15 @@ const CampaignDetail = () => {
           )}
         </div>
       </div>
+
+      <RunOSModal
+        open={runOpen}
+        onClose={() => setRunOpen(false)}
+        onComplete={load}
+        campaignId={data.id}
+        campaignName={data.name}
+        initialBrief={`Plan the next 30 days of marketing for the "${data.name}" campaign. Goal: ${data.custom_goal || data.goal}.${data.audience ? ` Audience: ${data.audience}.` : ''}`}
+      />
     </DashboardLayout>
   );
 };
