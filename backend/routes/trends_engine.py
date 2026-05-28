@@ -547,6 +547,14 @@ async def draft_post_from_trend(payload: _DraftFromSignalRequest, request: Reque
         "End your reply with a separate line: `HASHTAGS: #tag1 #tag2 #tag3`."
         + brand_block
     )
+    # Inject the user's top winning hooks (per-platform) into Nova's
+    # system prompt so the feedback loop is deterministic — not
+    # dependent on the vector retrieval layer happening to surface them.
+    try:
+        from routes.feedback_loop import winning_hooks_prompt_block
+        system += await winning_hooks_prompt_block(user.user_id, platform=platform, limit=3)
+    except Exception:
+        pass
     chat = await _llm_for_user(
         user.user_id, f"draft-from-signal-{user.user_id}", system,
         provider=provider, model=model,

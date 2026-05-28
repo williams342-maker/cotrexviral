@@ -6,7 +6,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import { Textarea } from '../../components/ui/textarea';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Sparkles, Send, Loader2, AlertTriangle, Wand2, Repeat } from 'lucide-react';
+import { Sparkles, Send, Loader2, AlertTriangle, Wand2, Repeat, Layers } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import FeedbackInsights from '../../components/FeedbackInsights';
 
@@ -27,10 +27,16 @@ const Compose = () => {
   const initialContent = location.state?.draft ?? initialParams.get('content') ?? '';
   const initialPlatform = location.state?.platform ?? initialParams.get('platform') ?? 'instagram';
   const initialSource = initialParams.get('source');  // e.g., "trend"
+  // Optional campaign link arriving from CampaignDetail's "New post" CTA.
+  // Persists for the life of this Compose session so every publish or
+  // schedule call carries it through to the posts collection.
+  const initialCampaignId = initialParams.get('campaign_id') || null;
   const [topic, setTopic] = useState('');
   const [content, setContent] = useState(initialContent);
   const [tone, setTone] = useState('friendly');
   const [platform, setPlatform] = useState(initialPlatform);
+  // The campaign this Compose session is attached to (or null).
+  const [campaign, setCampaign] = useState(null);
   // Pre-select the incoming platform so the user doesn't have to tick
   // its checkbox after landing here from Trends/Posts.
   const [selected, setSelected] = useState(() => {
@@ -114,13 +120,38 @@ const Compose = () => {
         description: 'Nova drafted this from a viral signal. Edit before publishing.',
       });
     }
-    if (initialParams.get('content') || initialParams.get('platform') || initialParams.get('source')) {
+    if (initialParams.get('content') || initialParams.get('platform') || initialParams.get('source') || initialParams.get('campaign_id')) {
       const url = new URL(window.location.href);
       url.search = '';
       window.history.replaceState(null, '', url.toString());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Resolve `?campaign_id=` once — pull the campaign's brief so the topic
+  // input is pre-populated and the user sees what they're writing FOR.
+  useEffect(() => {
+    if (!initialCampaignId) return;
+    let cancelled = false;
+    axios.get(`${API}/campaigns/${initialCampaignId}`, { withCredentials: true })
+      .then((r) => {
+        if (cancelled) return;
+        const c = r.data;
+        setCampaign({ id: c.id, name: c.name, goal: c.custom_goal || c.goal, audience: c.audience });
+        // Only auto-fill the topic if the user hasn't already typed something.
+        setTopic((t) => t || `${c.name} — ${c.custom_goal || c.goal}`);
+        toast({
+          title: 'Composing for a campaign',
+          description: `Posts you publish here will link to "${c.name}".`,
+        });
+      })
+      .catch(() => {
+        // Bad campaign_id → silently drop the link; user can still publish.
+        if (!cancelled) setCampaign(null);
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCampaignId]);
 
   const generate = async () => {
     if (!topic.trim()) {
@@ -188,6 +219,7 @@ const Compose = () => {
         ? `${content}\n\n${hashtags.map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' ')}`
         : content;
       const payload = { content: fullContent, platforms };
+      if (campaign?.id) payload.campaign_id = campaign.id;
       if (scheduleAt) {
         payload.scheduled_at = new Date(scheduleAt).toISOString();
         if (repeatWeekly && repeatWeeks > 1) {
@@ -261,6 +293,28 @@ const Compose = () => {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Left: Generator */}
         <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-neutral-200/70 space-y-4">
+          {campaign && (
+            <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-3 flex items-center justify-between gap-3" data-testid="compose-campaign-chip">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-8 h-8 rounded-md bg-cyan-100 border border-cyan-200 text-cyan-700 flex items-center justify-center shrink-0">
+                  <Layers size={14} />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase tracking-widest text-cyan-700 font-bold">Composing for campaign</div>
+                  <div className="text-sm font-semibold text-zinc-800 truncate">{campaign.name}</div>
+                  <div className="text-[11px] text-zinc-500 truncate">Goal: {campaign.goal}{campaign.audience ? ` · Audience: ${campaign.audience}` : ''}</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setCampaign(null); toast({ title: 'Detached', description: 'New posts will no longer link to that campaign.' }); }}
+                className="text-[11px] text-cyan-700 hover:text-cyan-900 underline shrink-0"
+                data-testid="compose-campaign-detach"
+              >
+                Detach
+              </button>
+            </div>
+          )}
           <FeedbackInsights testid="compose-feedback-insights" limit={3} theme="light" />
           <div className="grid md:grid-cols-3 gap-3">
             <div className="md:col-span-2">

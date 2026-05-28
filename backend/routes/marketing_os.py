@@ -273,6 +273,33 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
             ctx_parts.append("Platforms: " + ", ".join(camp["platforms"]))
         brief_text = "\n".join(ctx_parts) + "\n\nBrief:\n" + brief_text
 
+    # If the chain includes Nova (Content role) — which is the default —
+    # inject the user's top winning hooks into the brief so the content
+    # step doesn't have to rely on embedding retrieval to find them.
+    # Constrained by platform when the campaign declares one; otherwise
+    # cross-platform.
+    if "nova" in chain_for_run:
+        try:
+            from routes.feedback_loop import winning_hooks_prompt_block
+            # If the campaign declared exactly ONE platform, scope to it
+            # (cleaner signal); otherwise pull globally.
+            single_platform = ""
+            if payload.campaign_id:
+                camp_doc = await db.campaigns.find_one(
+                    {"id": payload.campaign_id, "user_id": user.user_id},
+                    {"_id": 0, "platforms": 1},
+                ) or {}
+                plats = camp_doc.get("platforms") or []
+                if len(plats) == 1:
+                    single_platform = plats[0]
+            wb = await winning_hooks_prompt_block(
+                user.user_id, platform=single_platform, limit=3,
+            )
+            if wb:
+                brief_text += wb
+        except Exception:
+            logger.exception("winning-hooks injection failed (continuing)")
+
     run_id = str(uuid.uuid4())
     started_at = datetime.now(timezone.utc)
 

@@ -219,3 +219,54 @@ async def feedback_insights(request: Request, limit: int = 5):
         "winning_hooks":  winners,
         "failed_patterns": losers,
     }
+
+
+# ---------------------------------------------------------------------------
+# Prompt-injection helper — deterministic feedback signal
+# ---------------------------------------------------------------------------
+# Used by Nova's draft flows (`trends_engine.draft_post_from_trend`) and the
+# Marketing OS chain (`marketing_os.run_marketing_os`). Returns a compact
+# system-prompt block listing the top-3 winning hooks (optionally filtered
+# by platform) so every Nova generation explicitly reuses what's worked
+# instead of relying on the embedding retrieval to surface them.
+async def winning_hooks_prompt_block(
+    user_id: str,
+    *,
+    platform: str = "",
+    limit: int = 3,
+) -> str:
+    """Return a `<winning_hooks>...</winning_hooks>` block ready to be
+    appended to an agent's system prompt. Returns "" when the user has no
+    winners yet (brand-new accounts), so callers can safely concatenate
+    without a `if block: ...` check at every call-site.
+    """
+    q: dict = {"user_id": user_id, "kind": "winning_hook"}
+    if platform:
+        q["meta.platform"] = platform.lower()
+    rows = await db.cortex_memory.find(
+        q, {"_id": 0, "embedding": 0},
+    ).sort("meta.engagement_rate", -1).limit(max(1, min(10, limit))).to_list(length=limit)
+    if not rows:
+        return ""
+    lines = []
+    for r in rows:
+        rate = (r.get("meta") or {}).get("engagement_rate") or 0
+        plat = (r.get("meta") or {}).get("platform") or "?"
+        # Strip the leading "[platform]" prefix and any trailing
+        # "(engagement rate: …)" noise so the LLM gets a clean hook.
+        text = (r.get("text") or "")
+        import re as _re
+        text = _re.sub(r"^\s*\[[^\]]+\]\s*", "", text)
+        text = _re.sub(r"\s*\(engagement rate:[^)]+\)\s*$", "", text)
+        lines.append(f"  - [{plat} · {rate * 100:.1f}%] {text.strip()[:240]}")
+    body = "\n".join(lines)
+    return (
+        "\n\n<winning_hooks>\n"
+        "Past posts from this user that beat the median engagement rate. "
+        "When you draft something new, lean on the patterns below — same "
+        "voice, same opener style, same length cadence. Do NOT copy them "
+        "verbatim, but let them shape your output:\n"
+        f"{body}\n"
+        "</winning_hooks>"
+    )
+

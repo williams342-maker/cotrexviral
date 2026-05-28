@@ -152,6 +152,7 @@ async def publish(payload: PublishRequest, request: Request):
                 "recurrence_group_id": group_id,
                 "recurrence_index": week_offset,
                 "recurrence_total": payload.repeat_weeks,
+                "campaign_id": payload.campaign_id,
                 "created_at": datetime.now(timezone.utc),
             }
             if "pinterest" in (payload.platforms or []):
@@ -177,6 +178,7 @@ async def publish(payload: PublishRequest, request: Request):
         "media_url": payload.media_url,
         "status": scheduled_status if is_scheduled else "published",
         "scheduled_at": payload.scheduled_at if is_scheduled else None,
+        "campaign_id": payload.campaign_id,
         "created_at": datetime.now(timezone.utc),
     }
     if "pinterest" in (payload.platforms or []):

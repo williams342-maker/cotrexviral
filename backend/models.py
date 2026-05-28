@@ -178,6 +178,9 @@ class PublishRequest(BaseModel):
     media_url: Optional[str] = None
     scheduled_at: Optional[datetime] = None
     repeat_weeks: Optional[int] = Field(None, ge=2, le=12)
+    # Optional campaign link — persisted on the resulting `posts` docs so
+    # the campaign's KPI rollup and linked-posts list update automatically.
+    campaign_id: Optional[str] = Field(default=None, max_length=64)
     # Pinterest-specific (only used when "pinterest" is in platforms):
     pinterest_board_id: Optional[str] = None
     pinterest_link: Optional[str] = None
