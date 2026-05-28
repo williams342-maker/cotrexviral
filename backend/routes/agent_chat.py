@@ -382,6 +382,259 @@ async def set_agent_pref(payload: _PrefsRequest, request: Request):
     return {"ok": True, "agent_id": agent_id, "mode": mode_id}
 
 
+# ---------------------------------------------------------------------------
+# Convene — multi-agent collaborative orchestrator
+# ---------------------------------------------------------------------------
+# Default chain when the user doesn't pick agents themselves: Research →
+# SEO → Copy → Strategy synthesizes. Each agent gets the original prompt
+# + every previous agent's reply as context, so each output builds on
+# the prior one (vs the parallel handoff which is one-shot).
+DEFAULT_CONVENE_CHAIN = ["research", "sam", "nova"]
+DEFAULT_SUMMARIZER = "strategy"
+
+
+class _ConveneRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=4000)
+    # Ordered list of agent_ids to consult. Capped at 5 — past that the
+    # context window explodes and the synthesizer struggles to focus.
+    agents: Optional[list[str]] = Field(default=None, max_length=5)
+    # Which agent produces the final executive summary. Defaults to Atlas.
+    summarizer: Optional[str] = Field(default=None, max_length=32)
+    mode: Optional[str] = Field(default=None, max_length=24)
+
+
+@api.post("/ai/agent/convene/stream")
+async def convene_stream(payload: _ConveneRequest, request: Request):
+    """Run a prompt through a sequence of agents and have a designated
+    summarizer (Atlas by default) produce a single executive summary.
+
+    SSE event vocabulary:
+      started        {chain: [{agent_id, agent_name}], summarizer_id}
+      agent_started  {agent_id, agent_name, step, total}
+      agent_done     {agent_id, agent_name, step, answer}
+      summarizing    {agent_id, agent_name}
+      complete       {summary, transcript: [{agent_id, agent_name, answer}],
+                      mode, model}
+      error          {message}
+    Keepalive `: keepalive` comments emitted every ~10s while any LLM call
+    is in-flight (chain can take 30-60s end-to-end on Sonnet, longer on
+    Opus). Same anti-timeout strategy as `/ai/agent/chat/stream`."""
+    user = await _gated_user(request)
+    chain_ids, summarizer_id = _resolve_convene(payload)
+
+    async def event_stream():
+        try:
+            async for ev, data in _convene(user, chain_ids, summarizer_id, payload):
+                yield _sse(ev, data)
+        except Exception as e:
+            yield _sse("error", {"message": str(e)[:300]})
+
+    return StreamingResponse(
+        event_stream(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@api.post("/ai/agent/convene")
+async def convene_sync(payload: _ConveneRequest, request: Request):
+    """Non-streaming variant of `/ai/agent/convene/stream`. Same flow,
+    but assembled into one JSON response. Useful for pytest / scripts."""
+    user = await _gated_user(request)
+    chain_ids, summarizer_id = _resolve_convene(payload)
+    final = None
+    async for ev, data in _convene(user, chain_ids, summarizer_id, payload):
+        if ev == "complete":
+            final = data
+    return final
+
+
+def _resolve_convene(payload: "_ConveneRequest") -> tuple[list[str], str]:
+    """Validate the requested chain + summarizer, applying sensible
+    defaults and de-duping. Raises HTTPException on bad input.
+
+    Note: `payload.agents is None` (the field was omitted) uses the
+    default chain; `payload.agents == []` (caller sent an empty list)
+    is treated as an explicit error so callers can't silently get the
+    default chain by mistake."""
+    if payload.agents is None:
+        requested = DEFAULT_CONVENE_CHAIN
+    elif len(payload.agents) == 0:
+        raise HTTPException(status_code=422, detail="At least one agent required")
+    else:
+        requested = payload.agents
+    # Resolve display-name aliases ("iris" → "research") + lower-case.
+    resolved: list[str] = []
+    seen: set[str] = set()
+    for tok in requested:
+        if not tok:
+            continue
+        key = _AGENT_LOOKUP.get(tok.strip().lower())
+        if not key:
+            raise HTTPException(status_code=422, detail=f"Unknown agent: {tok}")
+        if key in seen:
+            continue  # silently dedupe — running the same agent twice is pointless
+        seen.add(key)
+        resolved.append(key)
+    if not resolved:
+        raise HTTPException(status_code=422, detail="At least one agent required")
+    if len(resolved) > 5:
+        raise HTTPException(status_code=422, detail="Max 5 agents per convene")
+
+    summarizer_id = _AGENT_LOOKUP.get(
+        (payload.summarizer or DEFAULT_SUMMARIZER).strip().lower()
+    )
+    if not summarizer_id:
+        raise HTTPException(status_code=422, detail="Unknown summarizer")
+    return resolved, summarizer_id
+
+
+async def _convene(user, chain_ids: list[str], summarizer_id: str,
+                   payload: "_ConveneRequest"):
+    """Async generator: runs each chain agent in turn, then the
+    summarizer. Yields SSE-shaped (event_name, data_dict) tuples."""
+    chain = [AGENTS[aid] for aid in chain_ids]
+    summarizer = AGENTS[summarizer_id]
+
+    yield ("started", {
+        "chain": [{"agent_id": a["id"], "agent_name": a["name"]} for a in chain],
+        "summarizer_id": summarizer_id,
+        "summarizer_name": summarizer["name"],
+    })
+
+    transcript: list[dict] = []
+    total = len(chain)
+    last_mode = "default"
+    last_model = ""
+
+    for step, agent in enumerate(chain, start=1):
+        yield ("agent_started", {
+            "agent_id": agent["id"], "agent_name": agent["name"],
+            "step": step, "total": total,
+        })
+
+        # Each agent sees the brief + every prior agent's contribution
+        # so the chain produces a building synthesis instead of N
+        # independent answers.
+        context_block = ""
+        if transcript:
+            sections = [
+                f"### {t['agent_name']} ({t['agent_id']})\n{t['answer']}"
+                for t in transcript
+            ]
+            context_block = (
+                "\n\n--- Prior team input ---\n" + "\n\n".join(sections) +
+                "\n\n--- End prior input ---\n"
+                "Build on the above. Reference their work where useful, "
+                "but only add what's missing or sharpen what's there. Keep "
+                "your reply under 350 words.\n"
+            )
+        else:
+            context_block = (
+                "\nYou are the first specialist on this brief. Keep your "
+                "reply under 350 words. Be sharp and structured.\n"
+            )
+
+        provider, model, task_used = resolve_user_mode(payload.mode, agent["id"])
+        last_mode = task_used
+        last_model = model
+        session_id = f"convene-{agent['id']}-{user.user_id}"
+        chat = await _llm_for_user(
+            user.user_id, session_id,
+            agent["system"] + context_block,
+            provider=provider, model=model,
+        )
+        prompt = f"User brief:\n{payload.message}"
+        task = asyncio.create_task(chat.send_message(UserMessage(text=prompt)))
+        async for ping in _keepalive_while(task):
+            yield ping
+        answer = (task.result() or "").strip()
+        # Strip any stray <<FUPS>> or <<HANDOFF>> blocks the agent might
+        # emit (we don't run that machinery in convene mode).
+        answer = _FUPS_RE.sub("", answer)
+        answer = _HANDOFF_RE.sub("", answer).strip()
+
+        transcript.append({
+            "agent_id": agent["id"], "agent_name": agent["name"],
+            "answer": answer,
+        })
+        yield ("agent_done", {
+            "agent_id": agent["id"], "agent_name": agent["name"],
+            "step": step, "total": total, "answer": answer,
+        })
+        try:
+            from routes.llm_spend import record_llm_call
+            await record_llm_call(user.user_id, agent["id"], task_used, model)
+        except Exception:
+            pass
+
+    # Synthesis pass — summarizer always gets the deep task type, so
+    # Atlas runs on Opus regardless of the user's `mode` override. This
+    # is the highest-leverage part of the chain and worth the cost.
+    yield ("summarizing", {
+        "agent_id": summarizer["id"], "agent_name": summarizer["name"],
+    })
+    sum_provider, sum_model, sum_task = resolve_user_mode(
+        payload.mode or "deep", summarizer["id"],
+    )
+    sum_prompt_sys = summarizer["system"] + (
+        "\n\nYou are synthesizing input from your team for the user's brief. "
+        "Produce a single executive summary that:\n"
+        "  1. Restates the brief in one sentence.\n"
+        "  2. Surfaces the 3-5 strongest ideas from the team.\n"
+        "  3. Resolves any conflicts between specialists.\n"
+        "  4. Ends with a clear, ranked 'next 3 actions'.\n"
+        "Tone: confident, decisive, no hedging. Use markdown headings.\n"
+    )
+    sections = [
+        f"### {t['agent_name']} ({t['agent_id']})\n{t['answer']}"
+        for t in transcript
+    ]
+    sum_input = (
+        f"User's brief:\n{payload.message}\n\n"
+        f"Team transcript:\n\n" + "\n\n".join(sections)
+    )
+    sum_chat = await _llm_for_user(
+        user.user_id, f"convene-summary-{user.user_id}", sum_prompt_sys,
+        provider=sum_provider, model=sum_model,
+    )
+    sum_task_obj = asyncio.create_task(sum_chat.send_message(UserMessage(text=sum_input)))
+    async for ping in _keepalive_while(sum_task_obj):
+        yield ping
+    summary = (sum_task_obj.result() or "").strip()
+    summary = _FUPS_RE.sub("", summary)
+    summary = _HANDOFF_RE.sub("", summary).strip()
+
+    try:
+        from routes.llm_spend import record_llm_call
+        await record_llm_call(user.user_id, summarizer["id"], sum_task, sum_model)
+    except Exception:
+        pass
+
+    # Persist a memory of the convene so future agent chats can recall it.
+    try:
+        from routes.memory import remember
+        await remember(
+            user.user_id, "convene_summary",
+            f"Team convene on '{payload.message[:120]}' — "
+            f"agents: {', '.join(a['name'] for a in chain)}.\n{summary[:600]}",
+            meta={
+                "chain": [a["id"] for a in chain],
+                "summarizer": summarizer["id"],
+            },
+        )
+    except Exception:
+        pass
+
+    await record_ai_generation(user.user_id, "agent_convene")
+    yield ("complete", {
+        "summary":    summary,
+        "transcript": transcript,
+        "summarizer": {"agent_id": summarizer["id"], "agent_name": summarizer["name"]},
+        "mode":       last_mode,
+        "model":      last_model,
+    })
+
+
 @api.post("/ai/agent/chat")
 async def agent_chat(payload: _ChatRequest, request: Request):
     """Send a message to the selected agent. Single LLM call — the agent

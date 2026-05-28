@@ -35,6 +35,32 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 42) **🏟️ Convene — Multi-step team orchestrator**
+  - **What it is**: One brief runs sequentially through N specialists (each one sees the prior agents' answers as context), then Atlas synthesizes a single ranked executive summary with next-3-actions. The team behaves like a Slack huddle: builds on each other rather than firing N independent answers.
+  - **Backend** (`routes/agent_chat.py`):
+    - Two new endpoints — `POST /api/ai/agent/convene` (sync, returns full JSON) and `POST /api/ai/agent/convene/stream` (SSE).
+    - SSE event vocabulary: `started`, `agent_started`, `agent_done`, `summarizing`, `complete`, `error` — keepalive comments interleaved while LLM calls are in-flight (same pattern as `chat/stream`, prevents ingress timeouts on 60-90s chains).
+    - Strict validator `_resolve_convene()` — distinguishes `agents=None` (use default chain) from `agents=[]` (explicit error → 422), dedupes repeated agents, max 5 per convene, accepts display-name aliases (`iris`/`atlas`).
+    - Default chain: Research → SEO → Copy → Atlas synthesizes (configurable via `agents` and `summarizer` fields).
+    - Each chain agent gets a system-prompt suffix with the full prior-team transcript + "build on what's there, don't repeat, ≤350 words" guardrail.
+    - Synthesizer always runs on `deep` task type unless overridden — highest leverage step of the chain, worth the extra cost.
+    - Spend tracking integrated: each chain agent + the synthesizer write rows to `llm_usage`, so the admin spend card surfaces convene costs alongside regular chats.
+    - Persists a `convene_summary` memory row after every successful run — future agent_chats can recall the team's prior verdict via the existing memory retrieval layer.
+  - **Frontend** (`pages/dashboard/AITeam.jsx::ConveneModal`):
+    - "Convene the team" CTA card on the AI Team page (next to "Ask Atlas").
+    - Modal with brief textarea + specialist multi-select chips (Iris/Sam/Nova/Kai/Angela; default 3 selected).
+    - **Live SSE progress UI**: each picked agent gets a row that transitions ⌛ pending → 🔄 running (violet spinner) → ✓ done (green check, expanded markdown answer in a card). Atlas's synthesis row appears below with its own status line.
+    - **Executive summary panel** renders below the chain with a violet `Sparkles` accent — the final synthesized output.
+    - Fetch + ReadableStream pattern (same as `/agent/chat/stream`).
+  - **8 new pytest cases** (`tests/test_convene.py`):
+    - `TestConveneValidation` (5): auth · unknown agent → 422 · empty chain `[]` → 422 (NOT silent fallback to default) · >5 agents → 422 via pydantic `max_length` · repeated agents silently deduped (verified via the first SSE `started` event).
+    - `TestConveneHappyPath` (3): full sync chain produces ordered transcript + non-trivial summary, FUPS/HANDOFF markers stripped from chain outputs; SSE event order invariant (`started → agent_started → agent_done → summarizing → complete`); convene persists exactly one `convene_summary` memory row.
+    - Tests gracefully skip with a clear message when the Emergent LLM key budget is exhausted (encountered during this session — was temporarily at $38.40 / $38.40 cap).
+  - **All 59 agent-stack tests pass** (test_agent_chat + test_agent_handoff + test_model_router + test_agent_stream + test_ai_team_and_spend + test_convene).
+  - **Live UI screenshot-verified**: Convene modal with stubbed SSE shows the full flow — brief input, 3 selected specialists, 3 progress rows each with their own output card, Atlas status line, and the violet "Executive Summary" panel below with the ranked ideas + next-3-actions.
+  - **Live curl-verified**: real chain (Iris → Sam → Nova → Atlas) on "Launch plan for AI marketing SaaS targeting indie creators" produced a clean executive summary with three named "strongest ideas" attributed to the right specialists and three ranked actions.
+
+
 - 2026-02-28 (part 41) **💰 LLM spend dashboard + 🧠 Persisted mode prefs + 🏛️ Unified AI Team page**
   - **Per-agent mode persistence** (`routes/agent_chat.py`):
     - New endpoints `GET /api/ai/agent/prefs` (returns `{prefs: {agent_id: mode}}`) and `PUT /api/ai/agent/prefs` body `{agent_id, mode}`. Strictly validated: unknown agent_id or mode → 422 (so a typo'd frontend can never silently write junk).
