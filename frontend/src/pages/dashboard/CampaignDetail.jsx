@@ -136,9 +136,9 @@ const CampaignDetail = () => {
   const [historyLoading, setHistoryLoading] = useState(false);
   // Set of run-ids currently expanded inside the accordion.
   const [expandedRuns, setExpandedRuns] = useState(new Set());
-  // Set of run-ids currently in "diff vs. latest" mode (only valid
-  // when there IS a latest_run_summary to diff against).
-  const [diffRuns, setDiffRuns] = useState(new Set());
+  // Per-row diff mode: { [runId]: 'latest' | 'previous' }
+  // Absence in the map → diff is OFF for that row.
+  const [diffModes, setDiffModes] = useState({});
   // Holds the brief to pre-seed into the Run modal when the user hits
   // "Re-run with this" on a historical row. Falls back to the default
   // 30-day brief when null.
@@ -193,13 +193,24 @@ const CampaignDetail = () => {
     });
   };
 
-  const toggleDiff = (rid) => {
-    setDiffRuns((prev) => {
-      const next = new Set(prev);
-      if (next.has(rid)) next.delete(rid); else next.add(rid);
+  // Cycle: off → latest → previous → off (when both options are available)
+  const cycleDiffMode = (rid, hasLatest, hasPrevious) => {
+    setDiffModes((prev) => {
+      const next = { ...prev };
+      const cur = next[rid];
+      if (cur == null) {
+        if (hasLatest) next[rid] = 'latest';
+        else if (hasPrevious) next[rid] = 'previous';
+      } else if (cur === 'latest') {
+        if (hasPrevious) next[rid] = 'previous';
+        else delete next[rid];
+      } else {
+        // cur === 'previous'
+        delete next[rid];
+      }
       return next;
     });
-    // Auto-expand the row when switching to diff mode.
+    // Auto-expand the row when switching to/from diff mode.
     setExpandedRuns((prev) => {
       const next = new Set(prev);
       next.add(rid);
@@ -514,17 +525,38 @@ const CampaignDetail = () => {
                       No earlier runs. Hit <span className="text-violet-300">Re-run</span> above to add one.
                     </div>
                   )}
-                  {history && history
-                    // Hide the run that's currently pinned as the "latest"
-                    // — it's already shown at the top of the card.
-                    .filter((r) => r.id !== data.latest_run_id)
-                    .slice(0, 5)
-                    .map((r) => {
+                  {history && (() => {
+                    // Pre-compute the visible (filtered + capped) rows
+                    // so we can look up the "next-newer" row for the
+                    // "Diff vs. previous" mode (history is sorted desc
+                    // by created_at, so index-1 is newer in time).
+                    const visible = history
+                      .filter((r) => r.id !== data.latest_run_id)
+                      .slice(0, 5);
+                    return visible.map((r, idx) => {
                       const open = expandedRuns.has(r.id);
-                      const diffOn = diffRuns.has(r.id) && !!data.latest_run_summary;
-                      const diffTokens = diffOn
-                        ? wordDiff(r.summary || '', data.latest_run_summary || '')
+                      const mode = diffModes[r.id] || null;
+                      const hasLatest = !!(data.latest_run_summary && r.summary);
+                      // "Newer" row to diff against: the row above this
+                      // one in the list (older index = newer time). If
+                      // we're already the newest visible row, fall back
+                      // to the pinned latest_run_summary as the comparand
+                      // so "previous" still does something useful.
+                      const newerNeighbor = idx === 0
+                        ? { summary: data.latest_run_summary, label: 'latest' }
+                        : { summary: visible[idx - 1].summary, label: 'next run' };
+                      const hasPrevious = !!(newerNeighbor.summary && r.summary);
+                      const comparand = mode === 'latest'
+                        ? data.latest_run_summary
+                        : (mode === 'previous' ? newerNeighbor.summary : null);
+                      const diffTokens = comparand
+                        ? wordDiff(r.summary || '', comparand || '')
                         : null;
+                      const diffBtnLabel = mode === 'latest'
+                        ? 'Diff vs. latest'
+                        : mode === 'previous'
+                          ? `Diff vs. ${newerNeighbor.label}`
+                          : 'Diff';
                       return (
                         <div
                           key={r.id}
@@ -553,19 +585,21 @@ const CampaignDetail = () => {
                             <div className="px-3 pb-3 -mt-1 space-y-2.5">
                               {/* Action row: diff toggle + re-run */}
                               <div className="flex items-center gap-1.5 pt-1">
-                                {data.latest_run_summary && r.summary && (
+                                {(hasLatest || hasPrevious) && (
                                   <button
                                     type="button"
-                                    onClick={() => toggleDiff(r.id)}
+                                    onClick={() => cycleDiffMode(r.id, hasLatest, hasPrevious)}
                                     className={`text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 ${
-                                      diffOn
+                                      mode
                                         ? 'border-violet-500/50 bg-violet-500/15 text-violet-200'
                                         : 'border-white/10 text-zinc-400 hover:bg-white/5'
                                     }`}
                                     data-testid={`history-diff-toggle-${r.id}`}
-                                    title="Compare this run's summary against the latest pinned summary"
+                                    title={mode
+                                      ? 'Click to cycle diff mode (vs. latest → vs. previous → off)'
+                                      : 'Compare this run\'s summary against another run'}
                                   >
-                                    <GitCompare size={10} /> {diffOn ? 'Diff on' : 'Diff vs. latest'}
+                                    <GitCompare size={10} /> {diffBtnLabel}
                                   </button>
                                 )}
                                 <button
@@ -580,11 +614,11 @@ const CampaignDetail = () => {
                               </div>
 
                               {/* Body — either the plain brief+summary or the diff view */}
-                              {diffOn ? (
+                              {diffTokens ? (
                                 <div>
-                                  <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-1 flex items-center gap-2">
+                                  <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-1 flex items-center gap-2 flex-wrap">
                                     <span>Diff</span>
-                                    <span className="text-emerald-400">+ added in latest</span>
+                                    <span className="text-emerald-400">+ in {mode === 'latest' ? 'latest' : newerNeighbor.label}</span>
                                     <span className="text-rose-400">– removed since this run</span>
                                   </div>
                                   <div
@@ -624,7 +658,8 @@ const CampaignDetail = () => {
                           )}
                         </div>
                       );
-                    })}
+                    });
+                  })()}
                 </div>
               )}
             </div>
