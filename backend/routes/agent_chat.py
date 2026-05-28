@@ -32,7 +32,7 @@ from core import api
 from deps import get_current_user
 from routes.ai import _llm_for_user, _gated_user
 from routes.plans import record_ai_generation
-from routes.model_router import for_agent, for_task
+from routes.model_router import for_agent, resolve_user_mode, USER_MODES
 from emergentintegrations.llm.chat import UserMessage
 
 
@@ -253,6 +253,10 @@ for _id, _agent in AGENTS.items():
 class _ChatRequest(BaseModel):
     agent_id: str = Field(..., min_length=1, max_length=32)
     message: str = Field(..., min_length=1, max_length=4000)
+    # Optional model-routing override. Accepted values are exposed via
+    # `GET /api/ai/agent/modes` (`auto` | `fast` | `deep` | `creative`).
+    # Anything unknown is silently treated as `auto`.
+    mode: Optional[str] = Field(default=None, max_length=24)
 
 
 # ---------------------------------------------------------------------------
@@ -278,6 +282,15 @@ async def list_agents(request: Request):
             for a in AGENTS.values()
         ],
     }
+
+
+@api.get("/ai/agent/modes")
+async def list_modes(request: Request):
+    """Available routing modes for the agent composer toggle. Each entry
+    has `{id, label, blurb}`. The frontend renders one chip per mode and
+    POSTs the `id` back via `/ai/agent/chat` as the `mode` field."""
+    await get_current_user(request)
+    return {"modes": USER_MODES}
 
 
 @api.post("/ai/agent/chat")
@@ -328,7 +341,8 @@ async def agent_chat(payload: _ChatRequest, request: Request):
         system_prompt = system_prompt + "\n\n" + memory_block
 
     # Model routing — picks the right LLM family for the agent's task type.
-    provider, model = for_agent(agent["id"])
+    # User can override via the `mode` field (Auto/Fast/Deep/Creative).
+    provider, model, task_used = resolve_user_mode(payload.mode, agent["id"])
     chat = await _llm_for_user(
         user.user_id, session_id, system_prompt,
         provider=provider, model=model,
@@ -373,6 +387,10 @@ async def agent_chat(payload: _ChatRequest, request: Request):
         "follow_ups": follow_ups,
         "memories_used": used_memories,
         "handoff": handoff_done,  # {agent_id, agent_name, question, answer} or None
+        # Surface the routing decision so the UI can show "Deep · opus" pill
+        # and the user knows which model produced this reply.
+        "mode": task_used,
+        "model": model,
     }
 
 

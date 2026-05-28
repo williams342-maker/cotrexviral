@@ -46,17 +46,22 @@ const AgentWorkspace = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [agents, setAgents] = useState([]);
+  const [modes, setModes] = useState([]);
+  const [mode, setMode] = useState('auto');
   const [activeId, setActiveId] = useState(agentId || 'strategy');
   const [threads, setThreads] = useState({});   // { [agentId]: [{role, content, follow_ups}] }
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef(null);
 
-  // Load agents catalogue
+  // Load agents catalogue + available routing modes (Auto/Fast/Deep/Creative).
   useEffect(() => {
     axios.get(`${API}/ai/agent/list`, { withCredentials: true })
       .then((r) => setAgents(r.data.agents || []))
       .catch(() => setAgents([]));
+    axios.get(`${API}/ai/agent/modes`, { withCredentials: true })
+      .then((r) => setModes(r.data.modes || []))
+      .catch(() => setModes([]));
   }, []);
 
   // Keep URL in sync with active agent
@@ -87,7 +92,7 @@ const AgentWorkspace = () => {
     try {
       const res = await axios.post(
         `${API}/ai/agent/chat`,
-        { agent_id: activeId, message: text },
+        { agent_id: activeId, message: text, mode },
         { withCredentials: true },
       );
       setThreads((t) => ({
@@ -100,6 +105,8 @@ const AgentWorkspace = () => {
             follow_ups: res.data.follow_ups || [],
             memories_used: res.data.memories_used || [],
             handoff: res.data.handoff || null,
+            mode: res.data.mode || null,
+            model: res.data.model || null,
           },
         ],
       }));
@@ -242,29 +249,53 @@ const AgentWorkspace = () => {
             {/* Composer */}
             <form
               onSubmit={(e) => { e.preventDefault(); send(); }}
-              className="px-4 py-3 border-t border-white/5 flex items-end gap-2"
+              className="px-4 py-3 border-t border-white/5 flex flex-col gap-2"
               data-testid="agent-composer"
             >
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={onComposerKey}
-                rows={1}
-                placeholder={activeAgent ? `Message ${activeAgent.name}…` : 'Pick an agent above…'}
-                disabled={!activeAgent || busy}
-                data-testid="agent-input"
-                className="flex-1 resize-none bg-zinc-900 border border-zinc-800 focus:border-violet-500/50 rounded-xl px-3.5 py-3 text-[14px] text-zinc-100 placeholder-zinc-500 outline-none max-h-32"
-              />
-              <button
-                type="submit"
-                disabled={!input.trim() || busy}
-                data-testid="agent-send"
-                className={`inline-flex items-center justify-center w-11 h-11 rounded-xl shrink-0 ${
-                  input.trim() && !busy ? 'cv-btn-primary' : 'bg-white/[0.06] text-zinc-500 cursor-not-allowed'
-                }`}
-              >
-                {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowUp size={16} />}
-              </button>
+              {/* Mode selector — overrides the agent's default LLM route */}
+              {modes.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap" data-testid="agent-mode-selector">
+                  <span className="text-[10.5px] uppercase tracking-[0.18em] text-zinc-500 font-semibold pr-1">Mode</span>
+                  {modes.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setMode(m.id)}
+                      title={m.blurb}
+                      data-testid={`agent-mode-${m.id}`}
+                      className={`text-[11px] font-semibold rounded-full px-2.5 h-6 inline-flex items-center transition-colors ${
+                        mode === m.id
+                          ? 'bg-violet-500/20 text-violet-200 border border-violet-500/40'
+                          : 'bg-white/[0.04] text-zinc-400 border border-white/10 hover:text-zinc-200'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-end gap-2">
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={onComposerKey}
+                  rows={1}
+                  placeholder={activeAgent ? `Message ${activeAgent.name}…` : 'Pick an agent above…'}
+                  disabled={!activeAgent || busy}
+                  data-testid="agent-input"
+                  className="flex-1 resize-none bg-zinc-900 border border-zinc-800 focus:border-violet-500/50 rounded-xl px-3.5 py-3 text-[14px] text-zinc-100 placeholder-zinc-500 outline-none max-h-32"
+                />
+                <button
+                  type="submit"
+                  disabled={!input.trim() || busy}
+                  data-testid="agent-send"
+                  className={`inline-flex items-center justify-center w-11 h-11 rounded-xl shrink-0 ${
+                    input.trim() && !busy ? 'cv-btn-primary' : 'bg-white/[0.06] text-zinc-500 cursor-not-allowed'
+                  }`}
+                >
+                  {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowUp size={16} />}
+                </button>
+              </div>
             </form>
           </section>
 
@@ -341,11 +372,20 @@ const MessageBubble = ({ message, tone, agentName, onFollowUp }) => {
       )}
       <div className={`max-w-[78%] ${isUser ? 'order-1' : ''}`}>
         {!isUser && (
-          <div className="flex items-center gap-1.5 mb-1">
+          <div className="flex items-center gap-1.5 mb-1 flex-wrap">
             <span className="text-[11.5px] font-semibold text-white">{agentName}</span>
             {message.handoff && (
               <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-2 py-0.5" data-testid="agent-handoff-pill">
                 ↪ asked {message.handoff.agent_name}
+              </span>
+            )}
+            {message.mode && (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] font-medium text-zinc-400 bg-white/[0.04] border border-white/10 rounded-full px-2 py-0.5"
+                title={message.model || ''}
+                data-testid="agent-mode-pill"
+              >
+                {message.mode}
               </span>
             )}
           </div>

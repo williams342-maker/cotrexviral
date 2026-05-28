@@ -35,6 +35,27 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 39) **🎛️ Model routing layer — per-task user override**
+  - **What changed**: Previously the LLM family was hard-coded per agent (Atlas → Opus, Iris → Gemini, others → Sonnet). Now the user can override on a per-turn basis via a compact "Mode" selector above the chat composer.
+  - **Backend (`routes/model_router.py`)**:
+    - New `USER_MODES` catalogue — 4 entries (`auto`, `fast`, `deep`, `creative`) each with `{id, label, blurb}`. `USER_MODE_IDS` exposed for fast validation.
+    - New `resolve_user_mode(mode, agent_id) -> (provider, model, task)` — auto / None / unknown all gracefully fall back to the agent's natural task; `fast` routes to Haiku, `deep` to Opus, `creative` to Sonnet, etc. Returns the resolved task name so the API surfaces it in the response (handy for UI labels + debugging).
+  - **Backend (`routes/agent_chat.py`)**:
+    - `_ChatRequest` gains an optional `mode: str` field (validated as `<=24` chars; unknown values are silently treated as `auto` — never 422 the user).
+    - Response payload now includes `mode` (resolved task name) and `model` (actual model id used) so the UI can show "Reply produced via Haiku" without a follow-up call.
+    - New `GET /api/ai/agent/modes` endpoint returns the public `USER_MODES` list for the chip selector.
+  - **Frontend (`AgentWorkspace.jsx`)**:
+    - Loads `/ai/agent/modes` on mount; renders a `MODE  Auto · Fast · Deep · Creative` chip row above the textarea (`data-testid="agent-mode-selector"` + per-chip `agent-mode-{id}`). Active chip = violet pill.
+    - Posts `{agent_id, message, mode}` to `/ai/agent/chat`.
+    - Each agent reply now shows a tiny grey mode pill next to the agent name (`data-testid="agent-mode-pill"`) — hover reveals the actual model id (`claude-haiku-4-5-20251001`).
+  - **13 new pytest cases** (`tests/test_model_router.py`):
+    - `TestRouterUnit` (7): known task lookups · unknown falls back to default · `for_agent` returns per-persona defaults · explicit user mode beats agent default · `auto` / `None` / unknown silently fall back.
+    - `TestModesEndpoint` (2): auth required · returns canonical set with full `{id, label, blurb}` shape.
+    - `TestAgentChatRespectsMode` (4): default mode preserves agent's natural task (Nova → Sonnet) · `mode=fast` on Atlas re-routes from Opus → Haiku (live LLM call asserts `model` string contains "haiku" + NOT "opus") · `auto` is a no-op · garbage strings silently fall back.
+  - **All 33 agent-related tests green** (`test_agent_chat.py` + `test_agent_handoff.py` + `test_model_router.py`).
+  - **Live UI screenshot-verified**: clicking "Fast" chip → sending message → Atlas reply renders with grey `fast` pill next to her name.
+
+
 - 2026-02-28 (part 38) **🤝 Multi-agent collaboration — handoff bug fix + UI verification**
   - **Root cause**: Atlas (Strategy/Claude Opus) was correctly emitting `<<HANDOFF>>iris: <question><<END>>` markers in her replies, but the server's `_extract_handoff()` was rejecting every single one with `agent_id not in AGENTS`. Reason: the system prompt instructs the LLM to delegate by **display name** (`iris`, `sam`, `kai`, `nova`, `angela`), but `AGENTS` is keyed by **internal id** (`research`, `sam`, `kai`, `nova`, `angela`). `iris` was never in the dict → handoff silently dropped, raw marker leaked into the answer, `handoff: null` returned to the UI.
   - **Fix** in `routes/agent_chat.py`:

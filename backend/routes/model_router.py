@@ -21,6 +21,13 @@ Usage:
 We also expose `for_agent(agent_id)` so the per-agent chat picks a sensible
 default per persona — Atlas (Strategy) gets "deep", Iris (Research) gets
 "research", Sam/Angela/Nova/Kai get "creative" since they ship copy.
+
+User-facing modes
+-----------------
+For UI surfaces (composer toggle, settings) we expose a smaller, friendlier
+set of "modes" that are aliases or pass-throughs of the internal task names.
+`USER_MODES` is the single source of truth for what the frontend may send;
+`resolve_user_mode("deep")` maps it to a (provider, model) pair.
 """
 
 # Each entry: (provider, model_id) — provider is what `LlmChat.with_model`
@@ -54,3 +61,50 @@ AGENT_TASKS: dict[str, str] = {
 def for_agent(agent_id: str) -> tuple[str, str]:
     """Convenience — return (provider, model) for the given agent."""
     return for_task(AGENT_TASKS.get(agent_id, "default"))
+
+
+# ---------------------------------------------------------------------------
+# User-facing modes (composer toggle in the agent workspace)
+# ---------------------------------------------------------------------------
+# Public, UI-safe metadata. We deliberately omit `default` (it's covered by
+# "auto" → agent's natural task) and `research` (already the implicit mode
+# for Iris). The frontend renders one chip per entry.
+USER_MODES: list[dict] = [
+    {
+        "id": "auto",
+        "label": "Auto",
+        "blurb": "Use this agent's recommended model.",
+    },
+    {
+        "id": "fast",
+        "label": "Fast",
+        "blurb": "Snappier replies, cheaper. Great for quick iterations.",
+    },
+    {
+        "id": "deep",
+        "label": "Deep",
+        "blurb": "Slower, more thorough reasoning. Best for strategy + audits.",
+    },
+    {
+        "id": "creative",
+        "label": "Creative",
+        "blurb": "Long-form writing, hooks, marketing copy.",
+    },
+]
+
+USER_MODE_IDS: set[str] = {m["id"] for m in USER_MODES}
+
+
+def resolve_user_mode(mode: str | None, agent_id: str) -> tuple[str, str, str]:
+    """Resolve a user-supplied mode override into `(provider, model, task)`.
+
+    `mode` may be `None`, empty, "auto", or any key in `USER_MODE_IDS`.
+    Anything else (or "auto") falls back to the agent's natural task. The
+    returned `task` is the internal `ROUTES` key actually used — handy for
+    surfacing "Using deep mode (claude-opus-4-7)" in the UI."""
+    if mode and mode != "auto" and mode in USER_MODE_IDS:
+        task = mode
+    else:
+        task = AGENT_TASKS.get(agent_id, "default")
+    provider, model = for_task(task)
+    return provider, model, task
