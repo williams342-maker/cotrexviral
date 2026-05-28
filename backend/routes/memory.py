@@ -342,6 +342,19 @@ async def promote_hook_to_brand_voice(payload: _PromoteHookRequest, request: Req
     return {"ok": True, "id": new_id}
 
 
+@api.get("/memory/brand-voice")
+async def list_brand_voice(request: Request):
+    """List the user's promoted brand-voice anchors. Powers a viewer
+    panel on the dashboard so users see exactly what they've taught
+    the system."""
+    user = await get_current_user(request)
+    rows = await db.cortex_memory.find(
+        {"user_id": user.user_id, "kind": "brand_voice"},
+        {"_id": 0, "embedding": 0},
+    ).sort("created_at", -1).limit(50).to_list(length=50)
+    return {"brand_voice": rows, "count": len(rows)}
+
+
 @api.post("/memory/reindex")
 async def reindex_memories(request: Request):
     """Re-ingest the user's brand profile + latest 50 published posts.

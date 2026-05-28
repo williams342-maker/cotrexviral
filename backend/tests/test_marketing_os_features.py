@@ -461,3 +461,79 @@ class TestPromoteHookToBrandVoice:
                 db.cortex_memory.delete_one({"id": other_id}),
             )
             cli.close()
+
+
+# ===================================================================
+# 6) brand_voice_prompt_block + GET /memory/brand-voice
+# ===================================================================
+class TestBrandVoiceFeature:
+    """End-to-end: promote a hook → block builder picks it up → list
+    endpoint surfaces it for the viewer panel."""
+
+    def _promote_and_collect(self) -> str:
+        """Seed a hook, promote it, return the brand_voice row id."""
+        cli, db = _db()
+        keys = asyncio.get_event_loop().run_until_complete(_seed_winning_hooks())
+        row = asyncio.get_event_loop().run_until_complete(
+            db.cortex_memory.find_one({"user_id": USER_ID, "dedupe_key": keys[0]}),
+        )
+        cli.close()
+        r = httpx.post(
+            f"{API_URL}/api/memory/promote-hook", headers=H,
+            json={"hook_id": row["id"]}, timeout=10,
+        )
+        assert r.status_code == 200
+        return r.json()["id"]
+
+    def _cleanup(self) -> None:
+        cli, db = _db()
+        asyncio.get_event_loop().run_until_complete(_cleanup_winning_hooks())
+        asyncio.get_event_loop().run_until_complete(
+            db.cortex_memory.delete_many({"user_id": USER_ID, "kind": "brand_voice"}),
+        )
+        cli.close()
+
+    def test_block_returns_empty_when_user_has_promoted_nothing(self):
+        self._cleanup()
+        import sys
+        sys.path.insert(0, "/app/backend")
+        from routes.feedback_loop import brand_voice_prompt_block
+        block = asyncio.get_event_loop().run_until_complete(
+            brand_voice_prompt_block("user_nobody_seeded", limit=5),
+        )
+        assert block == ""
+
+    def test_block_extracts_anchor_text_after_promotion(self):
+        try:
+            self._promote_and_collect()
+            import sys
+            sys.path.insert(0, "/app/backend")
+            from routes.feedback_loop import brand_voice_prompt_block
+            block = asyncio.get_event_loop().run_until_complete(
+                brand_voice_prompt_block(USER_ID, limit=5),
+            )
+            assert "<brand_voice>" in block and "</brand_voice>" in block
+            # Anchor extracted (no surrounding "prefer this voice…" boilerplate)
+            assert "picking what to ship next." in block
+            assert "(linkedin)" in block.lower()
+        finally:
+            self._cleanup()
+
+    def test_list_endpoint_auth_required(self):
+        r = httpx.get(f"{API_URL}/api/memory/brand-voice", timeout=10)
+        assert r.status_code == 401
+
+    def test_list_endpoint_returns_promoted_anchors(self):
+        try:
+            new_id = self._promote_and_collect()
+            r = httpx.get(f"{API_URL}/api/memory/brand-voice", headers=H, timeout=10)
+            assert r.status_code == 200
+            d = r.json()
+            assert d["count"] >= 1
+            anchor_ids = [row["id"] for row in d["brand_voice"]]
+            assert new_id in anchor_ids
+            row = next(r for r in d["brand_voice"] if r["id"] == new_id)
+            assert row["kind"] == "brand_voice"
+            assert "embedding" not in row  # projection MUST exclude
+        finally:
+            self._cleanup()

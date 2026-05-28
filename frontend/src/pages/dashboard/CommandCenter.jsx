@@ -331,6 +331,79 @@ const CommandCenter = () => {
     }
   };
 
+  // Bulk-promote: queues a POST for each un-promoted winner in parallel.
+  // Capped at 3 to avoid accidentally pinning too many hooks at once
+  // (the brand_voice prompt block already truncates at 5 anyway).
+  const [bulkPromoting, setBulkPromoting] = useState(false);
+  const promoteTopWins = async () => {
+    const targets = (data?.wins || [])
+      .filter((w) => !promotedHooks.has(w.id))
+      .slice(0, 3);
+    if (targets.length === 0) {
+      toast({ title: 'Nothing to promote', description: 'All visible winners are already promoted.' });
+      return;
+    }
+    setBulkPromoting(true);
+    let ok = 0;
+    let failed = 0;
+    try {
+      await Promise.all(targets.map(async (w) => {
+        try {
+          await axios.post(
+            `${API}/memory/promote-hook`,
+            { hook_id: w.id },
+            { withCredentials: true },
+          );
+          setPromotedHooks((prev) => {
+            const next = new Set(prev);
+            next.add(w.id);
+            return next;
+          });
+          ok += 1;
+        } catch {
+          failed += 1;
+        }
+      }));
+      toast({
+        title: `Promoted ${ok} hook${ok === 1 ? '' : 's'}`,
+        description: failed > 0 ? `${failed} failed — retry individually.` : 'Nova will lean on these patterns.',
+      });
+    } finally {
+      setBulkPromoting(false);
+      load();  // Refresh brand-voice viewer count.
+    }
+  };
+
+  // Brand-voice viewer state — lazy-loaded the first time the user opens
+  // the popover (saves a roundtrip on initial paint).
+  const [bvOpen, setBvOpen] = useState(false);
+  const [bvData, setBvData] = useState(null);
+  const [bvLoading, setBvLoading] = useState(false);
+  const openBrandVoiceViewer = async () => {
+    setBvOpen(true);
+    if (bvData === null && !bvLoading) {
+      setBvLoading(true);
+      try {
+        const r = await axios.get(`${API}/memory/brand-voice`, { withCredentials: true });
+        setBvData(r.data.brand_voice || []);
+      } catch {
+        setBvData([]);
+      } finally {
+        setBvLoading(false);
+      }
+    }
+  };
+  const demoteBrandVoice = async (memId) => {
+    if (!window.confirm('Remove this voice anchor? Nova will stop using it in future generations.')) return;
+    try {
+      await axios.delete(`${API}/memory/${memId}`, { withCredentials: true });
+      setBvData((prev) => (prev || []).filter((r) => r.id !== memId));
+      toast({ title: 'Voice anchor removed' });
+    } catch (e) {
+      toast({ title: 'Could not remove', description: e.response?.data?.detail || e.message });
+    }
+  };
+
   return (
     <DashboardLayout
       title="Command Center"
@@ -589,9 +662,29 @@ const CommandCenter = () => {
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
               <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Trophy size={14} className="text-emerald-300" /> Recent Wins</h3>
-              <button onClick={() => navigate('/dashboard/performance')} className="text-xs text-zinc-400 hover:text-white">view →</button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={openBrandVoiceViewer}
+                  className="text-[10px] px-2 py-0.5 rounded border border-violet-500/30 text-violet-300 hover:bg-violet-500/15 flex items-center gap-1"
+                  data-testid="open-brand-voice-btn"
+                  title="View all promoted voice anchors"
+                >
+                  <Star size={10} /> Brand voice
+                </button>
+                {(data?.wins || []).some((w) => !promotedHooks.has(w.id)) && (
+                  <button
+                    onClick={promoteTopWins}
+                    disabled={bulkPromoting}
+                    className="text-[10px] px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50 flex items-center gap-1"
+                    data-testid="bulk-promote-btn"
+                    title="Promote the top 3 winners in one click"
+                  >
+                    {bulkPromoting ? <><Loader2 size={10} className="animate-spin" /> Promoting…</> : <><Star size={10} /> Promote top 3</>}
+                  </button>
+                )}
+              </div>
             </div>
             <div className="space-y-2" data-testid="wins-feed">
               {(data?.wins || []).length === 0 ? (
@@ -648,6 +741,74 @@ const CommandCenter = () => {
         onClose={() => setNewCampOpen(false)}
         onCreated={load}
       />
+
+      {/* Brand-voice viewer modal — shows everything the user has
+          promoted, with a per-row remove (so they can correct mistakes
+          without dropping into the raw Memory page). */}
+      {bvOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => setBvOpen(false)} data-testid="brand-voice-modal">
+          <div className="w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-2xl border border-violet-500/30 bg-zinc-950 p-6"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <div className="text-[10px] uppercase tracking-widest text-violet-400 font-bold mb-1">Brand Voice</div>
+                <h2 className="text-xl font-bold text-white">Pinned voice anchors</h2>
+                <p className="text-xs text-zinc-400 mt-1">Every Nova generation echoes these. Click ✕ to remove an anchor.</p>
+              </div>
+              <button onClick={() => setBvOpen(false)} className="text-zinc-500 hover:text-white text-2xl leading-none" data-testid="brand-voice-close">×</button>
+            </div>
+
+            {bvLoading ? (
+              <div className="text-xs text-zinc-500 italic flex items-center gap-1.5 py-4">
+                <Loader2 size={12} className="animate-spin" /> Loading…
+              </div>
+            ) : (bvData || []).length === 0 ? (
+              <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.04] p-4 text-sm text-zinc-300 leading-relaxed" data-testid="brand-voice-empty">
+                <div className="font-semibold mb-1">No voice anchors yet.</div>
+                <div className="text-xs text-zinc-400">
+                  Promote a winning hook from the <span className="text-emerald-300">Recent Wins</span> card to seed your brand voice. Once promoted, Nova will lean on that pattern in every future generation — Compose drafts, signal-driven posts, and OS chain runs.
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2" data-testid="brand-voice-list">
+                {(bvData || []).map((bv) => {
+                  // Extract the anchor text from the promotion-wrapper.
+                  const m = (bv.text || '').match(/"([^"]+)"/);
+                  const anchor = m ? m[1] : (bv.text || '');
+                  const plat = bv.meta?.platform;
+                  const rate = bv.meta?.engagement_rate;
+                  return (
+                    <div key={bv.id} className="rounded-lg border border-white/5 bg-zinc-950/40 p-3 flex items-start gap-3" data-testid={`brand-voice-row-${bv.id}`}>
+                      <span className="w-6 h-6 rounded-md bg-violet-500/15 border border-violet-500/30 text-violet-300 flex items-center justify-center shrink-0 mt-0.5">
+                        <Star size={11} />
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-zinc-200 leading-relaxed">{anchor}</div>
+                        <div className="flex items-center gap-2 mt-1.5 text-[10px] text-zinc-500">
+                          {plat && <span className="uppercase tracking-wider">{plat}</span>}
+                          {rate != null && <span className="text-emerald-400 tabular-nums">{Math.round(rate * 1000) / 10}%</span>}
+                          {bv.created_at && <span>· promoted {new Date(bv.created_at).toLocaleDateString()}</span>}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => demoteBrandVoice(bv.id)}
+                        aria-label="Remove voice anchor"
+                        className="text-zinc-500 hover:text-rose-300 shrink-0 p-1"
+                        data-testid={`brand-voice-demote-${bv.id}`}
+                        title="Remove this voice anchor"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };

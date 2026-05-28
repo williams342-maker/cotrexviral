@@ -270,3 +270,48 @@ async def winning_hooks_prompt_block(
         "</winning_hooks>"
     )
 
+
+async def brand_voice_prompt_block(user_id: str, *, limit: int = 5) -> str:
+    """Return a `<brand_voice>...</brand_voice>` block listing the
+    user's explicitly-promoted voice patterns.
+
+    Unlike `winning_hooks_prompt_block` (which is statistical — top
+    performers by engagement), brand_voice rows are *user-curated*:
+    the user clicked "Promote to Brand Voice" on a hook because they
+    want THIS pattern to shape every future generation.
+
+    Returned block is a stricter directive — the LLM should treat
+    these as canonical voice anchors, not just performance hints.
+
+    Returns "" when the user has promoted nothing yet, so callers can
+    concatenate the block unconditionally."""
+    rows = await db.cortex_memory.find(
+        {"user_id": user_id, "kind": "brand_voice"},
+        {"_id": 0, "embedding": 0},
+    ).sort("created_at", -1).limit(max(1, min(20, limit))).to_list(length=limit)
+    if not rows:
+        return ""
+    import re as _re
+    lines = []
+    for r in rows:
+        text = (r.get("text") or "")
+        # The promote-hook route wraps the hook in a "prefer this voice…"
+        # template. Strip that wrapper for cleaner LLM context — pull out
+        # only the quoted hook text.
+        match = _re.search(r'"([^"]+)"', text)
+        anchor = match.group(1) if match else text
+        plat = (r.get("meta") or {}).get("platform") or ""
+        plat_tag = f" ({plat})" if plat else ""
+        lines.append(f"  - {anchor[:280]}{plat_tag}")
+    body = "\n".join(lines)
+    return (
+        "\n\n<brand_voice>\n"
+        "These are the user's canonical voice anchors — patterns they've "
+        "explicitly chosen as representative of how their brand sounds. "
+        "Every draft you produce MUST echo this voice (tone, opener style, "
+        "sentence rhythm, level of directness). Treat these as harder "
+        "constraints than the statistical winning_hooks:\n"
+        f"{body}\n"
+        "</brand_voice>"
+    )
+

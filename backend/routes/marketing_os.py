@@ -283,7 +283,7 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
     # cross-platform.
     if "nova" in chain_for_run:
         try:
-            from routes.feedback_loop import winning_hooks_prompt_block
+            from routes.feedback_loop import winning_hooks_prompt_block, brand_voice_prompt_block
             # If the campaign declared exactly ONE platform, scope to it
             # (cleaner signal); otherwise pull globally.
             single_platform = ""
@@ -300,8 +300,13 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
             )
             if wb:
                 brief_text += wb
+            # Promoted brand-voice anchors are cross-platform — they
+            # express the user's chosen voice, not a per-platform win.
+            bv = await brand_voice_prompt_block(user.user_id, limit=5)
+            if bv:
+                brief_text += bv
         except Exception:
-            logger.exception("winning-hooks injection failed (continuing)")
+            logger.exception("winning-hooks/brand-voice injection failed (continuing)")
 
     run_id = str(uuid.uuid4())
     started_at = datetime.now(timezone.utc)

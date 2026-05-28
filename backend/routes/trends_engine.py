@@ -551,8 +551,9 @@ async def draft_post_from_trend(payload: _DraftFromSignalRequest, request: Reque
     # system prompt so the feedback loop is deterministic — not
     # dependent on the vector retrieval layer happening to surface them.
     try:
-        from routes.feedback_loop import winning_hooks_prompt_block
+        from routes.feedback_loop import winning_hooks_prompt_block, brand_voice_prompt_block
         system += await winning_hooks_prompt_block(user.user_id, platform=platform, limit=3)
+        system += await brand_voice_prompt_block(user.user_id, limit=5)
     except Exception:
         pass
     chat = await _llm_for_user(
