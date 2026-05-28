@@ -290,6 +290,58 @@ async def delete_memory(mem_id: str, request: Request):
     return {"ok": True}
 
 
+class _PromoteHookRequest(BaseModel):
+    hook_id: str = Field(..., min_length=1, max_length=64)
+
+
+@api.post("/memory/promote-hook")
+async def promote_hook_to_brand_voice(payload: _PromoteHookRequest, request: Request):
+    """Take a `winning_hook` memory row and write a derivative
+    `brand_voice` memory so it shapes every future Nova generation
+    (not just embedding-retrieval-dependent).
+
+    Behaviour:
+      - Looks up the winning_hook by id (scoped to the caller).
+      - Strips the `[platform]` prefix and `(engagement rate:...)` tail
+        for clean canon storage.
+      - Inserts a `brand_voice` row with `meta.source_hook_id` set so
+        idempotent re-promotion is a no-op via the dedupe key.
+
+    Returns 404 when the hook doesn't belong to the user."""
+    user = await get_current_user(request)
+    row = await db.cortex_memory.find_one(
+        {"id": payload.hook_id, "user_id": user.user_id, "kind": "winning_hook"},
+        {"_id": 0, "embedding": 0},
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Hook not found")
+
+    import re as _re
+    raw = row.get("text") or ""
+    cleaned = _re.sub(r"^\s*\[[^\]]+\]\s*", "", raw)
+    cleaned = _re.sub(r"\s*\(engagement rate:[^)]+\)\s*$", "", cleaned).strip()
+    if not cleaned:
+        raise HTTPException(status_code=422, detail="Hook text is empty after cleaning")
+
+    meta = row.get("meta") or {}
+    brand_voice_text = (
+        f"This user's audience reacts strongly to this hook style — "
+        f"prefer this voice/length/cadence in new content: \"{cleaned}\""
+    )
+    new_id = await remember(
+        user.user_id, "brand_voice", brand_voice_text,
+        meta={
+            "source_hook_id":   payload.hook_id,
+            "platform":         meta.get("platform"),
+            "engagement_rate":  meta.get("engagement_rate"),
+        },
+        dedupe_key=f"promoted_hook:{payload.hook_id}",
+    )
+    if not new_id:
+        raise HTTPException(status_code=400, detail="Could not embed hook")
+    return {"ok": True, "id": new_id}
+
+
 @api.post("/memory/reindex")
 async def reindex_memories(request: Request):
     """Re-ingest the user's brand profile + latest 50 published posts.

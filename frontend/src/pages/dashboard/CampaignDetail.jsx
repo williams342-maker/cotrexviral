@@ -139,6 +139,8 @@ const CampaignDetail = () => {
   // Per-row diff mode: { [runId]: 'latest' | 'previous' }
   // Absence in the map → diff is OFF for that row.
   const [diffModes, setDiffModes] = useState({});
+  // Filter for the history list: 'all' | 'completed' | 'failed'.
+  const [historyFilter, setHistoryFilter] = useState('all');
   // Holds the brief to pre-seed into the Run modal when the user hits
   // "Re-run with this" on a historical row. Falls back to the default
   // 30-day brief when null.
@@ -502,6 +504,8 @@ const CampaignDetail = () => {
                 type="button"
                 onClick={toggleHistory}
                 className="w-full flex items-center gap-2 text-left text-xs text-zinc-400 hover:text-white"
+                aria-expanded={historyOpen}
+                aria-controls="campaign-history-panel"
                 data-testid="campaign-history-toggle"
               >
                 {historyOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -514,7 +518,36 @@ const CampaignDetail = () => {
               </button>
 
               {historyOpen && (
-                <div className="mt-3 space-y-1.5" data-testid="campaign-history-list">
+                <div className="mt-3 space-y-1.5" id="campaign-history-panel" data-testid="campaign-history-list">
+                  {/* Status filter chips — only shown when there's enough
+                      data to actually filter (5+ runs). */}
+                  {history && history.length >= 5 && (
+                    <div className="flex items-center gap-1 mb-1" role="group" aria-label="Filter runs by status">
+                      {[
+                        { id: 'all',       label: 'All' },
+                        { id: 'completed', label: 'Completed' },
+                        { id: 'failed',    label: 'Failed' },
+                      ].map((opt) => {
+                        const active = historyFilter === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => setHistoryFilter(opt.id)}
+                            aria-pressed={active}
+                            className={`text-[10px] px-2 py-0.5 rounded border ${
+                              active
+                                ? 'border-violet-500/50 bg-violet-500/15 text-violet-200'
+                                : 'border-white/10 text-zinc-400 hover:bg-white/5'
+                            }`}
+                            data-testid={`history-filter-${opt.id}`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                   {historyLoading && (
                     <div className="text-[11px] text-zinc-500 italic flex items-center gap-1.5 py-1">
                       <Loader2 size={11} className="animate-spin" /> Loading…
@@ -532,7 +565,15 @@ const CampaignDetail = () => {
                     // by created_at, so index-1 is newer in time).
                     const visible = history
                       .filter((r) => r.id !== data.latest_run_id)
+                      .filter((r) => historyFilter === 'all' ? true : r.status === historyFilter)
                       .slice(0, 5);
+                    if (visible.length === 0 && historyFilter !== 'all') {
+                      return (
+                        <div className="text-[11px] text-zinc-500 italic py-2" data-testid="campaign-history-empty-filter">
+                          No {historyFilter} runs. <button onClick={() => setHistoryFilter('all')} className="underline">Show all</button>.
+                        </div>
+                      );
+                    }
                     return visible.map((r, idx) => {
                       const open = expandedRuns.has(r.id);
                       const mode = diffModes[r.id] || null;
@@ -589,7 +630,13 @@ const CampaignDetail = () => {
                                   <button
                                     type="button"
                                     onClick={() => cycleDiffMode(r.id, hasLatest, hasPrevious)}
-                                    className={`text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 ${
+                                    aria-pressed={!!mode}
+                                    aria-label={
+                                      mode === 'latest' ? 'Currently comparing against latest pinned run. Click to cycle to next-run comparison or off.'
+                                      : mode === 'previous' ? 'Currently comparing against next-newer run. Click to turn off.'
+                                      : 'Toggle diff comparison'
+                                    }
+                                    className={`text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-violet-500/40 ${
                                       mode
                                         ? 'border-violet-500/50 bg-violet-500/15 text-violet-200'
                                         : 'border-white/10 text-zinc-400 hover:bg-white/5'

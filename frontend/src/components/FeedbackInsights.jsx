@@ -147,10 +147,11 @@ const FeedbackInsights = ({ compact = false, limit = 3, testid = 'feedback-insig
                   <button
                     type="button"
                     onClick={() => onUseHook(cleanText, w)}
-                    className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center gap-1 ${
+                    aria-label={`Use this winning hook as your topic: ${cleanText.slice(0, 80)}`}
+                    className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 transition-opacity flex items-center gap-1 ${
                       theme === 'light'
-                        ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-100'
-                        : 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/15'
+                        ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-100 focus:ring-emerald-400/40'
+                        : 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/15 focus:ring-emerald-500/40'
                     }`}
                     data-testid={`${testid}-use-${w.id}`}
                     title="Use this hook as your topic"

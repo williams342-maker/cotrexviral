@@ -131,6 +131,12 @@ async def _cleanup_winning_hooks() -> None:
         cli.close()
 
 
+# Tiny helper so we can run an async expression inside a sync test
+# function without juggling event loops at each call site.
+def await_run(coro):
+    return asyncio.get_event_loop().run_until_complete(coro)
+
+
 # ===================================================================
 # 1) /marketing-os/runs campaign_id filter
 # ===================================================================
@@ -353,3 +359,105 @@ class TestDashboardEndpointShape:
             assert key in d, f"dashboard payload missing {key}"
         for key in ("campaigns_active", "pending_approvals", "signals_hot", "recent_wins"):
             assert key in d["stats"]
+
+
+# ===================================================================
+# 5) /memory/promote-hook — promotes a winning_hook into brand_voice
+# ===================================================================
+class TestPromoteHookToBrandVoice:
+    def test_auth_required(self):
+        r = httpx.post(
+            f"{API_URL}/api/memory/promote-hook",
+            json={"hook_id": "x"}, timeout=10,
+        )
+        assert r.status_code == 401
+
+    def test_promote_creates_brand_voice_row(self):
+        cli, db = _db()
+        # Seed exactly one winning_hook for the user.
+        keys = asyncio.get_event_loop().run_until_complete(_seed_winning_hooks())
+        try:
+            # Grab the seeded hook's id.
+            row = asyncio.get_event_loop().run_until_complete(
+                db.cortex_memory.find_one(
+                    {"user_id": USER_ID, "dedupe_key": keys[0]},
+                ),
+            )
+            assert row is not None
+            hook_id = row["id"]
+
+            r = httpx.post(
+                f"{API_URL}/api/memory/promote-hook", headers=H,
+                json={"hook_id": hook_id}, timeout=10,
+            )
+            assert r.status_code == 200, r.text
+            payload = r.json()
+            assert payload["ok"] is True
+            new_id = payload["id"]
+
+            # The new brand_voice row exists with the correct shape.
+            bv = asyncio.get_event_loop().run_until_complete(
+                db.cortex_memory.find_one({"id": new_id, "user_id": USER_ID}),
+            )
+            assert bv is not None
+            assert bv["kind"] == "brand_voice"
+            assert (bv.get("meta") or {}).get("source_hook_id") == hook_id
+            # The cleaned hook text was embedded, not the original raw row.
+            assert "[linkedin]" not in bv["text"]
+            assert "(engagement rate" not in bv["text"]
+
+            # Second promotion is idempotent (single dedupe key — no
+            # duplicate row created). `remember()` regenerates the
+            # internal `id` on each upsert, so we assert ROW COUNT
+            # rather than equal-ids.
+            r2 = httpx.post(
+                f"{API_URL}/api/memory/promote-hook", headers=H,
+                json={"hook_id": hook_id}, timeout=10,
+            )
+            assert r2.status_code == 200
+            count = await_run(db.cortex_memory.count_documents({
+                "user_id":             USER_ID,
+                "kind":                "brand_voice",
+                "meta.source_hook_id": hook_id,
+            }))
+            assert count == 1, f"expected 1 brand_voice row, got {count}"
+        finally:
+            asyncio.get_event_loop().run_until_complete(_cleanup_winning_hooks())
+            asyncio.get_event_loop().run_until_complete(
+                db.cortex_memory.delete_many({"user_id": USER_ID, "kind": "brand_voice", "meta.source_hook_id": {"$exists": True}}),
+            )
+            cli.close()
+
+    def test_promote_unknown_hook_404(self):
+        r = httpx.post(
+            f"{API_URL}/api/memory/promote-hook", headers=H,
+            json={"hook_id": "nope-not-real"}, timeout=10,
+        )
+        assert r.status_code == 404
+
+    def test_promote_other_users_hook_404(self):
+        """The route filters by user_id — even if I know another user's
+        hook id, the lookup must return 404."""
+        cli, db = _db()
+        other_id = str(uuid.uuid4())
+        asyncio.get_event_loop().run_until_complete(db.cortex_memory.insert_one({
+            "id":         other_id,
+            "user_id":    "user_someone_else",
+            "kind":       "winning_hook",
+            "text":       "[linkedin] private hook  (engagement rate: 10%)",
+            "embedding":  [],
+            "meta":       {"platform": "linkedin", "engagement_rate": 0.1},
+            "created_at": datetime.now(timezone.utc),
+            "dedupe_key": f"pytest_mos:other:{other_id}",
+        }))
+        try:
+            r = httpx.post(
+                f"{API_URL}/api/memory/promote-hook", headers=H,
+                json={"hook_id": other_id}, timeout=10,
+            )
+            assert r.status_code == 404
+        finally:
+            asyncio.get_event_loop().run_until_complete(
+                db.cortex_memory.delete_one({"id": other_id}),
+            )
+            cli.close()

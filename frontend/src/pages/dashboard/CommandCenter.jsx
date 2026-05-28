@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Command, Sparkles, Zap, TrendingUp, CheckSquare, Trophy,
   ChevronRight, Play, Activity, Loader2, Flame, ArrowRight, Bot,
-  Layers, Users, BarChart3, Megaphone, Brain, Plus,
+  Layers, Users, BarChart3, Megaphone, Brain, Plus, Check, Star,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import RunOSModal from '../../components/RunOSModal';
@@ -296,6 +296,41 @@ const CommandCenter = () => {
     setRunOpen(true);
   };
 
+  // Track hooks that have been promoted in this session so the UI can
+  // flip the button to a confirmed "Promoted" state without forcing a
+  // dashboard refetch. Server-side promotion is idempotent (dedupe key),
+  // so re-clicking is harmless even if state were lost.
+  const [promotedHooks, setPromotedHooks] = useState(new Set());
+  const [promoting, setPromoting] = useState(null); // id of in-flight promote
+
+  const promoteHook = async (hookId) => {
+    if (promotedHooks.has(hookId) || promoting === hookId) return;
+    setPromoting(hookId);
+    try {
+      await axios.post(
+        `${API}/memory/promote-hook`,
+        { hook_id: hookId },
+        { withCredentials: true },
+      );
+      setPromotedHooks((prev) => {
+        const next = new Set(prev);
+        next.add(hookId);
+        return next;
+      });
+      toast({
+        title: 'Promoted to Brand Voice',
+        description: 'Nova will lean on this pattern in every future generation.',
+      });
+    } catch (e) {
+      toast({
+        title: 'Could not promote hook',
+        description: e.response?.data?.detail || e.message,
+      });
+    } finally {
+      setPromoting(null);
+    }
+  };
+
   return (
     <DashboardLayout
       title="Command Center"
@@ -418,7 +453,14 @@ const CommandCenter = () => {
                             onClick={() => { if (!draggingId) navigate(`/dashboard/campaigns/${c.id}`); }}
                             role="button"
                             tabIndex={0}
-                            onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/dashboard/campaigns/${c.id}`); }}
+                            aria-label={`Campaign ${c.name} (${status}). Press Enter to open. Drag to change status.`}
+                            aria-grabbed={draggingId === c.id || undefined}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                navigate(`/dashboard/campaigns/${c.id}`);
+                              }
+                            }}
                             data-testid={`campaign-card-${c.id}`}
                             className={`group relative rounded-md border border-white/5 bg-zinc-900/60 p-2 cursor-grab active:cursor-grabbing select-none transition-opacity ${
                               draggingId === c.id ? 'opacity-40' : 'hover:bg-zinc-900/90 hover:border-cyan-500/30'
@@ -555,11 +597,34 @@ const CommandCenter = () => {
               {(data?.wins || []).length === 0 ? (
                 <div className="text-xs text-zinc-500 italic py-3">No wins logged yet. Once published posts cross 50 impressions, the feedback loop picks the top performers automatically.</div>
               ) : (
-                (data?.wins || []).map((w) => (
-                  <div key={w.id} className="rounded-lg border border-emerald-500/15 bg-emerald-500/5 p-2.5">
-                    <div className="text-xs text-zinc-200 line-clamp-2 leading-snug">{w.text}</div>
-                  </div>
-                ))
+                (data?.wins || []).map((w) => {
+                  const promoted = promotedHooks.has(w.id);
+                  const busy = promoting === w.id;
+                  return (
+                    <div key={w.id} className="rounded-lg border border-emerald-500/15 bg-emerald-500/5 p-2.5 group" data-testid={`win-card-${w.id}`}>
+                      <div className="text-xs text-zinc-200 line-clamp-2 leading-snug">{w.text}</div>
+                      <div className="flex items-center justify-end mt-1.5">
+                        <button
+                          type="button"
+                          onClick={() => promoteHook(w.id)}
+                          disabled={promoted || busy}
+                          aria-label={promoted ? 'Hook already promoted to brand voice' : 'Promote this winning hook to your brand voice'}
+                          className={`text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 transition-colors ${
+                            promoted
+                              ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-200 cursor-default'
+                              : 'border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/15 focus:opacity-100 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40'
+                          }`}
+                          data-testid={`win-promote-${w.id}`}
+                          title={promoted ? 'Already promoted' : 'Promote to Brand Voice — Nova will lean on this in every future draft'}
+                        >
+                          {promoted ? <><Check size={10} /> Promoted</> :
+                           busy ? <><Loader2 size={10} className="animate-spin" /> Promoting…</> :
+                           <><Star size={10} /> Promote to Brand Voice</>}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>
