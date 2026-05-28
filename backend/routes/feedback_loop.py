@@ -288,9 +288,18 @@ async def brand_voice_prompt_block(user_id: str, *, limit: int = 5) -> str:
     rows = await db.cortex_memory.find(
         {"user_id": user_id, "kind": "brand_voice"},
         {"_id": 0, "embedding": 0},
-    ).sort("created_at", -1).limit(max(1, min(20, limit))).to_list(length=limit)
+    ).limit(max(1, min(20, limit)) * 2).to_list(length=limit * 2)
     if not rows:
         return ""
+    # Sort by user-defined order (drag-reorder via /brand-voice/reorder)
+    # with created_at desc as fallback for legacy rows that lack order.
+    def _key(r: dict):
+        meta = r.get("meta") or {}
+        order = meta.get("order")
+        ts = (r.get("created_at").timestamp() if r.get("created_at") else 0)
+        return (1, 0, -ts) if order is None else (0, order, 0)
+    rows.sort(key=_key)
+    rows = rows[:limit]
     import re as _re
     lines = []
     for r in rows:

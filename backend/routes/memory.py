@@ -345,14 +345,112 @@ async def promote_hook_to_brand_voice(payload: _PromoteHookRequest, request: Req
 @api.get("/memory/brand-voice")
 async def list_brand_voice(request: Request):
     """List the user's promoted brand-voice anchors. Powers a viewer
-    panel on the dashboard so users see exactly what they've taught
-    the system."""
+    panel on the dashboard. Sorted by `meta.order` asc (drag-reorder)
+    with `created_at` desc as fallback for legacy rows."""
     user = await get_current_user(request)
     rows = await db.cortex_memory.find(
         {"user_id": user.user_id, "kind": "brand_voice"},
         {"_id": 0, "embedding": 0},
-    ).sort("created_at", -1).limit(50).to_list(length=50)
+    ).limit(50).to_list(length=50)
+    # In-memory secondary sort. Rows WITH meta.order land first (asc);
+    # rows WITHOUT order come after, sorted by created_at desc.
+    def _key(r: dict):
+        meta = r.get("meta") or {}
+        order = meta.get("order")
+        ts = (r.get("created_at").timestamp() if r.get("created_at") else 0)
+        return (1, 0, -ts) if order is None else (0, order, 0)
+    rows.sort(key=_key)
     return {"brand_voice": rows, "count": len(rows)}
+
+
+class _NewAnchorRequest(BaseModel):
+    text:     str = Field(..., min_length=4, max_length=600)
+    platform: Optional[str] = Field(default=None, max_length=32)
+
+
+@api.post("/memory/brand-voice")
+async def create_brand_voice_anchor(payload: _NewAnchorRequest, request: Request):
+    """Write a brand-voice anchor *from scratch* — without an existing
+    winning_hook. Lets users seed voice patterns before they have any
+    winners, or capture aspirational copy from external sources."""
+    user = await get_current_user(request)
+    text = payload.text.strip()
+    template = (
+        f"This user's audience reacts strongly to this hook style — "
+        f"prefer this voice/length/cadence in new content: \"{text}\""
+    )
+    new_id = await remember(
+        user.user_id, "brand_voice", template,
+        meta={
+            "platform": (payload.platform or "").lower() or None,
+            "source":   "manual",
+        },
+        # No dedupe_key — manual anchors are intentionally additive.
+    )
+    if not new_id:
+        raise HTTPException(status_code=400, detail="Could not embed anchor")
+    return {"ok": True, "id": new_id}
+
+
+class _ReorderRequest(BaseModel):
+    ids: list[str] = Field(..., max_length=50)
+
+
+@api.patch("/memory/brand-voice/reorder")
+async def reorder_brand_voice(payload: _ReorderRequest, request: Request):
+    """Persist a drag-reordered priority for brand-voice anchors.
+    Writes `meta.order` (0 = highest priority) so the prompt block
+    builder emits the most-wanted patterns first."""
+    user = await get_current_user(request)
+    for idx, mem_id in enumerate(payload.ids):
+        await db.cortex_memory.update_one(
+            {"id": mem_id, "user_id": user.user_id, "kind": "brand_voice"},
+            {"$set": {"meta.order": idx}},
+        )
+    return {"ok": True, "count": len(payload.ids)}
+
+
+class _TestVoiceRequest(BaseModel):
+    topic: str = Field(..., min_length=4, max_length=240)
+
+
+@api.post("/memory/brand-voice/test")
+async def test_brand_voice(payload: _TestVoiceRequest, request: Request):
+    """Generate a tiny Nova preview that applies the user's current
+    brand-voice anchors. Cheap by design (`fast` route = haiku, ~60
+    words) so the modal can offer instant "what does my voice sound
+    like" feedback without burning LLM budget."""
+    from routes.ai import _gated_user, _llm, send_with_usage
+    from routes.feedback_loop import brand_voice_prompt_block
+    from routes.model_router import for_task
+    user = await _gated_user(request)
+    bv = await brand_voice_prompt_block(user.user_id, limit=5)
+    if not bv:
+        raise HTTPException(
+            status_code=422,
+            detail="No brand voice anchors set — add one first.",
+        )
+    system = (
+        "You are Nova, the user's copy specialist. Produce ONE short "
+        "draft (max 60 words, single paragraph, no hashtags, no "
+        "preamble). The output MUST audibly echo the brand-voice "
+        "anchors below."
+        + bv
+    )
+    provider, model = for_task("fast")  # haiku for cost control
+    session_id = f"bv_test:{user.user_id}"
+    try:
+        chat = _llm(session_id, system, model=model, provider=provider)
+        text, usage = await send_with_usage(
+            chat, f"Draft a {payload.topic.strip()} hook.",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"LLM unavailable: {str(e)[:200]}")
+    return {
+        "draft":  (text or "").strip(),
+        "model":  f"{provider}/{model}",
+        "tokens": usage.get("total_tokens", 0),
+    }
 
 
 @api.post("/memory/reindex")

@@ -137,13 +137,14 @@ const RunOSModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-      onClick={close} data-testid="os-run-modal">
+      onClick={close} data-testid="os-run-modal"
+      role="dialog" aria-modal="true" aria-labelledby="os-run-modal-title">
       <div className="w-full max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl border border-violet-500/30 bg-zinc-950 p-6"
         onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-4">
           <div>
             <div className="text-[10px] uppercase tracking-widest text-violet-400 font-bold mb-1">5-Role Chain</div>
-            <h2 className="text-2xl font-bold text-white">Run Marketing OS</h2>
+            <h2 id="os-run-modal-title" className="text-2xl font-bold text-white">Run Marketing OS</h2>
             <p className="text-xs text-zinc-400 mt-1">Strategy → Intelligence → Content → Distribution → Analytics</p>
             {campaignName && (
               <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 text-[10px] font-semibold uppercase tracking-wider" data-testid="os-run-campaign-pill">

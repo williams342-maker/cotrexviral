@@ -537,3 +537,94 @@ class TestBrandVoiceFeature:
             assert "embedding" not in row  # projection MUST exclude
         finally:
             self._cleanup()
+
+
+class TestBrandVoiceManualAndReorder:
+    """Manual anchor creation + drag-reorder persistence."""
+
+    def _cleanup(self) -> None:
+        cli, db = _db()
+        asyncio.get_event_loop().run_until_complete(
+            db.cortex_memory.delete_many({"user_id": USER_ID, "kind": "brand_voice"}),
+        )
+        cli.close()
+
+    def test_create_anchor_auth_required(self):
+        r = httpx.post(
+            f"{API_URL}/api/memory/brand-voice",
+            json={"text": "x" * 10}, timeout=10,
+        )
+        assert r.status_code == 401
+
+    def test_create_anchor_validates_length(self):
+        r = httpx.post(
+            f"{API_URL}/api/memory/brand-voice", headers=H,
+            json={"text": "xx"}, timeout=10,
+        )
+        assert r.status_code == 422
+
+    def test_create_anchor_succeeds_and_lists(self):
+        try:
+            r = httpx.post(
+                f"{API_URL}/api/memory/brand-voice", headers=H,
+                json={"text": "Lead with what hurts. End with how to fix it."},
+                timeout=10,
+            )
+            assert r.status_code == 200
+            new_id = r.json()["id"]
+            list_r = httpx.get(f"{API_URL}/api/memory/brand-voice", headers=H, timeout=10)
+            anchors = list_r.json()["brand_voice"]
+            row = next(a for a in anchors if a["id"] == new_id)
+            assert row["meta"]["source"] == "manual"
+            # Anchor text round-trips through the prompt-wrapper.
+            assert "Lead with what hurts" in row["text"]
+        finally:
+            self._cleanup()
+
+    def test_reorder_persists_meta_order(self):
+        try:
+            ids = [
+                httpx.post(
+                    f"{API_URL}/api/memory/brand-voice", headers=H,
+                    json={"text": f"Anchor number {i} for reorder."}, timeout=10,
+                ).json()["id"] for i in range(3)
+            ]
+            # Reverse the natural creation order.
+            reversed_ids = list(reversed(ids))
+            r = httpx.patch(
+                f"{API_URL}/api/memory/brand-voice/reorder", headers=H,
+                json={"ids": reversed_ids}, timeout=10,
+            )
+            assert r.status_code == 200
+            list_r = httpx.get(f"{API_URL}/api/memory/brand-voice", headers=H, timeout=10)
+            returned_order = [r["id"] for r in list_r.json()["brand_voice"]]
+            # The reordered ids come first (meta.order asc), exactly in
+            # the order we just PATCHed.
+            assert returned_order[:3] == reversed_ids
+        finally:
+            self._cleanup()
+
+
+class TestBrandVoiceTest:
+    """The "Test this voice" endpoint — guards only (avoid live LLM
+    spend in CI)."""
+
+    def test_test_endpoint_auth_required(self):
+        r = httpx.post(
+            f"{API_URL}/api/memory/brand-voice/test",
+            json={"topic": "test"}, timeout=10,
+        )
+        assert r.status_code == 401
+
+    def test_test_endpoint_422_when_no_anchors(self):
+        # Cleanup any stray anchors, then call.
+        cli, db = _db()
+        asyncio.get_event_loop().run_until_complete(
+            db.cortex_memory.delete_many({"user_id": USER_ID, "kind": "brand_voice"}),
+        )
+        cli.close()
+        r = httpx.post(
+            f"{API_URL}/api/memory/brand-voice/test", headers=H,
+            json={"topic": "launch announcement"}, timeout=10,
+        )
+        assert r.status_code == 422

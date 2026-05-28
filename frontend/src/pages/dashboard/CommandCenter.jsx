@@ -117,13 +117,14 @@ const NewCampaignModal = ({ open, onClose, onCreated }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-      onClick={close} data-testid="new-campaign-modal">
+      onClick={close} data-testid="new-campaign-modal"
+      role="dialog" aria-modal="true" aria-labelledby="new-campaign-modal-title">
       <div className="w-full max-w-md rounded-2xl border border-cyan-500/30 bg-zinc-950 p-6"
         onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-4">
           <div>
             <div className="text-[10px] uppercase tracking-widest text-cyan-400 font-bold mb-1">Campaign Board</div>
-            <h2 className="text-xl font-bold text-white">New campaign</h2>
+            <h2 id="new-campaign-modal-title" className="text-xl font-bold text-white">New campaign</h2>
             <p className="text-xs text-zinc-400 mt-1">Name + goal to start — you can flesh out audience and pillars later.</p>
           </div>
           <button onClick={close} className="text-zinc-500 hover:text-white text-2xl leading-none" data-testid="new-campaign-close">×</button>
@@ -379,6 +380,16 @@ const CommandCenter = () => {
   const [bvOpen, setBvOpen] = useState(false);
   const [bvData, setBvData] = useState(null);
   const [bvLoading, setBvLoading] = useState(false);
+  // Drag-reorder state
+  const [bvDragId, setBvDragId] = useState(null);
+  // Inline "write a new anchor" form
+  const [newAnchorText, setNewAnchorText] = useState('');
+  const [newAnchorSaving, setNewAnchorSaving] = useState(false);
+  // "Test this voice" widget
+  const [testTopic, setTestTopic] = useState('');
+  const [testDraft, setTestDraft] = useState('');
+  const [testRunning, setTestRunning] = useState(false);
+
   const openBrandVoiceViewer = async () => {
     setBvOpen(true);
     if (bvData === null && !bvLoading) {
@@ -393,6 +404,11 @@ const CommandCenter = () => {
       }
     }
   };
+  const closeBrandVoiceViewer = () => {
+    setBvOpen(false);
+    setTestDraft(''); setTestTopic('');
+    setNewAnchorText('');
+  };
   const demoteBrandVoice = async (memId) => {
     if (!window.confirm('Remove this voice anchor? Nova will stop using it in future generations.')) return;
     try {
@@ -403,6 +419,95 @@ const CommandCenter = () => {
       toast({ title: 'Could not remove', description: e.response?.data?.detail || e.message });
     }
   };
+
+  // ---- Reorder handlers (HTML5 drag-and-drop) ----------------------
+  const onBvDragStart = (id) => setBvDragId(id);
+  const onBvDragEnd = () => setBvDragId(null);
+  const onBvDrop = async (targetId) => {
+    if (!bvDragId || bvDragId === targetId) { setBvDragId(null); return; }
+    const items = [...(bvData || [])];
+    const fromIdx = items.findIndex((r) => r.id === bvDragId);
+    const toIdx   = items.findIndex((r) => r.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) { setBvDragId(null); return; }
+    const [moved] = items.splice(fromIdx, 1);
+    items.splice(toIdx, 0, moved);
+    setBvData(items);
+    setBvDragId(null);
+    try {
+      await axios.patch(
+        `${API}/memory/brand-voice/reorder`,
+        { ids: items.map((r) => r.id) },
+        { withCredentials: true },
+      );
+    } catch (e) {
+      // Rollback on failure.
+      toast({ title: 'Could not save order', description: e.response?.data?.detail || e.message });
+      setBvData((prev) => prev);  // optimistic — server is authoritative on next reload
+    }
+  };
+
+  // ---- "Write a new anchor" -----------------------------------------
+  const saveNewAnchor = async () => {
+    if (!newAnchorText.trim()) return;
+    setNewAnchorSaving(true);
+    try {
+      const r = await axios.post(
+        `${API}/memory/brand-voice`,
+        { text: newAnchorText.trim() },
+        { withCredentials: true },
+      );
+      // Re-fetch so order + ids are in sync with the server.
+      const list = await axios.get(`${API}/memory/brand-voice`, { withCredentials: true });
+      setBvData(list.data.brand_voice || []);
+      setNewAnchorText('');
+      toast({ title: 'Anchor added', description: 'Nova will lean on this pattern in every future draft.' });
+      return r.data.id;
+    } catch (e) {
+      toast({ title: 'Could not save anchor', description: e.response?.data?.detail || e.message });
+    } finally {
+      setNewAnchorSaving(false);
+    }
+  };
+
+  // ---- "Test this voice" --------------------------------------------
+  const runVoiceTest = async () => {
+    if (!testTopic.trim()) return;
+    setTestRunning(true);
+    setTestDraft('');
+    try {
+      const r = await axios.post(
+        `${API}/memory/brand-voice/test`,
+        { topic: testTopic.trim() },
+        { withCredentials: true },
+      );
+      setTestDraft(r.data.draft || '(empty draft — try a different topic)');
+    } catch (e) {
+      const code = e.response?.status;
+      const msg = code === 422
+        ? 'Add at least one anchor first.'
+        : (e.response?.data?.detail || e.message);
+      toast({ title: 'Test failed', description: msg });
+    } finally {
+      setTestRunning(false);
+    }
+  };
+
+  // Global Escape-to-close for any open modal — declared AFTER the
+  // brand-voice state hooks so the closure can read `bvOpen` /
+  // `closeBrandVoiceViewer` legally (TDZ-safe).
+  useEffect(() => {
+    if (!runOpen && !newCampOpen && !bvOpen) return;
+    const handler = (e) => {
+      if (e.key === 'Escape') {
+        if (bvOpen) closeBrandVoiceViewer();
+        else if (newCampOpen) setNewCampOpen(false);
+        else if (runOpen) setRunOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runOpen, newCampOpen, bvOpen]);
 
   return (
     <DashboardLayout
@@ -742,21 +847,33 @@ const CommandCenter = () => {
         onCreated={load}
       />
 
-      {/* Brand-voice viewer modal — shows everything the user has
-          promoted, with a per-row remove (so they can correct mistakes
-          without dropping into the raw Memory page). */}
+      {/* Brand-voice viewer modal — drag-reorder, write-from-scratch,
+          and inline "test this voice" preview. */}
       {bvOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-          onClick={() => setBvOpen(false)} data-testid="brand-voice-modal">
-          <div className="w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-2xl border border-violet-500/30 bg-zinc-950 p-6"
-            onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={closeBrandVoiceViewer}
+          data-testid="brand-voice-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bv-modal-title"
+        >
+          <div
+            className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-violet-500/30 bg-zinc-950 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-start justify-between mb-4">
               <div>
                 <div className="text-[10px] uppercase tracking-widest text-violet-400 font-bold mb-1">Brand Voice</div>
-                <h2 className="text-xl font-bold text-white">Pinned voice anchors</h2>
-                <p className="text-xs text-zinc-400 mt-1">Every Nova generation echoes these. Click ✕ to remove an anchor.</p>
+                <h2 id="bv-modal-title" className="text-xl font-bold text-white">Pinned voice anchors</h2>
+                <p className="text-xs text-zinc-400 mt-1">Drag to reorder · top = highest priority. Nova echoes these in every draft.</p>
               </div>
-              <button onClick={() => setBvOpen(false)} className="text-zinc-500 hover:text-white text-2xl leading-none" data-testid="brand-voice-close">×</button>
+              <button
+                onClick={closeBrandVoiceViewer}
+                className="text-zinc-500 hover:text-white text-2xl leading-none focus:outline-none focus:ring-2 focus:ring-violet-500/40 rounded"
+                data-testid="brand-voice-close"
+                aria-label="Close brand voice viewer"
+              >×</button>
             </div>
 
             {bvLoading ? (
@@ -767,19 +884,30 @@ const CommandCenter = () => {
               <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.04] p-4 text-sm text-zinc-300 leading-relaxed" data-testid="brand-voice-empty">
                 <div className="font-semibold mb-1">No voice anchors yet.</div>
                 <div className="text-xs text-zinc-400">
-                  Promote a winning hook from the <span className="text-emerald-300">Recent Wins</span> card to seed your brand voice. Once promoted, Nova will lean on that pattern in every future generation — Compose drafts, signal-driven posts, and OS chain runs.
+                  Add an anchor below, or promote a winning hook from the <span className="text-emerald-300">Recent Wins</span> card. Once you have anchors, Nova will echo them in every Compose draft, signal-driven post, and OS chain run.
                 </div>
               </div>
             ) : (
               <div className="space-y-2" data-testid="brand-voice-list">
                 {(bvData || []).map((bv) => {
-                  // Extract the anchor text from the promotion-wrapper.
                   const m = (bv.text || '').match(/"([^"]+)"/);
                   const anchor = m ? m[1] : (bv.text || '');
                   const plat = bv.meta?.platform;
                   const rate = bv.meta?.engagement_rate;
+                  const isManual = bv.meta?.source === 'manual';
                   return (
-                    <div key={bv.id} className="rounded-lg border border-white/5 bg-zinc-950/40 p-3 flex items-start gap-3" data-testid={`brand-voice-row-${bv.id}`}>
+                    <div
+                      key={bv.id}
+                      draggable
+                      onDragStart={() => onBvDragStart(bv.id)}
+                      onDragEnd={onBvDragEnd}
+                      onDragOver={(e) => { if (bvDragId && bvDragId !== bv.id) e.preventDefault(); }}
+                      onDrop={() => onBvDrop(bv.id)}
+                      className={`rounded-lg border bg-zinc-950/40 p-3 flex items-start gap-3 cursor-grab active:cursor-grabbing transition-colors ${
+                        bvDragId === bv.id ? 'opacity-40 border-violet-500/60' : 'border-white/5 hover:border-violet-500/30'
+                      }`}
+                      data-testid={`brand-voice-row-${bv.id}`}
+                    >
                       <span className="w-6 h-6 rounded-md bg-violet-500/15 border border-violet-500/30 text-violet-300 flex items-center justify-center shrink-0 mt-0.5">
                         <Star size={11} />
                       </span>
@@ -788,6 +916,7 @@ const CommandCenter = () => {
                         <div className="flex items-center gap-2 mt-1.5 text-[10px] text-zinc-500">
                           {plat && <span className="uppercase tracking-wider">{plat}</span>}
                           {rate != null && <span className="text-emerald-400 tabular-nums">{Math.round(rate * 1000) / 10}%</span>}
+                          {isManual && <span className="text-violet-400 italic">manual</span>}
                           {bv.created_at && <span>· promoted {new Date(bv.created_at).toLocaleDateString()}</span>}
                         </div>
                       </div>
@@ -795,7 +924,7 @@ const CommandCenter = () => {
                         type="button"
                         onClick={() => demoteBrandVoice(bv.id)}
                         aria-label="Remove voice anchor"
-                        className="text-zinc-500 hover:text-rose-300 shrink-0 p-1"
+                        className="text-zinc-500 hover:text-rose-300 shrink-0 p-1 focus:outline-none focus:ring-2 focus:ring-rose-500/40 rounded"
                         data-testid={`brand-voice-demote-${bv.id}`}
                         title="Remove this voice anchor"
                       >
@@ -804,6 +933,66 @@ const CommandCenter = () => {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Write a new anchor from scratch */}
+            <div className="mt-5 rounded-lg border border-white/10 bg-white/[0.02] p-3" data-testid="brand-voice-new-block">
+              <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-2">Add an anchor</div>
+              <div className="flex gap-2">
+                <input
+                  value={newAnchorText}
+                  onChange={(e) => setNewAnchorText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && newAnchorText.trim()) saveNewAnchor(); }}
+                  placeholder="e.g. 'Stop measuring what's easy. Measure what matters.'"
+                  maxLength={600}
+                  className="flex-1 bg-zinc-900 border border-white/10 rounded-md p-2 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-violet-500/40"
+                  data-testid="brand-voice-new-input"
+                />
+                <button
+                  onClick={saveNewAnchor}
+                  disabled={!newAnchorText.trim() || newAnchorSaving}
+                  className="px-3 rounded-md bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium disabled:opacity-50 flex items-center gap-1"
+                  data-testid="brand-voice-new-add"
+                >
+                  {newAnchorSaving ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+                  Add
+                </button>
+              </div>
+            </div>
+
+            {/* Test this voice — instant Nova preview */}
+            {(bvData || []).length > 0 && (
+              <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3" data-testid="brand-voice-test-block">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles size={12} className="text-emerald-300" />
+                  <div className="text-[10px] uppercase tracking-widest text-emerald-300 font-bold">Test this voice</div>
+                  <span className="text-[10px] text-zinc-500">— see what Nova would draft right now</span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={testTopic}
+                    onChange={(e) => setTestTopic(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && testTopic.trim() && !testRunning) runVoiceTest(); }}
+                    placeholder="Topic — e.g. 'launching a pricing experiment'"
+                    maxLength={240}
+                    className="flex-1 bg-zinc-900 border border-white/10 rounded-md p-2 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/40"
+                    data-testid="brand-voice-test-input"
+                  />
+                  <button
+                    onClick={runVoiceTest}
+                    disabled={!testTopic.trim() || testRunning}
+                    className="px-3 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium disabled:opacity-50 flex items-center gap-1"
+                    data-testid="brand-voice-test-run"
+                  >
+                    {testRunning ? <><Loader2 size={11} className="animate-spin" /> Drafting…</> : <><Play size={11} /> Test</>}
+                  </button>
+                </div>
+                {testDraft && (
+                  <div className="mt-3 rounded-md border border-emerald-500/30 bg-zinc-950/50 p-3 text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap" data-testid="brand-voice-test-draft">
+                    {testDraft}
+                  </div>
+                )}
               </div>
             )}
           </div>
