@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import {
   TrendingUp, Loader2, RefreshCw, ExternalLink, MessageSquare,
-  ArrowUp, Sparkles, Settings as SettingsIcon, X as XIcon, Plus,
+  ArrowUp, Sparkles, Settings as SettingsIcon, X as XIcon, Plus, Info,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { API } from '../../context/AuthContext';
@@ -15,6 +15,7 @@ const Trends = () => {
   const { toast } = useToast();
   const [trends, setTrends] = useState([]);
   const [seeds, setSeeds] = useState({ subreddits: [], keywords: [], user_configured: false });
+  const [sourceStatus, setSourceStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [ingesting, setIngesting] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
@@ -22,9 +23,10 @@ const Trends = () => {
   const [draftKws, setDraftKws] = useState([]);
 
   const load = async () => {
-    const [t, s] = await Promise.all([
+    const [t, s, st] = await Promise.all([
       axios.get(`${API}/trends/recent?limit=50`, { withCredentials: true }).catch(() => null),
       axios.get(`${API}/trends/seeds`, { withCredentials: true }).catch(() => null),
+      axios.get(`${API}/trends/status`, { withCredentials: true }).catch(() => null),
     ]);
     if (t?.data) setTrends(t.data.trends || []);
     if (s?.data) {
@@ -32,6 +34,7 @@ const Trends = () => {
       setDraftSubs(s.data.subreddits || []);
       setDraftKws(s.data.keywords || []);
     }
+    if (st?.data) setSourceStatus(st.data);
   };
 
   useEffect(() => { load().finally(() => setLoading(false)); }, []);
@@ -44,10 +47,12 @@ const Trends = () => {
       if (subreddits !== undefined) body.subreddits = subreddits;
       if (keywords !== undefined) body.keywords = keywords;
       const r = await axios.post(`${API}/trends/ingest`, body, { withCredentials: true });
-      toast({
-        title: `Pulled ${r.data.reddit + r.data.gtrends} signals`,
-        description: `Reddit: ${r.data.reddit} · Google Trends: ${r.data.gtrends}`,
-      });
+      const total = (r.data.reddit || 0) + (r.data.gtrends || 0);
+      const desc =
+        r.data.reddit_configured === false
+          ? `Google Trends: ${r.data.gtrends} · Reddit skipped (not configured)`
+          : `Reddit: ${r.data.reddit} · Google Trends: ${r.data.gtrends}`;
+      toast({ title: `Pulled ${total} signal${total === 1 ? '' : 's'}`, description: desc });
       await load();
     } catch (e) {
       toast({ title: 'Ingest failed', description: e.response?.data?.detail || e.message });
@@ -87,6 +92,24 @@ const Trends = () => {
       }
     >
       <div className="cv-dash-scope" data-testid="trends-page">
+
+        {/* Reddit-not-configured hint */}
+        {sourceStatus?.reddit?.configured === false && (
+          <div
+            className="cv-glass rounded-2xl p-3.5 mb-4 flex items-start gap-3 border-amber-500/30 bg-amber-500/5"
+            data-testid="trends-reddit-unconfigured-banner"
+          >
+            <Info size={15} className="text-amber-300 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[12.5px] text-amber-200 font-semibold">Reddit ingestion is offline</p>
+              <p className="text-[11.5px] text-zinc-400 leading-relaxed mt-0.5">
+                Add a free Reddit "script" app at{' '}
+                <a href="https://www.reddit.com/prefs/apps" target="_blank" rel="noopener noreferrer" className="text-amber-300 underline">reddit.com/prefs/apps</a>{' '}
+                and paste <code className="text-amber-200">REDDIT_CLIENT_ID</code> + <code className="text-amber-200">REDDIT_CLIENT_SECRET</code> into the backend env. Google Trends keeps working in the meantime.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Seeds + counts */}
         <div className="cv-glass rounded-2xl p-4 mb-5 flex items-center flex-wrap gap-3" data-testid="trends-seeds-strip">

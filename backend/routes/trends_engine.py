@@ -1,8 +1,13 @@
 """Trend ingestion engine — pulls real-world signals into user memory.
 
-Sources (no extra API keys required):
-  • Reddit — public JSON endpoints `/r/{sub}/hot.json` (top 5 hot posts).
-  • Google Trends — `pytrends` (unofficial scraper, but stable).
+Sources:
+  • Reddit — via OAuth2 `client_credentials` on `oauth.reddit.com`.
+    Reddit's anonymous JSON endpoints (`www.reddit.com/r/*.json`) return
+    403 from datacenter IPs since the 2023 API lockdown, so we use the
+    free "application-only" OAuth grant. Requires REDDIT_CLIENT_ID +
+    REDDIT_CLIENT_SECRET (create a "script" app at
+    https://www.reddit.com/prefs/apps). Gracefully skipped if missing.
+  • Google Trends — `pytrends` (unofficial, but stable). No key needed.
   • X (Twitter) — TODO. Requires paid API tier, scaffolded for later.
 
 Storage:
@@ -16,6 +21,7 @@ Endpoints:
   POST /api/trends/ingest body {keywords?: [str], subreddits?: [str]}
        → on-demand pull for the calling user. Limits: 10 subs, 5 keywords.
   GET  /api/trends/recent → user's last 30 trend memories.
+  GET  /api/trends/status → reports which sources are configured.
 
 Background job:
   `refresh_trends_for_all_users` runs every 6h via the scheduler. Iterates
@@ -24,11 +30,13 @@ Background job:
 """
 import asyncio
 import logging
+import os
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
-from fastapi import Request, HTTPException
+from fastapi import Request
 from pydantic import BaseModel, Field
 
 from core import db, api
@@ -36,6 +44,55 @@ from deps import get_current_user
 from routes.memory import remember
 
 logger = logging.getLogger(__name__)
+
+REDDIT_CLIENT_ID = (os.environ.get("REDDIT_CLIENT_ID") or "").strip()
+REDDIT_CLIENT_SECRET = (os.environ.get("REDDIT_CLIENT_SECRET") or "").strip()
+REDDIT_USER_AGENT = (
+    os.environ.get("REDDIT_USER_AGENT")
+    or "python:cortexviral.trends:v1.0 (by /u/cortexviral)"
+).strip()
+
+
+def _reddit_configured() -> bool:
+    return bool(REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET)
+
+
+# In-process Reddit OAuth token cache. App-only tokens last 24h; we
+# refresh after 50min to leave buffer. Single-process worker → in-memory
+# is fine; tokens are not user-specific.
+_reddit_token_cache: dict = {"token": None, "expires_at": 0.0}
+
+
+async def _reddit_app_token() -> Optional[str]:
+    """Fetch (and cache) a Reddit application-only OAuth bearer token.
+    Returns None if creds aren't configured or the auth call fails."""
+    if not _reddit_configured():
+        return None
+    now = time.time()
+    if _reddit_token_cache["token"] and _reddit_token_cache["expires_at"] > now + 30:
+        return _reddit_token_cache["token"]
+    try:
+        async with httpx.AsyncClient(timeout=15) as cli:
+            r = await cli.post(
+                "https://www.reddit.com/api/v1/access_token",
+                auth=(REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET),
+                data={"grant_type": "client_credentials"},
+                headers={"User-Agent": REDDIT_USER_AGENT},
+            )
+        if r.status_code != 200:
+            logger.warning("Reddit token fetch failed: %s %s", r.status_code, r.text[:200])
+            return None
+        body = r.json() or {}
+        token = body.get("access_token")
+        ttl = int(body.get("expires_in") or 3600)
+        if not token:
+            return None
+        _reddit_token_cache["token"] = token
+        _reddit_token_cache["expires_at"] = now + min(ttl, 3000)
+        return token
+    except Exception:
+        logger.exception("Reddit token fetch crashed")
+        return None
 
 
 # Niche → default subreddits / keyword seeds. Used when the user hasn't
@@ -76,22 +133,30 @@ async def _fetch_reddit_hot(subreddit: str, limit: int = 5) -> list[dict]:
     """Returns a list of {id, title, score, url, comments} for the top
     `limit` hot posts in /r/{subreddit}. Empty list on any failure.
 
-    NOTE: Reddit blocks the unauthenticated JSON endpoint from many
-    datacenter IPs (AWS/GCP/etc.) with a 403. The code path below is
-    correct and works from residential IPs. For production reliability,
-    set up Reddit OAuth (https://www.reddit.com/prefs/apps) and switch
-    to `oauth.reddit.com` with an access token — see the TODO note in
-    the module docstring.
+    Uses Reddit's app-only OAuth flow on `oauth.reddit.com`. Anonymous
+    `www.reddit.com/r/*.json` access returns 403 from datacenter IPs.
+    When `REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET` are not set we return
+    an empty list quickly (no network call).
     """
-    url = f"https://www.reddit.com/r/{subreddit}/hot.json?limit={limit}&raw_json=1"
+    token = await _reddit_app_token()
+    if not token:
+        return []
+    url = f"https://oauth.reddit.com/r/{subreddit}/hot?limit={limit}&raw_json=1"
     headers = {
-        "User-Agent": "CortexViralBot/1.0 (+https://cortexviral.com)",
+        "Authorization": f"Bearer {token}",
+        "User-Agent": REDDIT_USER_AGENT,
         "Accept": "application/json",
     }
     try:
         async with httpx.AsyncClient(timeout=15) as cli:
             r = await cli.get(url, headers=headers)
+        if r.status_code == 401:
+            # token possibly expired mid-flight; flush and bail (next run retries).
+            _reddit_token_cache["token"] = None
+            _reddit_token_cache["expires_at"] = 0.0
+            return []
         if r.status_code != 200:
+            logger.warning("Reddit %s returned %s", subreddit, r.status_code)
             return []
         children = ((r.json() or {}).get("data") or {}).get("children") or []
         out = []
@@ -164,21 +229,23 @@ async def ingest_trends_for_user(user_id: str) -> dict:
     subreddits, keywords = _seeds_for_user(user_doc)
 
     reddit_count = 0
-    for sub in subreddits:
-        posts = await _fetch_reddit_hot(sub, limit=5)
-        for p in posts:
-            text = f"r/{p['subreddit']} ({p['score']} upvotes, {p['num_comments']} comments): {p['title']}"
-            await remember(
-                user_id, "trend", text,
-                meta={
-                    "source": "reddit",
-                    "subreddit": p["subreddit"],
-                    "score": p["score"],
-                    "permalink": p["permalink"],
-                },
-                dedupe_key=f"reddit:{p['id']}",
-            )
-            reddit_count += 1
+    reddit_skipped = not _reddit_configured()
+    if not reddit_skipped:
+        for sub in subreddits:
+            posts = await _fetch_reddit_hot(sub, limit=5)
+            for p in posts:
+                text = f"r/{p['subreddit']} ({p['score']} upvotes, {p['num_comments']} comments): {p['title']}"
+                await remember(
+                    user_id, "trend", text,
+                    meta={
+                        "source": "reddit",
+                        "subreddit": p["subreddit"],
+                        "score": p["score"],
+                        "permalink": p["permalink"],
+                    },
+                    dedupe_key=f"reddit:{p['id']}",
+                )
+                reddit_count += 1
 
     gtrends_count = 0
     for kw in keywords:
@@ -194,7 +261,9 @@ async def ingest_trends_for_user(user_id: str) -> dict:
             gtrends_count += 1
 
     return {"reddit": reddit_count, "gtrends": gtrends_count,
-            "subreddits": subreddits, "keywords": keywords}
+            "reddit_configured": not reddit_skipped,
+            "subreddits": subreddits if not reddit_skipped else [],
+            "keywords": keywords}
 
 
 # ---------------------------------------------------------------------------
@@ -268,4 +337,27 @@ async def get_seeds(request: Request):
         "subreddits": subs,
         "keywords": kws,
         "user_configured": bool(doc.get("niche_subreddits") or doc.get("niche_keywords")),
+    }
+
+
+
+@api.get("/trends/status")
+async def trends_source_status(request: Request):
+    """Reports which trend sources are currently usable. Helps the
+    frontend show a "Reddit not configured" hint to the user/admin."""
+    await get_current_user(request)
+    return {
+        "reddit": {
+            "configured": _reddit_configured(),
+            "note": (
+                "Set REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET (create a "
+                "'script' app at https://www.reddit.com/prefs/apps) to "
+                "enable Reddit ingestion."
+                if not _reddit_configured() else "Reddit OAuth ready."
+            ),
+        },
+        "gtrends": {
+            "configured": True,
+            "note": "Google Trends always available (pytrends, no key).",
+        },
     }

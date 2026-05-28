@@ -35,6 +35,27 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 37) **📡 Reddit OAuth + Trend Ingestion unblocked**
+  - **Root cause of the 403**: Reddit blocks anonymous `www.reddit.com/r/*.json` requests from datacenter IPs (AWS/GCP/Emergent infra) at the network layer regardless of User-Agent. Verified: `Mozilla/5.0`, `CortexViralBot/1.0`, even `old.reddit.com` → all 403.
+  - **Fix in `routes/trends_engine.py`**: switched Reddit ingestion to the official **OAuth 2.0 application-only** flow (`client_credentials` grant on `https://www.reddit.com/api/v1/access_token` → `https://oauth.reddit.com/r/{sub}/hot`). Free, no user-context required, ~600 req / 10min limit.
+  - **Token cache**: in-process bearer-token cache with 50-min TTL so we hit Reddit's auth endpoint at most ~1× per hour per worker. Auto-flushes on 401 so a mid-flight token expiry self-recovers on the next ingest tick.
+  - **Graceful degradation**: when `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` are blank, the ingest short-circuits with `reddit: 0, reddit_configured: false` — Google Trends still runs, no 500/403 noise in logs.
+  - **New env vars** (added to `/app/backend/.env`, blank by default): `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT` (already pre-filled with a compliant value).
+  - **New endpoint `GET /api/trends/status`** — reports per-source `{configured, note}` so the UI can render a setup hint when Reddit is offline.
+  - **Frontend (`Trends.jsx`)**:
+    - Amber `Reddit ingestion is offline` banner with inline link to `reddit.com/prefs/apps` + the exact env var names to paste.
+    - Ingest toast now reads `"Google Trends: N · Reddit skipped (not configured)"` when Reddit is unavailable, instead of misleadingly counting "Reddit: 0".
+    - Adds `Info` lucide icon import; `data-testid="trends-reddit-unconfigured-banner"`.
+  - **11 new pytest cases** (`tests/test_trends_engine.py`):
+    - `TestTrendsStatus` (2): auth required · per-source shape with `configured`/`note` keys, gtrends always true.
+    - `TestTrendsSeeds` (2): auth required · default-niche fallback returns non-empty subs list.
+    - `TestTrendsIngest` (3): auth required · ingest succeeds without 500/403 when Reddit unconfigured (asserts `reddit_configured: false` + `reddit: 0`) · watch-list (subreddits/keywords) persisted on the user doc.
+    - `TestTrendsRecent` (2): auth required · `/recent` surfaces freshly-ingested gtrends rows.
+    - `TestRedditOAuthScaffolding` (2): `_reddit_configured()` returns False when env blank · `_reddit_app_token()` short-circuits with `None` (no network call) when unconfigured.
+  - **Existing tests still pass**: `test_trends_and_ablab.py` (10) + `test_memory.py` (10) → **31/31 trends-related tests green**.
+  - **What you need to do to enable Reddit**: register a "script" app at https://www.reddit.com/prefs/apps (redirect URI can be anything — we don't use it for app-only flow), paste the `client_id` (the short string under the app name) into `REDDIT_CLIENT_ID` and the `secret` into `REDDIT_CLIENT_SECRET` in `/app/backend/.env`, restart backend. The banner disappears and `/trends/ingest` starts pulling hot posts from each watched subreddit.
+
+
 - 2026-02-26 (part 36) **🔐 Sign-out-everywhere + ⏸️ Pause account + 📧 Password-changed email**
   - **Sessions management** — three new endpoints on `routes/account.py`:
     - `GET /api/account/sessions` returns `{total, others, current:{created_at,expires_at}}` so the dashboard can show "You're signed in on N other devices".
