@@ -47,6 +47,7 @@ const AgentWorkspace = () => {
   const { user } = useAuth();
   const [agents, setAgents] = useState([]);
   const [modes, setModes] = useState([]);
+  const [prefs, setPrefs] = useState({});       // { [agent_id]: mode_id }
   const [mode, setMode] = useState('auto');
   const [activeId, setActiveId] = useState(agentId || 'strategy');
   const [threads, setThreads] = useState({});   // { [agentId]: [{role, content, follow_ups}] }
@@ -54,7 +55,8 @@ const AgentWorkspace = () => {
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef(null);
 
-  // Load agents catalogue + available routing modes (Auto/Fast/Deep/Creative).
+  // Load agents catalogue + available routing modes (Auto/Fast/Deep/Creative)
+  // + the user's persisted per-agent mode preferences.
   useEffect(() => {
     axios.get(`${API}/ai/agent/list`, { withCredentials: true })
       .then((r) => setAgents(r.data.agents || []))
@@ -62,7 +64,25 @@ const AgentWorkspace = () => {
     axios.get(`${API}/ai/agent/modes`, { withCredentials: true })
       .then((r) => setModes(r.data.modes || []))
       .catch(() => setModes([]));
+    axios.get(`${API}/ai/agent/prefs`, { withCredentials: true })
+      .then((r) => setPrefs(r.data.prefs || {}))
+      .catch(() => setPrefs({}));
   }, []);
+
+  // Whenever the active agent changes, hydrate the mode chip from the
+  // saved preference (falls back to 'auto' for first-time visits).
+  useEffect(() => {
+    setMode(prefs[activeId] || 'auto');
+  }, [activeId, prefs]);
+
+  // Persist a mode change to the backend AND keep local state in sync.
+  // Best-effort: a failed PUT just logs and doesn't block the UI.
+  const pickMode = (newMode) => {
+    setMode(newMode);
+    setPrefs((p) => ({ ...p, [activeId]: newMode }));
+    axios.put(`${API}/ai/agent/prefs`, { agent_id: activeId, mode: newMode }, { withCredentials: true })
+      .catch(() => {});
+  };
 
   // Keep URL in sync with active agent
   useEffect(() => {
@@ -70,6 +90,19 @@ const AgentWorkspace = () => {
       navigate(`/dashboard/agent/${activeId}`, { replace: true });
     }
   }, [activeId, agentId, navigate]);
+
+  // Honor `?q=...` query param so the AI Team page can route the user
+  // here with a pre-filled prompt (one-click "Ask Atlas").
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const q = url.searchParams.get('q');
+    if (q && !input) {
+      setInput(q);
+      url.searchParams.delete('q');
+      window.history.replaceState(null, '', url.toString());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -329,7 +362,7 @@ const AgentWorkspace = () => {
                     <button
                       key={m.id}
                       type="button"
-                      onClick={() => setMode(m.id)}
+                      onClick={() => pickMode(m.id)}
                       title={m.blurb}
                       data-testid={`agent-mode-${m.id}`}
                       className={`text-[11px] font-semibold rounded-full px-2.5 h-6 inline-flex items-center transition-colors ${

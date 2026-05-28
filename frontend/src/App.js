@@ -27,6 +27,7 @@ import Studio from './pages/dashboard/Studio';
 import Help from './pages/dashboard/Help';
 import AccountSettings from './pages/dashboard/AccountSettings';
 import AgentWorkspace from './pages/dashboard/AgentWorkspace';
+import AITeam from './pages/dashboard/AITeam';
 import Memory from './pages/dashboard/Memory';
 import Approvals from './pages/dashboard/Approvals';
 import Trends from './pages/dashboard/Trends';
@@ -92,6 +93,7 @@ function AppRouter() {
       <Route path="/dashboard/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
       <Route path="/dashboard/agent" element={<ProtectedRoute><AgentWorkspace /></ProtectedRoute>} />
       <Route path="/dashboard/agent/:agentId" element={<ProtectedRoute><AgentWorkspace /></ProtectedRoute>} />
+      <Route path="/dashboard/team" element={<ProtectedRoute><AITeam /></ProtectedRoute>} />
       <Route path="/dashboard/memory" element={<ProtectedRoute><Memory /></ProtectedRoute>} />
       <Route path="/dashboard/approvals" element={<ProtectedRoute><Approvals /></ProtectedRoute>} />
       <Route path="/dashboard/trends" element={<ProtectedRoute><Trends /></ProtectedRoute>} />

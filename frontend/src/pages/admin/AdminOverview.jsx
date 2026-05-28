@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { API } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
-import { Users, Shield, ShieldCheck, FileText, Send, Inbox, BarChart3, Ticket as TicketIcon, Loader2, Sparkles, Crown, Zap, TrendingUp, Eye, UserPlus, Wand2, CreditCard, Mail, AlertCircle } from 'lucide-react';
+import { Users, Shield, ShieldCheck, FileText, Send, Inbox, BarChart3, Ticket as TicketIcon, Loader2, Sparkles, Crown, Zap, TrendingUp, Eye, UserPlus, Wand2, CreditCard, Mail, AlertCircle, DollarSign } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const AdminOverview = () => {
@@ -11,6 +11,8 @@ const AdminOverview = () => {
   const [funnel, setFunnel] = useState(null);
   const [funnelDays, setFunnelDays] = useState(30);
   const [emailHealth, setEmailHealth] = useState(null);
+  const [llmSpend, setLlmSpend] = useState(null);
+  const [spendDays, setSpendDays] = useState(30);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,8 +21,16 @@ const AdminOverview = () => {
       axios.get(`${API}/admin/ai-usage?months=6`, { withCredentials: true }).then((r) => setAiUsage(r.data)).catch(() => {}),
       axios.get(`${API}/admin/funnel?days=30`, { withCredentials: true }).then((r) => setFunnel(r.data)).catch(() => {}),
       axios.get(`${API}/admin/email/health?hours=24`, { withCredentials: true }).then((r) => setEmailHealth(r.data)).catch(() => {}),
+      axios.get(`${API}/admin/llm-spend?days=30`, { withCredentials: true }).then((r) => setLlmSpend(r.data)).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, []);
+
+  const reloadSpend = (days) => {
+    setSpendDays(days);
+    axios.get(`${API}/admin/llm-spend?days=${days}`, { withCredentials: true })
+      .then((r) => setLlmSpend(r.data))
+      .catch(() => {});
+  };
 
   const reloadFunnel = (days) => {
     setFunnelDays(days);
@@ -126,6 +136,14 @@ const AdminOverview = () => {
 
       <Section title="Email health (last 24h)">
         <EmailHealthCard health={emailHealth} />
+      </Section>
+
+      <Section title="LLM model spend (estimated)">
+        <LlmSpendCard
+          spend={llmSpend}
+          days={spendDays}
+          onChangeDays={reloadSpend}
+        />
       </Section>
 
       <Section title="AI generation analytics">
@@ -400,6 +418,133 @@ const EmailHealthCard = ({ health }) => {
             <div className="text-neutral-500 mt-1 line-clamp-2 italic">{String(last_problem.reason).slice(0, 220)}</div>
           )}
         </div>
+      )}
+    </div>
+  );
+};
+
+
+/* ----------------------------------- LLM spend ---------------------------------- */
+const LlmSpendCard = ({ spend, days, onChangeDays }) => {
+  if (!spend) {
+    return (
+      <div className="bg-white rounded-2xl p-6 border border-neutral-200/70 text-center text-[12.5px] text-neutral-500 italic" data-testid="admin-llm-spend-loading">
+        Loading LLM spend…
+      </div>
+    );
+  }
+  const totalCost = spend.total_estimated_cost || 0;
+  const totalCalls = spend.total_calls || 0;
+  const driver = spend.biggest_driver;
+  const fmtUSD = (v) => `$${(v || 0).toFixed(2)}`;
+  const maxCost = Math.max(0.01, ...(spend.by_mode || []).map((r) => r.cost));
+
+  return (
+    <div className="bg-white rounded-2xl p-6 border border-neutral-200/70" data-testid="admin-llm-spend">
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
+        <div>
+          <div className="text-[13px] text-neutral-500 font-medium flex items-center gap-1.5">
+            <DollarSign size={12} /> Estimated LLM spend · last {days} days
+          </div>
+          <div className="flex items-baseline gap-2 mt-1.5">
+            <span className="text-3xl font-medium tracking-tight text-neutral-900" data-testid="admin-llm-spend-total">{fmtUSD(totalCost)}</span>
+            <span className="text-[13px] text-neutral-500">· {totalCalls.toLocaleString()} call{totalCalls === 1 ? '' : 's'}</span>
+          </div>
+          <div className="text-[11px] text-neutral-400 mt-1">
+            Approximated from per-call cost averages — accuracy ±20%.
+          </div>
+        </div>
+        <div className="inline-flex rounded-full bg-neutral-100 p-1" data-testid="admin-llm-spend-tabs">
+          {[7, 30, 90].map((d) => (
+            <button
+              key={d}
+              onClick={() => onChangeDays(d)}
+              data-testid={`admin-llm-spend-tab-${d}`}
+              className={`px-3 h-7 rounded-full text-[12px] font-semibold transition-colors ${days === d ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
+            >
+              {d}d
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {totalCalls === 0 ? (
+        <div className="text-[12.5px] text-neutral-500 italic py-4 text-center" data-testid="admin-llm-spend-empty">
+          No agent_chat calls in this window yet.
+        </div>
+      ) : (
+        <>
+          {/* Biggest cost driver callout */}
+          {driver && driver.percentage >= 20 && (
+            <div className="rounded-lg border border-violet-200/70 bg-violet-50/50 px-3 py-2.5 mb-5 text-[12.5px] flex items-start gap-2" data-testid="admin-llm-spend-driver">
+              <Sparkles size={13} className="text-violet-600 mt-0.5 shrink-0" />
+              <span className="text-neutral-700 leading-snug">
+                <strong className="text-violet-700">{driver.percentage}%</strong> of spend is
+                {' '}<span className="font-mono text-[12px] bg-white px-1.5 py-0.5 rounded border border-violet-200/60">{driver.model}</span>{' '}
+                from <strong className="capitalize">{driver.agent}</strong>.
+                {driver.percentage >= 60 && (
+                  <span className="text-neutral-500"> Nudge users toward Auto/Fast mode to lower bills.</span>
+                )}
+              </span>
+            </div>
+          )}
+
+          <div className="grid lg:grid-cols-3 gap-5">
+            {/* By mode */}
+            <div data-testid="admin-llm-by-mode">
+              <div className="text-[11.5px] uppercase tracking-wider text-neutral-500 font-semibold mb-2.5">By mode</div>
+              <div className="space-y-2.5">
+                {(spend.by_mode || []).map((r) => {
+                  const pct = totalCost > 0 ? Math.round((r.cost / totalCost) * 100) : 0;
+                  return (
+                    <div key={r.mode}>
+                      <div className="flex items-center justify-between text-[12.5px]">
+                        <span className="capitalize text-neutral-700 font-medium">{r.mode}</span>
+                        <span className="tabular-nums text-neutral-900 font-semibold">{fmtUSD(r.cost)} <span className="text-neutral-400 font-normal">· {pct}%</span></span>
+                      </div>
+                      <div className="h-1.5 bg-neutral-100 rounded-full mt-1 overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-violet-500 to-blue-400" style={{ width: `${Math.max(2, (r.cost / maxCost) * 100)}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* By agent */}
+            <div data-testid="admin-llm-by-agent">
+              <div className="text-[11.5px] uppercase tracking-wider text-neutral-500 font-semibold mb-2.5">By agent</div>
+              <div className="space-y-1.5">
+                {(spend.by_agent || []).slice(0, 6).map((r) => (
+                  <div key={r.agent_id} className="flex items-center justify-between text-[12.5px]">
+                    <span className="capitalize text-neutral-700">{r.agent_id}</span>
+                    <span className="tabular-nums">
+                      <span className="text-neutral-400 mr-2">{r.calls}</span>
+                      <span className="text-neutral-900 font-semibold">{fmtUSD(r.cost)}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Top users */}
+            <div data-testid="admin-llm-top-users">
+              <div className="text-[11.5px] uppercase tracking-wider text-neutral-500 font-semibold mb-2.5">Top spenders</div>
+              {(spend.top_users || []).length === 0 ? (
+                <div className="text-[12px] text-neutral-500 italic">No data.</div>
+              ) : (
+                <div className="space-y-1.5">
+                  {spend.top_users.slice(0, 5).map((u) => (
+                    <div key={u.user_id} className="flex items-center justify-between text-[12.5px]" title={u.user_id}>
+                      <span className="text-neutral-700 truncate max-w-[180px]">{u.email || u.name || u.user_id.slice(0, 12)}</span>
+                      <span className="tabular-nums text-neutral-900 font-semibold">{fmtUSD(u.cost)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

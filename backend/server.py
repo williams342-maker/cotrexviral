@@ -46,6 +46,7 @@ from routes import (  # noqa: F401
     memory,          # Vector memory system (brand profile, posts, agent context)
     approvals,       # Human-in-the-loop approval workflow
     trends_engine,   # Reddit + Google Trends → memory ingestion
+    llm_spend,       # Estimated LLM cost tracking + admin spend dashboard
 )
 
 

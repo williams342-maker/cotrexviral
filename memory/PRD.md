@@ -35,6 +35,38 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 41) **💰 LLM spend dashboard + 🧠 Persisted mode prefs + 🏛️ Unified AI Team page**
+  - **Per-agent mode persistence** (`routes/agent_chat.py`):
+    - New endpoints `GET /api/ai/agent/prefs` (returns `{prefs: {agent_id: mode}}`) and `PUT /api/ai/agent/prefs` body `{agent_id, mode}`. Strictly validated: unknown agent_id or mode → 422 (so a typo'd frontend can never silently write junk).
+    - Persisted on the user doc as `agent_prefs.{agent_id}` (single-doc update — no separate collection).
+    - Frontend `AgentWorkspace.jsx` loads prefs on mount, hydrates the mode chip when the active agent changes, and PUTs on every chip click (best-effort — a failed write doesn't block the UI).
+  - **LLM spend tracking + Admin Overview card** (new `routes/llm_spend.py`):
+    - Every successful agent_chat turn fires `record_llm_call(user_id, agent_id, mode, model)` which writes one row to a new `llm_usage` collection with an *estimated* per-call USD cost. Per-call costs hardcoded from published 2026 pricing (Opus $0.045, Sonnet $0.012, Haiku $0.0012, Gemini 2.5 Pro $0.008, GPT-5 $0.020). Prefix-matches family names so future minor versions inherit the right rate without code changes. Unknown models fall back to a $0.01 default so admins still see *something*.
+    - Handoff sub-agent calls also tracked separately (`agent_id` = the sub-agent).
+    - New `GET /api/admin/llm-spend?days=30` endpoint runs a single `$facet` aggregation returning totals + by_mode + by_agent + by_model + top_users (10) + biggest_driver (the single highest `(model, agent)` pair). `days` clamped 1..365; `days=0` falls back to default 30.
+    - **Admin Overview card** (`AdminOverview.jsx::LlmSpendCard`):
+      • Estimated USD total + call count, with "Approximated from per-call cost averages — accuracy ±20%" disclaimer.
+      • Period toggle (7d / 30d / 90d).
+      • Violet "Biggest cost driver" callout — appears when one (model, agent) pair eats ≥20% of spend: *"50% of spend is `claude-haiku-4-5-20251001` from Kai"*. At ≥60% adds "Nudge users toward Auto/Fast mode to lower bills."
+      • 3-column breakdown: By Mode (with gradient progress bars + %), By Agent (top 6), Top Spenders (top 5 with hydrated email).
+  - **Unified AI Team dashboard** (`/dashboard/team`, new `pages/dashboard/AITeam.jsx`):
+    - "Ask Atlas" hero with one-line input; submitting routes to `/dashboard/agent/strategy?q=<prompt>` and AgentWorkspace auto-prefills the composer.
+    - **4-panel 2×2 grid** with count badges + "Open" CTA on each:
+      • **Active Conversations** (`GET /api/ai/agent/conversations/recent`) — derived from `agent_summary` memory rows via Mongo `$group`; one row per agent_id with the most-recent prompt preview + relative timestamp + color-coded agent badge.
+      • **Pending Approvals** (`GET /api/approvals`) — first 4 posts with platform pills, scheduled date, content preview.
+      • **Recent Memories** (`GET /api/memory/list`) — first 5 with kind badges.
+      • **Trend Signals** (`GET /api/trends/recent`) — first 5 with Reddit/GTrends color-coded source pills, clickable through to permalinks.
+    - Friendly empty states on each panel so a new user sees a guided onboarding view instead of 4 blank cards.
+    - Added "AI Team" link as the **first** sidebar item (uses `Users2` icon from lucide).
+  - **13 new pytest cases** (`tests/test_ai_team_and_spend.py`):
+    - `TestAgentPrefs` (5): auth required · default empty prefs · set→get round-trip with two different agents · 422 on unknown agent_id · 422 on unknown mode.
+    - `TestCostLookup` (2): known model lookups (Opus > Sonnet > Haiku ordering verified) · prefix-match for future versions · unknown models fall back to default cost.
+    - `TestLLMSpendEndpoint` (4): admin auth · empty window → zeros not 404 · LIVE chat call actually writes a row that surfaces in the aggregate · `days` param clamped to 1..365.
+    - `TestRecentConversations` (2): auth · dedupe per-agent (3 chats with Nova → 1 conversation row, latest preview).
+  - **All 51 agent-stack tests pass** (`test_agent_chat.py` + `test_agent_handoff.py` + `test_model_router.py` + `test_agent_stream.py` + `test_ai_team_and_spend.py`).
+  - **Live UI screenshot-verified**: AI Team page renders all 4 panels + Ask Atlas hero correctly. Admin Overview renders the LLM spend card with the "50% of spend is claude-haiku from Kai" insight callout exactly as designed.
+
+
 - 2026-02-28 (part 40) **🔀 SSE streaming + 🤝 Universal agent handoff**
   - **Why**: A handoff (Atlas → Iris) is two sequential LLM calls (~30-50s combined) and was hitting Cloudflare's ~100s ingress idle timeout from the browser even though the backend ran fine. The fix is server-sent events with periodic keepalive pings, AND it lets us show the user *what's happening* during the wait.
   - **Universal handoff**: flipped `can_handoff = True` for every agent (was Atlas-only). Now Sam can ask Iris for keyword trends, Angela can ask Nova for positioning, Kai can ask Sam for SEO context, etc. Single delegation per turn (no chains). Server-side self-handoff guard rejects an agent delegating to itself — would just waste an LLM call in an ephemeral session.

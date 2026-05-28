@@ -295,6 +295,93 @@ async def list_modes(request: Request):
     return {"modes": USER_MODES}
 
 
+@api.get("/ai/agent/conversations/recent")
+async def recent_conversations(request: Request, limit: int = 5):
+    """Latest agent chat threads for the calling user — one row per
+    agent_id with their most recent prompt. Derived from `agent_summary`
+    memory rows so we don't need a separate `conversations` collection.
+
+    Powers the AI Team dashboard's "Active conversations" panel. Empty
+    when the user is brand-new (no memory rows tagged `agent_summary` yet)."""
+    user = await get_current_user(request)
+    limit = max(1, min(20, int(limit or 5)))
+    # Latest row per agent_id. Mongo's $first inside $group with a
+    # pre-sort gives us the most recent prompt per agent.
+    pipeline = [
+        {"$match": {"user_id": user.user_id, "kind": "agent_summary"}},
+        {"$sort": {"created_at": -1}},
+        {"$group": {
+            "_id":     "$meta.agent",
+            "last_at": {"$first": "$created_at"},
+            "preview": {"$first": "$text"},
+        }},
+        {"$sort": {"last_at": -1}},
+        {"$limit": limit},
+    ]
+    raw_rows = await _db.cortex_memory.aggregate(pipeline).to_list(length=limit)
+    rows = []
+    for r in raw_rows:
+        agent = AGENTS.get(r["_id"]) if r.get("_id") else None
+        if not agent:
+            continue
+        # Trim the "User asked Atlas: " prefix the summary template uses
+        # to keep the panel preview tight.
+        preview = (r.get("preview") or "")
+        if ": " in preview:
+            preview = preview.split(": ", 1)[1]
+        rows.append({
+            "agent_id":   agent["id"],
+            "agent_name": agent["name"],
+            "last_at":    r.get("last_at"),
+            "preview":    preview[:160],
+        })
+    return {"conversations": rows, "count": len(rows)}
+
+
+# ---------------------------------------------------------------------------
+# Per-agent mode preferences (persisted on the user doc)
+# ---------------------------------------------------------------------------
+from core import db as _db  # noqa: E402
+
+
+@api.get("/ai/agent/prefs")
+async def get_agent_prefs(request: Request):
+    """Return the user's saved per-agent mode preferences. Shape:
+    `{prefs: {agent_id: mode_id, ...}}`. Missing entries default to 'auto'
+    on the client."""
+    user = await get_current_user(request)
+    doc = await _db.users.find_one(
+        {"user_id": user.user_id}, {"_id": 0, "agent_prefs": 1},
+    ) or {}
+    return {"prefs": doc.get("agent_prefs") or {}}
+
+
+class _PrefsRequest(BaseModel):
+    agent_id: str = Field(..., min_length=1, max_length=32)
+    mode: str = Field(..., min_length=1, max_length=24)
+
+
+@api.put("/ai/agent/prefs")
+async def set_agent_pref(payload: _PrefsRequest, request: Request):
+    """Persist the user's preferred mode for one agent. Both `agent_id`
+    and `mode` are strictly validated — unknown values are 422'd so a
+    typo'd frontend never silently writes junk."""
+    user = await get_current_user(request)
+    agent_id = payload.agent_id.lower()
+    mode_id = payload.mode.lower()
+    if agent_id not in AGENTS:
+        raise HTTPException(status_code=422, detail="Unknown agent_id")
+    # Allow USER_MODE_IDS plus the explicit "auto" sentinel.
+    valid_modes = {m["id"] for m in USER_MODES}
+    if mode_id not in valid_modes:
+        raise HTTPException(status_code=422, detail="Unknown mode")
+    await _db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {f"agent_prefs.{agent_id}": mode_id}},
+    )
+    return {"ok": True, "agent_id": agent_id, "mode": mode_id}
+
+
 @api.post("/ai/agent/chat")
 async def agent_chat(payload: _ChatRequest, request: Request):
     """Send a message to the selected agent. Single LLM call — the agent
@@ -474,6 +561,13 @@ async def _orchestrate(user, agent: dict, payload: "_ChatRequest"):
         pass
 
     await record_ai_generation(user.user_id, f"agent_chat:{agent['id']}")
+    # Estimated cost accounting (best-effort, never raises) — powers the
+    # admin spend dashboard.
+    try:
+        from routes.llm_spend import record_llm_call
+        await record_llm_call(user.user_id, agent["id"], task_used, model)
+    except Exception:
+        pass
     yield ("complete", {
         "agent_id": agent["id"],
         "answer": answer,
@@ -525,6 +619,16 @@ async def _run_handoff(user_id: str, handoff: dict) -> Optional[dict]:
     chat = await _llm(user_id, session_id, system,
                       provider=provider, model=model)
     answer = await chat.send_message(UserMessage(text=handoff["question"]))
+    # Track sub-agent cost too (treat handoff as the "research"/etc task).
+    try:
+        from routes.llm_spend import record_llm_call
+        from routes.model_router import AGENT_TASKS
+        await record_llm_call(
+            user_id, sub["id"],
+            AGENT_TASKS.get(sub["id"], "default"), model,
+        )
+    except Exception:
+        pass
     return {
         "agent_id": sub["id"],
         "agent_name": sub["name"],
