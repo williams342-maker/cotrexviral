@@ -35,6 +35,12 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-28 (part 47) **🛡️ "Test this voice" — budget-cap-safe error handling**
+  - **Backend (`routes/memory.py::test_brand_voice`)**: wrapped `send_with_usage` in `asyncio.wait_for(..., timeout=25)` so a stalled LiteLLM call aborts before the ingress idle limit. Returns 504 on `asyncio.TimeoutError` and 429 when the underlying error string contains `"budget"`, `"rate limit"`, or `"429"` (LiteLLM surfaces universal-key cap errors this way). Falls back to 503 for any other failure.
+  - **Frontend (`pages/dashboard/CommandCenter.jsx::runVoiceTest`)**: added a 30s axios `timeout` so the UI never hangs forever. Distinct toast copy per status: `ECONNABORTED`/timeout ("Timed out — universal key may be over budget"), 422 ("Add an anchor first"), 429 ("LLM budget cap reached — add balance in Profile → Universal Key"), 504 ("LLM is slow right now"), 503 ("LLM unavailable"). Spinner always clears via `finally`.
+  - **Test status**: 26/26 marketing-OS pytest cases still pass (`tests/test_marketing_os_features.py`). 422-no-anchors path verified via curl. Live 429/504 path will trigger automatically next time the universal key hits its cap — no more infinite spinners.
+
+
 - 2026-05-28 (part 46) **🎯 Marketing OS pivot — Opportunity Signals + Command Center + 5-role chain**
   - **Architectural pivot landed** (from chat-only to "Autonomous Marketing Operating System"). Built on top of the existing Convene engine instead of swapping to LangGraph/CrewAI — same orchestration runtime, new lens.
   - **Opportunity Signals scoring** (`routes/trends_engine.py`):

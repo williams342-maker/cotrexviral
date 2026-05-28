@@ -441,11 +441,29 @@ async def test_brand_voice(payload: _TestVoiceRequest, request: Request):
     session_id = f"bv_test:{user.user_id}"
     try:
         chat = _llm(session_id, system, model=model, provider=provider)
-        text, usage = await send_with_usage(
-            chat, f"Draft a {payload.topic.strip()} hook.",
+        # 25s timeout so a budget-capped key doesn't hang the request
+        # past the ingress idle limit. Frontend gets a clean 504 it can
+        # toast on.
+        text, usage = await asyncio.wait_for(
+            send_with_usage(chat, f"Draft a {payload.topic.strip()} hook."),
+            timeout=25,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail="LLM took too long — the universal key may be over budget. Try again in a few minutes.",
         )
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"LLM unavailable: {str(e)[:200]}")
+        msg = str(e)
+        # LiteLLM surfaces budget-cap errors with the word "budget" in
+        # the response body; map those to 429 so the UI shows a
+        # friendlier "rate limited" toast instead of generic 503.
+        if "budget" in msg.lower() or "rate limit" in msg.lower() or "429" in msg:
+            raise HTTPException(
+                status_code=429,
+                detail="LLM budget cap reached for the universal key. Add balance in Profile → Universal Key, or try again later.",
+            )
+        raise HTTPException(status_code=503, detail=f"LLM unavailable: {msg[:200]}")
     return {
         "draft":  (text or "").strip(),
         "model":  f"{provider}/{model}",

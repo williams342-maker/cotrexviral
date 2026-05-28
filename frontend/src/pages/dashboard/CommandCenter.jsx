@@ -478,15 +478,31 @@ const CommandCenter = () => {
       const r = await axios.post(
         `${API}/memory/brand-voice/test`,
         { topic: testTopic.trim() },
-        { withCredentials: true },
+        { withCredentials: true, timeout: 30000 },
       );
       setTestDraft(r.data.draft || '(empty draft — try a different topic)');
     } catch (e) {
+      // Map known failure modes to friendly toast copy. Without this,
+      // a budget-capped key just leaves the UI spinning forever.
       const code = e.response?.status;
-      const msg = code === 422
-        ? 'Add at least one anchor first.'
-        : (e.response?.data?.detail || e.message);
-      toast({ title: 'Test failed', description: msg });
+      let title = 'Test failed';
+      let description = e.response?.data?.detail || e.message;
+      if (e.code === 'ECONNABORTED' || /timeout/i.test(e.message || '')) {
+        title = 'Timed out';
+        description = 'The LLM took too long — the universal key may be over budget. Try again in a few minutes.';
+      } else if (code === 422) {
+        title = 'Add an anchor first';
+        description = 'Promote a winning hook or write a manual anchor, then test again.';
+      } else if (code === 429) {
+        title = 'LLM budget cap reached';
+        description = 'Add balance in Profile → Universal Key, or try again later.';
+      } else if (code === 504) {
+        title = 'LLM is slow right now';
+        description = description || 'The model timed out. Try again in a few minutes.';
+      } else if (code === 503) {
+        title = 'LLM unavailable';
+      }
+      toast({ title, description });
     } finally {
       setTestRunning(false);
     }
