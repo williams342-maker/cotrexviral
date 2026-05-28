@@ -446,7 +446,8 @@ async def draft_post_from_trend(payload: _DraftFromSignalRequest, request: Reque
     )
     user_msg = f"Signal:\n{signal['text']}\n\nDraft the {platform} post now."
     try:
-        raw = await chat.send_message(UserMessage(text=user_msg))
+        from routes.ai import send_with_usage
+        raw, draft_usage = await send_with_usage(chat, UserMessage(text=user_msg))
     except Exception as e:
         # Surface a clean error instead of a generic 500.
         if "budget" in str(e).lower():
@@ -489,7 +490,7 @@ async def draft_post_from_trend(payload: _DraftFromSignalRequest, request: Reque
         pass
     try:
         from routes.llm_spend import record_llm_call
-        await record_llm_call(user.user_id, "nova", task_used, model)
+        await record_llm_call(user.user_id, "nova", task_used, model, draft_usage)
     except Exception:
         pass
 

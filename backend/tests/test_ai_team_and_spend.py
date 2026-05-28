@@ -25,19 +25,13 @@ def _comp(plan: str = "growth"):
 
 
 def _wipe_usage():
-    """Clear `llm_usage` so spend assertions are deterministic."""
-    from core import db
-
-    async def go():
-        await db.llm_usage.delete_many({"user_id": USER_ID})
-
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            raise RuntimeError("closed")
-        loop.run_until_complete(go())
-    except RuntimeError:
-        asyncio.new_event_loop().run_until_complete(go())
+    """Clear `llm_usage` so spend assertions are deterministic. Uses
+    pymongo (sync) to avoid Motor's per-loop binding issue when this
+    runs in the same pytest session as other Motor-using tests."""
+    from pymongo import MongoClient
+    mongo_url = open("/app/backend/.env").read().split("MONGO_URL=")[1].split("\n")[0].strip().strip("'\"")
+    db_name = open("/app/backend/.env").read().split("DB_NAME=")[1].split("\n")[0].strip().strip("'\"")
+    MongoClient(mongo_url)[db_name].llm_usage.delete_many({"user_id": USER_ID})
 
 
 # ----------------------------------------------------------------------

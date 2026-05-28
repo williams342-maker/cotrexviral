@@ -35,6 +35,36 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 44) **🎯 Token-accurate LLM cost tracking + 🔗 Compose URL-param plumbing**
+  - **Token-accurate cost tracking** — replaces the per-call averages with exact USD computed from real prompt + completion tokens:
+    - **`routes/ai.py::send_with_usage(chat, user_message)`** — new helper that mirrors `LlmChat.send_message`'s side-effects (history append, error wrapping in `ChatError`) but also extracts `prompt_tokens`/`completion_tokens`/`total_tokens` from the underlying LiteLLM `response.usage`. Returns `(text, {prompt_tokens, completion_tokens, total_tokens})`.
+    - **`routes/llm_spend.py::_exact_cost(model, in_tokens, out_tokens)`** — multiplies token counts by per-million rates (Opus $15/$75, Sonnet $3/$15, Haiku $1/$5, Gemini 2.5 Pro $1.25/$10, GPT-5 $5/$15). Prefix-matches family names so future minor versions inherit rates without code changes.
+    - **`record_llm_call()`** now accepts an optional `usage` dict. When tokens > 0 it stores the exact cost with `cost_source: "tokens"`; otherwise it falls back to the per-call estimate with `cost_source: "per_call_estimate"`. The `llm_usage` row now persists `prompt_tokens`, `completion_tokens`, `total_tokens` alongside.
+    - **All 5 LLM call sites** updated to use `send_with_usage` + thread tokens through to the spend writer:
+      • `_orchestrate()` primary chat
+      • `_run_handoff()` sub-agent call
+      • `_convene()` per-agent chain step
+      • `_convene()` synthesizer (Atlas)
+      • `trends_engine.py::draft_post_from_trend()` (Nova draft from signal)
+    - **`/api/admin/llm-spend` response** now includes `total_tokens: {prompt, completion, total}` and each `by_mode`/`by_agent`/`by_model` row gets a `tokens` field.
+    - **`AdminOverview.jsx::LlmSpendCard`** surfaces "2.9K tokens" next to the call count, and the disclaimer changed from "±20%" → "Token-accurate when available, falls back to per-call averages — accuracy ±5%." `fmtTokens` helper formats K/M.
+  - **Compose URL-param plumbing** — closes the "Open in Compose" CTA on Trends drafts:
+    - `Compose.jsx` now reads both `location.state` (legacy in-app navigation) AND query params (`?content=&platform=&source=trend`). Either source pre-fills the textarea + platform selection on mount.
+    - **Bug fix**: the existing channels-load `useEffect` was wiping any pre-selected platform with the user's connected channels. Now merges the two so the trend-draft platform survives. Falls back to `instagram` only when both prev state AND channels are empty.
+    - **Source-aware toast**: when arrived via `?source=trend`, fires *"Draft loaded from a trend — Nova drafted this from a viral signal. Edit before publishing."* so the user knows where it came from.
+    - **URL cleanup**: after consuming the params, replaces the history entry to strip the search string. Refreshing the page no longer re-prefills — feels like a single intentional handoff.
+  - **11 new pytest cases** (`tests/test_token_costs.py`):
+    - `TestExactCost` (5): pure unit tests — Sonnet 1500/500 = $0.012 (exact arithmetic check) · Opus > Sonnet > Haiku ordering · zero tokens returns 0 · unknown model returns 0 (caller handles fallback) · prefix match for future minor versions inherits family rates.
+    - `TestRecordWithUsage` (2): with usage → row has token counts + `cost_source: "tokens"` + exact cost; without usage → row has zero tokens + `cost_source: "per_call_estimate"` + per-call average cost.
+    - `TestSendWithUsage` (1): live LLM round-trip on Haiku confirms LiteLLM surfaces non-zero `prompt_tokens` + `completion_tokens`, and `total_tokens == prompt + completion`. Skips gracefully on budget exhaustion.
+    - `TestAgentChatTokenAccountingE2E` (1): live `mode=fast` agent_chat → the resulting `llm_usage` row has real token counts AND `cost < $0.0012` (the per-call fallback cap), proving exact pricing is active in production not just unit-tested.
+    - `TestSpendEndpointSurfacesTokens` (2): admin endpoint includes `total_tokens` object with `{prompt, completion, total}` ints + each by_mode/by_model row has a `tokens` field.
+  - **Migration note**: existing `llm_usage` rows written before this change lack the `cost_source`/`prompt_tokens`/`completion_tokens` fields. The aggregation pipeline uses `$ifNull` to default them to 0, so older rows still surface correctly — they just don't contribute to the token totals (the call & cost are still counted).
+  - **Test-isolation fix**: refactored `test_ai_team_and_spend.py::_wipe_usage` to use pymongo (sync) instead of Motor, eliminating a cross-loop "Future attached to a different loop" error that surfaced when running with other Motor-using tests in the same session.
+  - **All 75 agent-stack tests pass** across the 7 test files (`test_agent_chat`, `test_agent_handoff`, `test_model_router`, `test_agent_stream`, `test_ai_team_and_spend`, `test_trend_drafts_and_nudge`, `test_token_costs`).
+  - **Live screenshot-verified**: Compose loads from `?content=&platform=linkedin&source=trend` query string, prefills the textarea, fires a "Draft loaded from a trend" toast, AND cleans the URL to `/dashboard/compose` (so refresh ≠ re-prefill). Admin LLM Spend card shows "$0.01 · 4 calls · 2.9K tokens" with the new disclaimer.
+
+
 - 2026-02-28 (part 43) **🔄 Trend → Draft loop + 💡 Proactive spend nudges**
   - **"Draft post from this signal"** — closes the signal → memory → content loop:
     - New endpoint `POST /api/trends/draft-post` body `{trend_id, platform}` (supports `linkedin`, `twitter`/`x`, `instagram`, `tiktok`, `pinterest`, `facebook`).

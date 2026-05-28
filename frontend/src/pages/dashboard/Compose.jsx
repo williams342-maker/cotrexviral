@@ -18,11 +18,27 @@ const PLATFORM_LIMITS = {
 const Compose = () => {
   const { toast } = useToast();
   const location = useLocation();
+  // Initial values can arrive from either:
+  //   • react-router `state` (e.g., regenerate-from-post, posts page)
+  //   • URL query params (`?content=&platform=&source=trend`) — used by
+  //     the Trends page "Open in Compose" CTA on signal drafts.
+  const initialParams = new URLSearchParams(location.search);
+  const initialContent = location.state?.draft ?? initialParams.get('content') ?? '';
+  const initialPlatform = location.state?.platform ?? initialParams.get('platform') ?? 'instagram';
+  const initialSource = initialParams.get('source');  // e.g., "trend"
   const [topic, setTopic] = useState('');
-  const [content, setContent] = useState(location.state?.draft || '');
+  const [content, setContent] = useState(initialContent);
   const [tone, setTone] = useState('friendly');
-  const [platform, setPlatform] = useState(location.state?.platform || 'instagram');
-  const [selected, setSelected] = useState({ instagram: true });
+  const [platform, setPlatform] = useState(initialPlatform);
+  // Pre-select the incoming platform so the user doesn't have to tick
+  // its checkbox after landing here from Trends/Posts.
+  const [selected, setSelected] = useState(() => {
+    const init = { instagram: true };
+    if (initialPlatform && initialPlatform !== 'instagram') {
+      init[initialPlatform] = true;
+    }
+    return init;
+  });
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [channels, setChannels] = useState([]);
@@ -69,11 +85,40 @@ const Compose = () => {
     axios.get(`${API}/channels`, { withCredentials: true })
       .then((r) => {
         setChannels(r.data);
+        // Start with all the user's connected platforms ticked, then
+        // ALSO preserve any platform we pre-selected from the route
+        // (URL `?platform=` / nav state) so the trend-draft handoff
+        // doesn't get clobbered. If no channels are connected yet we
+        // fall back to whatever the route asked for.
         const init = {};
         r.data.filter((c) => c.connected).forEach((c) => { init[c.platform] = true; });
-        if (Object.keys(init).length) setSelected(init);
+        setSelected((prev) => {
+          const merged = { ...init };
+          for (const [k, v] of Object.entries(prev || {})) {
+            if (v) merged[k] = true;
+          }
+          return Object.keys(merged).length ? merged : { instagram: true };
+        });
       })
       .catch(() => {});
+  }, []);
+
+  // One-time: when arriving from the Trends "Open in Compose" CTA,
+  // announce it and strip the query string so a refresh doesn't keep
+  // re-prefilling. Runs once on mount only.
+  useEffect(() => {
+    if (initialSource === 'trend' && initialContent) {
+      toast({
+        title: 'Draft loaded from a trend',
+        description: 'Nova drafted this from a viral signal. Edit before publishing.',
+      });
+    }
+    if (initialParams.get('content') || initialParams.get('platform') || initialParams.get('source')) {
+      const url = new URL(window.location.href);
+      url.search = '';
+      window.history.replaceState(null, '', url.toString());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const generate = async () => {

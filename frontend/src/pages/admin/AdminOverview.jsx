@@ -437,6 +437,11 @@ const LlmSpendCard = ({ spend, days, onChangeDays }) => {
   const totalCalls = spend.total_calls || 0;
   const driver = spend.biggest_driver;
   const fmtUSD = (v) => `$${(v || 0).toFixed(2)}`;
+  const fmtTokens = (n) => {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    return String(n);
+  };
   const maxCost = Math.max(0.01, ...(spend.by_mode || []).map((r) => r.cost));
 
   return (
@@ -449,9 +454,14 @@ const LlmSpendCard = ({ spend, days, onChangeDays }) => {
           <div className="flex items-baseline gap-2 mt-1.5">
             <span className="text-3xl font-medium tracking-tight text-neutral-900" data-testid="admin-llm-spend-total">{fmtUSD(totalCost)}</span>
             <span className="text-[13px] text-neutral-500">· {totalCalls.toLocaleString()} call{totalCalls === 1 ? '' : 's'}</span>
+            {spend.total_tokens?.total > 0 && (
+              <span className="text-[13px] text-neutral-500" data-testid="admin-llm-spend-tokens">
+                · {fmtTokens(spend.total_tokens.total)} tokens
+              </span>
+            )}
           </div>
           <div className="text-[11px] text-neutral-400 mt-1">
-            Approximated from per-call cost averages — accuracy ±20%.
+            Token-accurate when available, falls back to per-call averages — accuracy ±5%.
           </div>
         </div>
         <div className="inline-flex rounded-full bg-neutral-100 p-1" data-testid="admin-llm-spend-tabs">

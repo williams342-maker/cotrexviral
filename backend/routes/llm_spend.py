@@ -1,25 +1,32 @@
 """LLM cost tracking + admin spend dashboard.
 
 Every successful agent_chat turn fires `record_llm_call()` which writes a
-single document to the `llm_usage` collection with the agent + resolved
-mode + model + an *estimated* per-call USD cost. We don't ship a token
-counter (the SDK doesn't surface tokens reliably across providers), so
-costs are approximations based on published per-call averages for typical
-1-2K input / 500-token output. Clearly labelled as "estimated" in the UI.
+single document to the `llm_usage` collection capturing agent + resolved
+mode + model + token usage + USD cost.
+
+Cost computation:
+  • PREFERRED: token-accurate — we read `prompt_tokens` and
+    `completion_tokens` from LiteLLM's `response.usage` (via
+    `routes.ai.send_with_usage`) and multiply by per-million rates from
+    `COST_PER_MTOK`.
+  • FALLBACK: when token counts aren't available (rare), use the
+    per-call averages in `COST_PER_CALL`.
 
 Endpoint `GET /api/admin/llm-spend?days=30` returns:
   {
     days, since,
     total_calls, total_estimated_cost,
-    by_mode:   [{mode, calls, cost}],
-    by_agent:  [{agent_id, calls, cost}],
-    by_model:  [{model, calls, cost}],
+    total_tokens: {prompt, completion, total},
+    by_mode:   [{mode, calls, cost, tokens}],
+    by_agent:  [{agent_id, calls, cost, tokens}],
+    by_model:  [{model, calls, cost, tokens}],
     top_users: [{user_id, email, calls, cost}],
-    biggest_driver: {model, agent, percentage}  # the single largest cost contributor
+    biggest_driver: {model, agent, percentage}
   }
 """
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from fastapi import Request
 
@@ -33,6 +40,7 @@ logger = logging.getLogger(__name__)
 # CortexViral agent_chat shape (~1.5K input + ~500 output tokens). These
 # are intentionally rough — surface them as "estimated" in the UI.
 # Updated 2026-02 to match published Claude 4.x / Gemini 2.5 / GPT-5 pricing.
+# Used as a fallback when LiteLLM doesn't surface token usage (rare).
 COST_PER_CALL: dict[str, float] = {
     # Anthropic Claude family
     "claude-opus-4-7":            0.0450,
@@ -54,6 +62,53 @@ COST_PER_CALL: dict[str, float] = {
 DEFAULT_COST_PER_CALL = 0.0100
 
 
+# Token-accurate pricing — USD per 1M tokens. Used when LiteLLM gives us
+# real prompt_tokens / completion_tokens (the normal path). Sources:
+# Anthropic / OpenAI / Google pricing pages as of Feb 2026. When a model
+# isn't listed we fall back to the per-call average above.
+COST_PER_MTOK: dict[str, tuple[float, float]] = {
+    # (input $/M, output $/M)
+    "claude-opus-4-7":            (15.00, 75.00),
+    "claude-opus":                (15.00, 75.00),
+    "claude-sonnet-4-5":          ( 3.00, 15.00),
+    "claude-sonnet":              ( 3.00, 15.00),
+    "claude-haiku-4-5-20251001":  ( 1.00,  5.00),
+    "claude-haiku":               ( 1.00,  5.00),
+    "gemini-2.5-pro":             ( 1.25, 10.00),
+    "gemini-pro":                 ( 1.25, 10.00),
+    "gpt-5":                      ( 5.00, 15.00),
+    "gpt-4o":                     ( 2.50, 10.00),
+    "gpt-4o-mini":                ( 0.15,  0.60),
+}
+
+
+def _per_mtok_for(model: str) -> Optional[tuple[float, float]]:
+    """Return `(input $/M, output $/M)` for the model — prefix-matches
+    family names so future minor versions inherit the right rate without
+    code changes. Returns None when the model isn't priced."""
+    if not model:
+        return None
+    m = model.lower()
+    if m in COST_PER_MTOK:
+        return COST_PER_MTOK[m]
+    for key, rates in COST_PER_MTOK.items():
+        if m.startswith(key):
+            return rates
+    return None
+
+
+def _exact_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
+    """Token-accurate cost. Returns 0 only when both counts are 0 (or
+    model unknown). Numbers are exact USD up to whatever precision the
+    pricing table has — typically 4 decimal places of a cent."""
+    rates = _per_mtok_for(model)
+    if not rates or (prompt_tokens <= 0 and completion_tokens <= 0):
+        return 0.0
+    in_per_mtok, out_per_mtok = rates
+    return (prompt_tokens / 1_000_000.0) * in_per_mtok + \
+           (completion_tokens / 1_000_000.0) * out_per_mtok
+
+
 def _cost_for(model: str) -> float:
     """Look up the estimated per-call cost. Prefix-matches on family name
     so `claude-sonnet-4-5-20250929` (or any future minor version) hits the
@@ -69,17 +124,38 @@ def _cost_for(model: str) -> float:
     return DEFAULT_COST_PER_CALL
 
 
-async def record_llm_call(user_id: str, agent_id: str, mode: str, model: str) -> None:
+async def record_llm_call(
+    user_id: str, agent_id: str, mode: str, model: str,
+    usage: Optional[dict] = None,
+) -> None:
     """Persist one row to `llm_usage`. Best-effort: never raises — an
-    accounting failure must not break a successful chat reply."""
+    accounting failure must not break a successful chat reply.
+
+    `usage` is the dict returned by `routes.ai.send_with_usage` —
+    `{prompt_tokens, completion_tokens, total_tokens}`. When present we
+    compute the exact USD cost; otherwise we fall back to the per-call
+    average so the dashboard still shows non-zero data."""
     try:
+        prompt_tokens = int((usage or {}).get("prompt_tokens") or 0)
+        completion_tokens = int((usage or {}).get("completion_tokens") or 0)
+        total_tokens = int((usage or {}).get("total_tokens") or prompt_tokens + completion_tokens)
+        if prompt_tokens + completion_tokens > 0:
+            cost = _exact_cost(model, prompt_tokens, completion_tokens)
+            cost_source = "tokens"
+        else:
+            cost = _cost_for(model)
+            cost_source = "per_call_estimate"
         await db.llm_usage.insert_one({
-            "user_id":  user_id,
-            "agent_id": agent_id,
-            "mode":     mode,
-            "model":    model,
-            "cost":     _cost_for(model),
-            "ts":       datetime.now(timezone.utc),
+            "user_id":           user_id,
+            "agent_id":          agent_id,
+            "mode":              mode,
+            "model":             model,
+            "cost":              cost,
+            "cost_source":       cost_source,
+            "prompt_tokens":     prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens":      total_tokens,
+            "ts":                datetime.now(timezone.utc),
         })
     except Exception:
         logger.exception("llm_usage write failed")
@@ -104,25 +180,30 @@ async def admin_llm_spend(request: Request, days: int = 30):
         {"$facet": {
             "totals": [
                 {"$group": {"_id": None,
-                            "calls": {"$sum": 1},
-                            "cost":  {"$sum": "$cost"}}},
+                            "calls":  {"$sum": 1},
+                            "cost":   {"$sum": "$cost"},
+                            "prompt": {"$sum": {"$ifNull": ["$prompt_tokens", 0]}},
+                            "completion": {"$sum": {"$ifNull": ["$completion_tokens", 0]}}}},
             ],
             "by_mode": [
                 {"$group": {"_id": "$mode",
-                            "calls": {"$sum": 1},
-                            "cost":  {"$sum": "$cost"}}},
+                            "calls":  {"$sum": 1},
+                            "cost":   {"$sum": "$cost"},
+                            "tokens": {"$sum": {"$ifNull": ["$total_tokens", 0]}}}},
                 {"$sort": {"cost": -1}},
             ],
             "by_agent": [
                 {"$group": {"_id": "$agent_id",
-                            "calls": {"$sum": 1},
-                            "cost":  {"$sum": "$cost"}}},
+                            "calls":  {"$sum": 1},
+                            "cost":   {"$sum": "$cost"},
+                            "tokens": {"$sum": {"$ifNull": ["$total_tokens", 0]}}}},
                 {"$sort": {"cost": -1}},
             ],
             "by_model": [
                 {"$group": {"_id": "$model",
-                            "calls": {"$sum": 1},
-                            "cost":  {"$sum": "$cost"}}},
+                            "calls":  {"$sum": 1},
+                            "cost":   {"$sum": "$cost"},
+                            "tokens": {"$sum": {"$ifNull": ["$total_tokens", 0]}}}},
                 {"$sort": {"cost": -1}},
             ],
             "by_user": [
@@ -147,6 +228,8 @@ async def admin_llm_spend(request: Request, days: int = 30):
 
     total_calls = (facets.get("totals") or [{}])[0].get("calls", 0)
     total_cost  = (facets.get("totals") or [{}])[0].get("cost", 0.0)
+    total_prompt_tokens = (facets.get("totals") or [{}])[0].get("prompt", 0)
+    total_completion_tokens = (facets.get("totals") or [{}])[0].get("completion", 0)
 
     # Hydrate top-user rows with email so the admin doesn't see opaque
     # `user_xxxxx` strings.
@@ -184,7 +267,8 @@ async def admin_llm_spend(request: Request, days: int = 30):
 
     def _shape(rows, key_name):
         return [
-            {key_name: r["_id"], "calls": r["calls"], "cost": round(r["cost"], 4)}
+            {key_name: r["_id"], "calls": r["calls"], "cost": round(r["cost"], 4),
+             "tokens": int(r.get("tokens") or 0)}
             for r in rows if r["_id"] is not None
         ]
 
@@ -193,6 +277,11 @@ async def admin_llm_spend(request: Request, days: int = 30):
         "since":                since.isoformat(),
         "total_calls":          total_calls,
         "total_estimated_cost": round(total_cost, 4),
+        "total_tokens": {
+            "prompt":     int(total_prompt_tokens or 0),
+            "completion": int(total_completion_tokens or 0),
+            "total":      int((total_prompt_tokens or 0) + (total_completion_tokens or 0)),
+        },
         "by_mode":              _shape(facets.get("by_mode") or [], "mode"),
         "by_agent":             _shape(facets.get("by_agent") or [], "agent_id"),
         "by_model":             _shape(facets.get("by_model") or [], "model"),

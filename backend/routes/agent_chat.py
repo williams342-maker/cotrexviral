@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field
 
 from core import api
 from deps import get_current_user
-from routes.ai import _llm_for_user, _gated_user
+from routes.ai import _llm_for_user, _gated_user, send_with_usage
 from routes.plans import record_ai_generation
 from routes.model_router import for_agent, resolve_user_mode, USER_MODES
 from emergentintegrations.llm.chat import UserMessage
@@ -544,10 +544,11 @@ async def _convene(user, chain_ids: list[str], summarizer_id: str,
             provider=provider, model=model,
         )
         prompt = f"User brief:\n{payload.message}"
-        task = asyncio.create_task(chat.send_message(UserMessage(text=prompt)))
+        task = asyncio.create_task(send_with_usage(chat, UserMessage(text=prompt)))
         async for ping in _keepalive_while(task):
             yield ping
-        answer = (task.result() or "").strip()
+        result_text, chain_usage = task.result()
+        answer = (result_text or "").strip()
         # Strip any stray <<FUPS>> or <<HANDOFF>> blocks the agent might
         # emit (we don't run that machinery in convene mode).
         answer = _FUPS_RE.sub("", answer)
@@ -563,7 +564,7 @@ async def _convene(user, chain_ids: list[str], summarizer_id: str,
         })
         try:
             from routes.llm_spend import record_llm_call
-            await record_llm_call(user.user_id, agent["id"], task_used, model)
+            await record_llm_call(user.user_id, agent["id"], task_used, model, chain_usage)
         except Exception:
             pass
 
@@ -597,16 +598,17 @@ async def _convene(user, chain_ids: list[str], summarizer_id: str,
         user.user_id, f"convene-summary-{user.user_id}", sum_prompt_sys,
         provider=sum_provider, model=sum_model,
     )
-    sum_task_obj = asyncio.create_task(sum_chat.send_message(UserMessage(text=sum_input)))
+    sum_task_obj = asyncio.create_task(send_with_usage(sum_chat, UserMessage(text=sum_input)))
     async for ping in _keepalive_while(sum_task_obj):
         yield ping
-    summary = (sum_task_obj.result() or "").strip()
+    sum_text, sum_usage = sum_task_obj.result()
+    summary = (sum_text or "").strip()
     summary = _FUPS_RE.sub("", summary)
     summary = _HANDOFF_RE.sub("", summary).strip()
 
     try:
         from routes.llm_spend import record_llm_call
-        await record_llm_call(user.user_id, summarizer["id"], sum_task, sum_model)
+        await record_llm_call(user.user_id, summarizer["id"], sum_task, sum_model, sum_usage)
     except Exception:
         pass
 
@@ -766,10 +768,10 @@ async def _orchestrate(user, agent: dict, payload: "_ChatRequest"):
     # Primary LLM call — interleave keepalive pings so the stream stays
     # warm even when Opus takes 20-30s to think.
     yield ("thinking", {"phase": "primary", "agent": agent["name"]})
-    primary_task = asyncio.create_task(chat.send_message(UserMessage(text=payload.message)))
+    primary_task = asyncio.create_task(send_with_usage(chat, UserMessage(text=payload.message)))
     async for ping in _keepalive_while(primary_task):
         yield ping
-    raw = primary_task.result()
+    raw, primary_usage = primary_task.result()
 
     # Optional handoff
     handoff_done = None
@@ -818,7 +820,7 @@ async def _orchestrate(user, agent: dict, payload: "_ChatRequest"):
     # admin spend dashboard.
     try:
         from routes.llm_spend import record_llm_call
-        await record_llm_call(user.user_id, agent["id"], task_used, model)
+        await record_llm_call(user.user_id, agent["id"], task_used, model, primary_usage)
     except Exception:
         pass
     yield ("complete", {
@@ -871,7 +873,7 @@ async def _run_handoff(user_id: str, handoff: dict) -> Optional[dict]:
     from routes.ai import _llm_for_user as _llm
     chat = await _llm(user_id, session_id, system,
                       provider=provider, model=model)
-    answer = await chat.send_message(UserMessage(text=handoff["question"]))
+    answer, ho_usage = await send_with_usage(chat, UserMessage(text=handoff["question"]))
     # Track sub-agent cost too (treat handoff as the "research"/etc task).
     try:
         from routes.llm_spend import record_llm_call
@@ -879,6 +881,7 @@ async def _run_handoff(user_id: str, handoff: dict) -> Optional[dict]:
         await record_llm_call(
             user_id, sub["id"],
             AGENT_TASKS.get(sub["id"], "default"), model,
+            ho_usage,
         )
     except Exception:
         pass

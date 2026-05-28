@@ -88,6 +88,41 @@ def _llm(session_id: str, system: str,
     return chat
 
 
+async def send_with_usage(chat, user_message) -> tuple[str, dict]:
+    """Drop-in replacement for `chat.send_message(user_message)` that ALSO
+    returns the raw LLM token usage. Returns `(text, {prompt_tokens,
+    completion_tokens, total_tokens})`.
+
+    We bypass `LlmChat.send_message` so we can read `response.usage` off
+    the underlying `litellm.ModelResponse` (the public `send_message`
+    discards it and only returns the text).
+
+    Mirrors the side-effects of `send_message`: appends both the user
+    message and the assistant reply to the chat's history so subsequent
+    turns in the same session still work. Any exception is wrapped in a
+    `ChatError` exactly like the public method does."""
+    from emergentintegrations.llm.chat import ChatError
+    messages = await chat.get_messages()
+    await chat._add_user_message(messages, user_message)
+    try:
+        response = await chat._execute_completion(messages)
+        text = await chat._extract_response_text(response)
+        await chat._add_assistant_message(messages, text)
+    except Exception as e:
+        raise ChatError(f"Failed to generate chat completion: {str(e)}")
+    usage = {
+        "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
+    }
+    u = getattr(response, "usage", None)
+    if u is not None:
+        # Different providers shape this slightly differently; pull the
+        # canonical OpenAI-style fields and fall back to 0 otherwise.
+        usage["prompt_tokens"]     = int(getattr(u, "prompt_tokens", 0) or 0)
+        usage["completion_tokens"] = int(getattr(u, "completion_tokens", 0) or 0)
+        usage["total_tokens"]      = int(getattr(u, "total_tokens", 0) or 0)
+    return text, usage
+
+
 async def _fetch_url_snippet(url: str) -> str:
     """Fetch a website and return a cleaned text snippet."""
     try:
