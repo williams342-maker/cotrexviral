@@ -390,56 +390,15 @@ const CommandCenter = () => {
   const [testDraft, setTestDraft] = useState('');
   const [testRunning, setTestRunning] = useState(false);
 
-  // HITL — resolving a paused run via /approve or /reject. Streams SSE
-  // but we don't render the live progress here (the modal handles
-  // that). We just fire-and-forget and reload the dashboard once the
-  // stream closes so the resolved row + new completed run both show
-  // up. Single-flight: only one resolve in-progress at a time.
-  const [resolvingId, setResolvingId] = useState(null);
-  const resolveRun = async (runId, decision) => {
-    if (resolvingId) return;
-    setResolvingId(runId);
-    try {
-      // Use fetch + ReadableStream so we drain the SSE response. The
-      // backend doesn't return JSON; it streams events. We don't
-      // surface them in the UI here (the activity card just flips
-      // from awaiting_approval → resolved on the next load).
-      const res = await fetch(`${API}/marketing-os/runs/${runId}/${decision}`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'fast' }),
-      });
-      if (!res.ok) {
-        let detail = res.statusText;
-        try { detail = (await res.json()).detail || detail; } catch { /* ignore */ }
-        toast({ title: `Could not ${decision} run`, description: detail });
-        return;
-      }
-      // Drain the SSE body so the runner finishes server-side.
-      const reader = res.body?.getReader();
-      if (reader) {
-        const decoder = new TextDecoder();
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-          const { done } = await reader.read();
-          if (done) break;
-          // We don't act on intermediate events here.
-          decoder.decode();
-        }
-      }
-      toast({
-        title: decision === 'approve' ? 'Distribution approved' : 'Distribution skipped',
-        description: decision === 'approve'
-          ? 'Kai drafted the distribution plan and Angela synthesised the final summary.'
-          : 'Run completed without Distribution. Angela synthesised the existing content.',
-      });
-      load();   // reload activity feed
-    } catch (e) {
-      toast({ title: `Could not ${decision} run`, description: e.message });
-    } finally {
-      setResolvingId(null);
-    }
+  // HITL — resolving a paused run via /approve or /reject. We OPEN
+  // the Run-OS modal in resume mode so the user gets live Kai +
+  // Angela progress instead of a blind toast. `resumeState` lets the
+  // single modal instance serve both fresh runs and resumes.
+  const [resumeState, setResumeState] = useState(null); // { runId, decision }
+  const resolveRun = (runId, decision) => {
+    if (resumeState) return;        // already resolving another run
+    setResumeState({ runId, decision });
+    setRunOpen(true);                // re-use the existing modal
   };
 
   const openBrandVoiceViewer = async () => {
@@ -851,7 +810,7 @@ const CommandCenter = () => {
                           <button
                             type="button"
                             onClick={() => resolveRun(r.id, 'reject')}
-                            disabled={resolvingId === r.id}
+                            disabled={!!resumeState}
                             className="text-[10px] px-2 py-0.5 rounded border border-zinc-500/40 text-zinc-300 hover:bg-zinc-500/15 disabled:opacity-50"
                             data-testid={`activity-reject-${r.id}`}
                             title="Skip Distribution and run Analytics only on the existing content"
@@ -861,12 +820,12 @@ const CommandCenter = () => {
                           <button
                             type="button"
                             onClick={() => resolveRun(r.id, 'approve')}
-                            disabled={resolvingId === r.id}
+                            disabled={!!resumeState}
                             className="text-[10px] px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50 flex items-center gap-1"
                             data-testid={`activity-approve-${r.id}`}
                             title="Run Distribution (Kai) + Analytics (Angela) on the existing content"
                           >
-                            {resolvingId === r.id ? <Loader2 size={9} className="animate-spin" /> : <Check size={9} />} Approve
+                            {resumeState?.runId === r.id ? <Loader2 size={9} className="animate-spin" /> : <Check size={9} />} Approve
                           </button>
                         </div>
                       )}
@@ -946,11 +905,25 @@ const CommandCenter = () => {
 
       <RunOSModal
         open={runOpen}
-        onClose={() => setRunOpen(false)}
-        onComplete={load}
+        onClose={() => {
+          setRunOpen(false);
+          if (resumeState) {
+            setResumeState(null);
+            // Refresh the activity feed so the resolved + new completed
+            // rows replace the stale awaiting_approval entry.
+            load();
+          }
+        }}
+        onComplete={() => {
+          load();
+          // Clear resume state so the next open is a fresh run.
+          if (resumeState) setResumeState(null);
+        }}
         initialBrief={runCampaign?.brief || ''}
         campaignId={runCampaign?.id || null}
         campaignName={runCampaign?.name || ''}
+        resumeRunId={resumeState?.runId || null}
+        resumeDecision={resumeState?.decision || null}
       />
       <NewCampaignModal
         open={newCampOpen}

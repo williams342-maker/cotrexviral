@@ -6,24 +6,32 @@ import { API } from '../context/AuthContext';
 import { useToast } from '../hooks/use-toast';
 
 /* Reusable "Run the OS" modal — kicks off the 5-role Marketing OS chain
-   via SSE (`POST /api/marketing-os/run/stream`). Used from:
-     • CommandCenter   (no campaign context — user types a free brief)
-     • CampaignDetail  (pre-seeded with `campaignId` + suggested brief)
+   via SSE. Two modes:
+
+   1. FRESH RUN: `POST /api/marketing-os/run/stream` with the user's
+      brief. Used from CommandCenter and CampaignDetail.
+
+   2. RESUME (HITL): `POST /api/marketing-os/runs/{id}/{decision}` where
+      decision = "approve" | "reject". Auto-starts on open; hides the
+      brief textarea + requires-approval checkbox. Streams Kai +
+      Angela live so the user sees the gate close in real time.
 
    Props:
      open              bool   — visibility
      onClose           ()     — caller hides the modal
      onComplete        ()?    — called once the chain finishes successfully
-     initialBrief      str?   — pre-fill the textarea
-     campaignId        str?   — when set, sent as `campaign_id` so the
-                                 server enriches the brief with the
-                                 campaign's goal/audience/pillars.
-     campaignName      str?   — purely for UI (shown as a chip in the header)
+     initialBrief      str?   — pre-fill the textarea (fresh run only)
+     campaignId        str?   — when set, sent as `campaign_id` (fresh run only)
+     campaignName      str?   — purely for UI (chip in header)
+     resumeRunId       str?   — when set, switches to RESUME mode
+     resumeDecision    str?   — "approve" | "reject" — required in RESUME mode
 */
 const RunOSModal = ({
   open, onClose, onComplete,
   initialBrief = '', campaignId = null, campaignName = '',
+  resumeRunId = null, resumeDecision = null,
 }) => {
+  const isResume = !!resumeRunId;
   const [brief, setBrief] = useState(initialBrief);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState([]);
@@ -43,7 +51,16 @@ const RunOSModal = ({
     setRunning(false);
     setRequireApproval(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialBrief, campaignId]);
+  }, [open, initialBrief, campaignId, resumeRunId, resumeDecision]);
+
+  // Auto-start in resume mode — the user already decided to approve/
+  // reject; opening the modal is the action, no extra click.
+  useEffect(() => {
+    if (open && isResume && !running && progress.length === 0) {
+      start();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isResume, resumeRunId, resumeDecision]);
 
   if (!open) return null;
 
@@ -52,18 +69,30 @@ const RunOSModal = ({
   };
 
   const start = async () => {
-    if (!brief.trim()) {
+    if (!isResume && !brief.trim()) {
       toast({ title: 'Brief required', description: 'Tell the OS what to ship.' });
       return;
     }
     reset();
     setRunning(true);
-    setProgress([{ status: 'starting', label: 'Booting Marketing OS' }]);
+    setProgress([{
+      status: 'starting',
+      label: isResume
+        ? `Resuming run · ${resumeDecision === 'approve' ? 'Approved' : 'Rejected'} Distribution`
+        : 'Booting Marketing OS',
+    }]);
     try {
-      const body = { brief: brief.trim() };
-      if (campaignId) body.campaign_id = campaignId;
-      if (requireApproval) body.requires_approval = true;
-      const res = await fetch(`${API}/marketing-os/run/stream`, {
+      let url, body;
+      if (isResume) {
+        url  = `${API}/marketing-os/runs/${resumeRunId}/${resumeDecision}`;
+        body = { mode: 'fast' };  // resume always runs on cheap haiku
+      } else {
+        url  = `${API}/marketing-os/run/stream`;
+        body = { brief: brief.trim() };
+        if (campaignId) body.campaign_id = campaignId;
+        if (requireApproval) body.requires_approval = true;
+      }
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -146,9 +175,21 @@ const RunOSModal = ({
         onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-4">
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-violet-400 font-bold mb-1">5-Role Chain</div>
-            <h2 id="os-run-modal-title" className="text-2xl font-bold text-white">Run Marketing OS</h2>
-            <p className="text-xs text-zinc-400 mt-1">Strategy → Intelligence → Content → Distribution → Analytics</p>
+            <div className="text-[10px] uppercase tracking-widest text-violet-400 font-bold mb-1">
+              {isResume ? (resumeDecision === 'approve' ? 'Resume · Approved' : 'Resume · Rejected') : '5-Role Chain'}
+            </div>
+            <h2 id="os-run-modal-title" className="text-2xl font-bold text-white">
+              {isResume
+                ? (resumeDecision === 'approve' ? 'Running Distribution + Analytics' : 'Running Analytics (Distribution skipped)')
+                : 'Run Marketing OS'}
+            </h2>
+            <p className="text-xs text-zinc-400 mt-1">
+              {isResume
+                ? (resumeDecision === 'approve'
+                    ? 'Kai writes the distribution plan, then Angela synthesises the executive summary.'
+                    : 'Angela synthesises the existing Strategy + Intelligence + Content into a final summary.')
+                : 'Strategy → Intelligence → Content → Distribution → Analytics'}
+            </p>
             {campaignName && (
               <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 text-[10px] font-semibold uppercase tracking-wider" data-testid="os-run-campaign-pill">
                 <Layers size={11} /> Campaign · {campaignName}
@@ -158,17 +199,19 @@ const RunOSModal = ({
           <button onClick={close} className="text-zinc-500 hover:text-white text-2xl leading-none" data-testid="os-run-close">×</button>
         </div>
 
-        <textarea
-          value={brief}
-          onChange={(e) => setBrief(e.target.value)}
-          placeholder="Brief for the team — e.g. &#10;&#10;'We're launching our analytics product to indie SaaS founders next month. Plan the launch.'"
-          rows={5}
-          disabled={running}
-          className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-violet-500/50"
-          data-testid="os-run-brief"
-        />
+        {!isResume && (
+          <textarea
+            value={brief}
+            onChange={(e) => setBrief(e.target.value)}
+            placeholder="Brief for the team — e.g. &#10;&#10;'We're launching our analytics product to indie SaaS founders next month. Plan the launch.'"
+            rows={5}
+            disabled={running}
+            className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-violet-500/50"
+            data-testid="os-run-brief"
+          />
+        )}
 
-        {progress.length === 0 ? (
+        {!isResume && progress.length === 0 ? (
           <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
             <label
               className="flex items-center gap-2 text-[11px] text-zinc-400 mr-auto cursor-pointer select-none"

@@ -35,6 +35,18 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-28 (part 52) **🎬 Run-OS modal resume mode — live Approve/Reject progress**
+  - **`RunOSModal` now supports two modes** in one component:
+    - **Fresh run** (existing): textarea + "Require approval" checkbox + Run button → `POST /api/marketing-os/run/stream`.
+    - **NEW resume mode**: triggered when `resumeRunId` + `resumeDecision` props are set. Auto-starts on open (no extra click), hides the textarea + footer chrome, swaps the header to *"Running Distribution + Analytics"* (approve) or *"Running Analytics (Distribution skipped)"* (reject), and streams from `POST /api/marketing-os/runs/{id}/{decision}` with `mode: "fast"`. Same SSE drain loop renders the same beautiful per-agent progress cards.
+  - **`CommandCenter.jsx::resolveRun`** rewritten — was fire-and-forget with a single end-of-stream toast (15-30s of silence in between), now flips a new `resumeState` and re-uses the existing `runOpen` modal:
+    - Click Approve/Reject → modal opens in resume mode → Kai streams live → Angela synthesises live → modal stays open showing the final summary → user closes → activity feed reloads.
+    - Single-flight gate on `resumeState` so both Approve and Reject buttons disable across all paused rows while one is in-flight.
+    - `onClose` + `onComplete` callbacks clear `resumeState` so the next open is a fresh run again.
+  - **Net change**: ~25 lines of state plumbing (RunOSModal added a `useEffect` auto-start, an `isResume` branch in `start()`, conditional rendering for textarea/footer; CommandCenter swapped the inline SSE drain for two `setResumeState` calls). Backend contract unchanged — only the frontend now mounts the existing endpoints in a richer UX.
+  - **Backend regression green**: 5/5 HITL tests still pass (`TestHITLEndpoints` 4 + `TestHITLLiveFlow` 1). No new tests needed — endpoint behaviour unchanged.
+
+
 - 2026-05-28 (part 51) **🟣 Vector DB migration callout on Admin Overview**
   - **New `MemoryPerfCallout` component** in `AdminOverview.jsx` — polls `/api/admin/memory-perf` on dashboard load and renders one of two states:
     - **Healthy** (default — current state, p95 = 19.7 ms on 282 memories): compact slate card with an emerald "OK" badge + p95/p50/samples/memories tabular-nums summary. Zero visual urgency, just situational awareness. `data-testid="memory-perf-card-healthy"`.
