@@ -28,6 +28,7 @@ import Help from './pages/dashboard/Help';
 import AccountSettings from './pages/dashboard/AccountSettings';
 import AgentWorkspace from './pages/dashboard/AgentWorkspace';
 import AITeam from './pages/dashboard/AITeam';
+import CommandCenter from './pages/dashboard/CommandCenter';
 import Memory from './pages/dashboard/Memory';
 import Approvals from './pages/dashboard/Approvals';
 import Trends from './pages/dashboard/Trends';
@@ -75,7 +76,8 @@ function AppRouter() {
       <Route path="/tools/:slug" element={<NicheToolPage />} />
       <Route path="/blog" element={<BlogIndex />} />
       <Route path="/blog/:slug" element={<BlogPost />} />
-      <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/dashboard/agent" replace /></ProtectedRoute>} />
+      <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/dashboard/command-center" replace /></ProtectedRoute>} />
+      <Route path="/dashboard/command-center" element={<ProtectedRoute><CommandCenter /></ProtectedRoute>} />
       <Route path="/dashboard/overview" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
       <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
       <Route path="/auth/claim" element={<AuthClaim />} />

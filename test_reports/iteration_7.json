@@ -1,0 +1,41 @@
+{
+  "summary": "Full backend + frontend validation of the new Marketing OS module (Command Center, 5-role chain, Opportunity Signals). 18/18 new tests pass; 45/45 regression tests across trends, convene, auto-draft, trend-drafts, agent-stream still pass. Frontend Command Center renders end-to-end with all required testids and the run modal successfully streams a live multi-role agent chain.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_marketing_os.py",
+    "/app/test_reports/pytest/marketing_os_results.xml",
+    "/app/test_reports/pytest/marketing_os_regression.xml"
+  ],
+  "test_coverage": {
+    "auth": "401 verified on /dashboard, /signals, /runs, /roles, /run/stream",
+    "dashboard_shape": "roles=5 canonical, stats keys (campaigns_active, pending_approvals, signals_hot, recent_wins) all int, lists for campaigns/signals/approvals/runs/wins",
+    "roles_endpoint": "5 canonical roles returned in correct order with {role, agent_id, label, color}",
+    "runs_endpoint": "list returned; unknown id -> 404",
+    "signals_scoring": "Every ingested trend has meta.signal {virality_score 0-100 int, urgency in (now,this_week,monitor), content_angle str, recommended_agent in (nova,sam,kai,angela)}; 'seo' keyword routes to sam; signals sorted desc by virality_score; limit param respected",
+    "run_stream_validation": "invalid role -> 422; empty brief -> 422; unknown campaign_id -> 404; empty roles list -> 200 (default chain used)",
+    "run_stream_happy_path": "Full SSE chain emits in order: os_started -> agent_started -> agent_done -> summarizing -> complete -> os_persisted; marketing_os_runs doc persisted with status=completed, non-empty transcript, summary string; GET /runs/{id} returns it",
+    "frontend": "Cookie-based session login works; /dashboard/command-center renders with data-testid=command-center-page; sidebar 'Command Center' is first nav item; os-roles-strip has 5 roles; campaign-board has 3 columns (draft/active/completed); signals-stack shows ranked signals; os-run-cta opens os-run-modal; os-run-brief + os-run-start successfully streams a multi-role run (Atlas->Iris->Nova->Kai visible live)",
+    "regression": "trends_engine, convene, auto_draft_and_chip, trend_drafts_and_nudge, agent_stream — 45/45 pass"
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "marketing_os.py is well-structured but starting to lean on _convene from agent_chat.py — note future split risk if it grows; not actionable now.",
+    "Signals scoring path (_score_signal) currently runs on ingest and ranks correctly; no _id leakage observed in any /api/marketing-os/* responses.",
+    "Run streaming uses httpx text iteration cleanly; tests confirm both order and persistence — solid contract."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_marketing_os.py (NEW)"
+  ],
+  "success_rate": { "backend": "100% (18/18 new + 45/45 regression)", "frontend": "100% (all testids + run streaming verified)" },
+  "test_credentials": "user_id=user_test1779636592168, bearer/cookie=test_session_1779636592168, is_admin=true (from /app/memory/test_credentials.md). Auth is cookie-based via /api/auth/me; tests pass token as Bearer (server accepts both).",
+  "seed_data_creation": "Used existing seeded test user. Comped 'growth' plan via /api/admin/users/{id}/plan to bypass tier limits during run streaming. Trends ingested twice during signals tests (idempotent / additive).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "New module fully covered by /app/backend/tests/test_marketing_os.py. The happy-path run streaming test does spend a small amount of LLM budget (mode='fast', 2 roles) — it self-skips on 429/budget errors. Frontend cookie auth pattern: page.context.add_cookies([{name:'session_token', value: TOKEN, domain: preview-host, path:'/', secure:true, sameSite:'Lax'}]) then navigate. All new testids (command-center-page, os-roles-strip, campaign-board, signals-stack, os-run-cta, os-run-modal, os-run-brief, os-run-start, dash-sidebar-logo) confirmed wired correctly.",
+  "rca of the issue": "N/A — no issues found."
+}

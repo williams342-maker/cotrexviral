@@ -127,6 +127,109 @@ def _seeds_for_user(user_doc: dict) -> tuple[list[str], list[str]]:
 
 
 # ---------------------------------------------------------------------------
+# Opportunity Signal scoring
+# ---------------------------------------------------------------------------
+# Maps a raw trend → structured "opportunity signal" the Marketing OS UI
+# can rank and route. Deterministic, no LLM call — runs on EVERY ingested
+# trend so the feed is always ready to consume.
+#
+# Output:
+#   virality_score   int 0..100  (higher = act fast)
+#   urgency          "now" | "this_week" | "monitor"
+#   content_angle    str          one-line creative angle
+#   recommended_agent  "nova" | "sam" | "kai" | "angela"  who should ship it
+
+# Keywords that hint at the best agent to action the signal.
+_AGENT_KEYWORD_MAP: list[tuple[str, str]] = [
+    # (substring, agent_id) — first match wins
+    ("seo",        "sam"),
+    ("ranking",    "sam"),
+    ("google",     "sam"),
+    ("search",     "sam"),
+    ("keyword",    "sam"),
+    ("email",      "angela"),
+    ("newsletter", "angela"),
+    ("subject line", "angela"),
+    ("tiktok",     "kai"),
+    ("reels",      "kai"),
+    ("trend",      "kai"),
+    ("viral",      "kai"),
+    ("hook",       "kai"),
+    ("influencer", "kai"),
+]
+
+
+def _score_signal(text: str, meta: dict) -> dict:
+    """Score one ingested trend into an opportunity-signal envelope.
+    
+    Pure function — same input always yields the same output, so it can
+    safely run inside the ingest loop without side-effects."""
+    source = (meta or {}).get("source") or ""
+    lower = (text or "").lower()
+
+    # --- Virality score (0..100) ---------------------------------------
+    score = 35  # baseline so even quiet signals show up in the feed
+    if source == "reddit":
+        # Reddit upvote count is the primary velocity signal. 100 upvotes
+        # → +10pts, 1k → +30, 10k → +50 (log-scaled, capped at +55).
+        upv = int((meta or {}).get("score") or 0)
+        if upv > 0:
+            import math as _m
+            score += min(55, int(15 * _m.log10(max(upv, 1) + 1)))
+    elif source == "gtrends":
+        # `growth` from pytrends is a % (e.g. +450). Anything >= 1000% is
+        # a "breakout" — pytrends literally returns the string "Breakout"
+        # which we coerce to 5000 upstream; tier the rest.
+        growth = int((meta or {}).get("growth") or 0)
+        if growth >= 500:
+            score += 55
+        elif growth >= 250:
+            score += 40
+        elif growth >= 100:
+            score += 25
+        elif growth >= 50:
+            score += 15
+        else:
+            score += 8
+    score = max(0, min(100, score))
+
+    # --- Urgency -------------------------------------------------------
+    if score >= 75:
+        urgency = "now"
+    elif score >= 50:
+        urgency = "this_week"
+    else:
+        urgency = "monitor"
+
+    # --- Recommended agent --------------------------------------------
+    # Default = Nova (Copy) since most signals end up as a draft post.
+    recommended = "nova"
+    for kw, aid in _AGENT_KEYWORD_MAP:
+        if kw in lower:
+            recommended = aid
+            break
+
+    # --- Content angle ------------------------------------------------
+    # Tight one-liner the user sees on the Command Center card. Templated
+    # by source so the angle reads naturally without an LLM call.
+    if source == "reddit":
+        sub = (meta or {}).get("subreddit") or "the community"
+        angle = f"Riff on what r/{sub} is debating — bring your POV in 200 words."
+    elif source == "gtrends":
+        kw = (meta or {}).get("keyword") or "this topic"
+        angle = f"Search interest for \"{kw}\" is spiking — own the explainer first."
+    else:
+        angle = "Capitalize on this signal with a fast, opinionated post."
+
+    return {
+        "virality_score":   score,
+        "urgency":          urgency,
+        "content_angle":    angle,
+        "recommended_agent": recommended,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Reddit ingestion
 # ---------------------------------------------------------------------------
 async def _fetch_reddit_hot(subreddit: str, limit: int = 5) -> list[dict]:
@@ -235,14 +338,16 @@ async def ingest_trends_for_user(user_id: str) -> dict:
             posts = await _fetch_reddit_hot(sub, limit=5)
             for p in posts:
                 text = f"r/{p['subreddit']} ({p['score']} upvotes, {p['num_comments']} comments): {p['title']}"
+                meta = {
+                    "source": "reddit",
+                    "subreddit": p["subreddit"],
+                    "score": p["score"],
+                    "permalink": p["permalink"],
+                }
+                meta["signal"] = _score_signal(text, meta)
                 await remember(
                     user_id, "trend", text,
-                    meta={
-                        "source": "reddit",
-                        "subreddit": p["subreddit"],
-                        "score": p["score"],
-                        "permalink": p["permalink"],
-                    },
+                    meta=meta,
                     dedupe_key=f"reddit:{p['id']}",
                 )
                 reddit_count += 1
@@ -252,10 +357,12 @@ async def ingest_trends_for_user(user_id: str) -> dict:
         rising = await _fetch_gtrends_for(kw)
         for r in rising:
             text = f"Google Trends rising query for '{kw}': {r['query']} (+{r['value']}%)"
+            meta = {"source": "gtrends", "keyword": kw, "growth": r["value"]}
+            meta["signal"] = _score_signal(text, meta)
             # Use the query itself as the dedupe key so repeated runs update.
             await remember(
                 user_id, "trend", text,
-                meta={"source": "gtrends", "keyword": kw, "growth": r["value"]},
+                meta=meta,
                 dedupe_key=f"gtrends:{kw}:{r['query']}",
             )
             gtrends_count += 1
