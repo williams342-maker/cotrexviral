@@ -8,6 +8,7 @@ import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Sparkles, Send, Loader2, AlertTriangle, Wand2, Repeat } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
+import FeedbackInsights from '../../components/FeedbackInsights';
 
 const PLATFORM_LIMITS = {
   instagram: 2200, tiktok: 2200, x: 280, facebook: 63206, linkedin: 3000,
@@ -260,6 +261,7 @@ const Compose = () => {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Left: Generator */}
         <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-neutral-200/70 space-y-4">
+          <FeedbackInsights testid="compose-feedback-insights" limit={3} theme="light" />
           <div className="grid md:grid-cols-3 gap-3">
             <div className="md:col-span-2">
               <label className="text-[12px] font-medium text-neutral-600 mb-1.5 block">Topic / Listing</label>

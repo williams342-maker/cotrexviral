@@ -8,6 +8,7 @@ import {
   Instagram, Twitter, AlertCircle, Brain, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
+import FeedbackInsights from '../../components/FeedbackInsights';
 import { useAuth, API } from '../../context/AuthContext';
 import { useToast } from '../../hooks/use-toast';
 
@@ -447,6 +448,9 @@ const AgentWorkspace = () => {
 
           {/* RIGHT METRICS RAIL */}
           <aside className="space-y-4" data-testid="agent-metrics-rail">
+            {activeId === 'nova' && (
+              <FeedbackInsights compact testid="rail-feedback-insights" />
+            )}
             {spendHint && (spendHint.total_cost > 0 || spendHint.total_tokens > 0) && (
               <Link
                 to="/admin"
