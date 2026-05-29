@@ -1,0 +1,44 @@
+{
+  "summary": "Verified Seller OS Phase 4 (offer artifacts + download.html + outreach attach_artifact) and Phase 8 (retention intel score, workflows, advance). Backend pytest: Phase 4/8 = 10/10 PASS, Phase 1 = 10/10 PASS (re-verified individually). Phase 2/3 (12 tests) returned 6 ERRORS during the back-to-back full-suite run — all are 30s read-timeouts at the preview ingress when the LLM-heavy Phase 4/8 tests run immediately before them; phase 2/3 still PASS individually per iteration_9. Direct curl confirmed: POST /seller-offers/generate persists artifact with sections+score, GET /seller-offers/{id}/download.html returns text/html with title + fit-score bar + sections. Frontend Conversations renders 'View attached audit' link correctly when event has artifact_id; Retention page wires both 'Score churn risk' (POST /seller-retention/intel/score) and 'Heuristic scan' (POST /seller-retention/scan). Found ONE critical UX gap: the Send + audit / Send offer buttons on Conversations are unreachable in the normal flow.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/seller-leads (filter chain w/ LLM enrichment)", "issue": "Preview-edge ingress returns read-timeouts (30s) when several LLM-heavy seeds run back-to-back inside same pytest session. Not a code bug — phase 2/3 pass in isolation. Suggest bumping the requests session timeout in conftest from 30s -> 60s OR add pytest-rerunfailures."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "SellerLifecycle.jsx · Conversations · active-thread panel", "issue": "'Send + audit' and 'Send offer' buttons are GATED to lead.stage==='qualified', but the Conversations threads list (/seller-outreach/threads/{mission_id}) only returns leads with stage in {outreached, interested}. Result: buttons are ALWAYS disabled in normal flow — the only way they'd be enabled is if the lead stage is manually reverted to 'qualified'. Either (a) relax the disabled gate to allow follow-up outreach on outreached/interested leads (recommended — would let user attach an audit AFTER first cold message), or (b) include qualified leads with events in the threads list.", "selector": "[data-testid=\"conv-send-offer-artifact\"], [data-testid=\"conv-send-offer\"]", "priority": "HIGH"},
+      {"component": "Sidebar route highlighting", "issue": "'Mission Control' stays highlighted purple alongside the actually-active subsection (Conversations / Retention). Pre-existing from iteration_9, still not fixed.", "selector": "sidebar nav links", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Conversations · attach_artifact end-to-end", "issue": "Cannot validate via UI because of the gate bug above. Verified via direct API: POST /seller-outreach/generate with attach_artifact=true returns body+artifact and stamps artifact_id on the event; the Conversations page DOES render the 'View attached audit' link when an event has artifact_id, and clicking opens /seller-offers/{id}/download.html (text/html, 200, ~5KB styled HTML).", "affected_selectors": ["[data-testid=\"conv-send-offer-artifact\"]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_seller_os_phase4_8.py",
+    "/app/backend/tests/test_seller_os_phase1.py",
+    "/app/backend/tests/test_seller_os_phase23.py",
+    "/app/test_reports/pytest/seller_os_phase48_iter10.xml"
+  ],
+  "action_items": [
+    "Decide whether Send + audit / Send offer buttons on Conversations should be enabled for stage in {outreached, interested}. Current behavior makes them dead UI. Recommended fix in SellerLifecycle.jsx: change disabled gate from `active.stage !== 'qualified'` to `!['qualified','outreached','interested'].includes(active.stage)` and update tooltip accordingly. The backend /seller-outreach/generate already accepts re-outreach (it just records a new event).",
+    "(Low) Fix sidebar active-route detection so 'Mission Control' is not highlighted when on a sub-page (Conversations/Retention).",
+    "(Optional) Bump pytest requests-session timeout from 30s -> 60s OR add pytest-rerunfailures so the LLM-heavy seeds in phase 2/3 do not timeout at preview ingress when run after phase 4/8."
+  ],
+  "critical_code_review_comments": [
+    "SellerLifecycle.jsx is 711 lines and bundles Conversations + Retention + (likely) Discovery — split into focused subcomponents per route per file-size guideline (>700 lines).",
+    "/seller-outreach/threads/{mission_id} hard-codes the stage allow-list ['outreached','interested']; consider exposing as a query param (?stages=) for richer UX.",
+    "openArtifact() in Conversations uses window.open with onClick — works, but the rendered element therefore lacks an href attribute, so middle-click / right-click 'open in new tab' / copy-link does not work. Render an <a href={`${API}/seller-offers/${id}/download.html`} target=\"_blank\" rel=\"noopener\"> instead.",
+    "Pytest tests do not protect against preview-edge slowness; recommend retry-on-timeout for setup helpers like _seed_qualified_lead."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (Phase 1: 10/10, Phase 4/8: 10/10) — Phase 2/3 12 tests pass individually but flake under back-to-back run", "frontend": "85% (1 HIGH UX gate bug, 1 LOW sidebar highlight)"},
+  "test_credentials": "Session: test_session_1779636592168 (user_test1779636592168, is_admin=true). Cookie + Bearer both work.",
+  "seed_data_creation": "Created and CLEANED UP: mission 34efcea1d6b945f6aa39a62f295093f6 + lead ac360b8d992b42fc8afb16c539c422d7 + outreach event cf54ec1dfead4dceaadd0b5f7e49b741 + artifact d9f8d10e5a954a948e0b489790b4fcea. All deleted at end of run.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 4 (download.html, attach_artifact end-to-end) and Phase 8 (intel score + workflows) BACKEND is solid. The blocker is purely a frontend gating bug in SellerLifecycle.jsx Conversations panel — the disabled condition `active.stage !== 'qualified'` makes Send/Send+audit unreachable because threads only show outreached/interested. To retest after fix: (1) seed qualified lead with at least 1 outreach event (manually mongo-insert), or use the test-credentials user and run /seller-discovery/run + /seller-qualification/qualify + /seller-outreach/generate to land at outreached, (2) open Conversations, click thread, click Send + audit, (3) wait ~70s for LLM, (4) confirm a new sent event appears with artifact_id and 'View attached audit' link, (5) click link -> /seller-offers/{id}/download.html opens with text/html. Sidebar active-state is a separate small fix.",
+  "rca of the issue": "Conversations Send/Audit disabled-gate bug: SellerLifecycle.jsx renders the active-thread side with the buttons disabled when active.stage !== 'qualified'. The list of selectable threads is fetched from /api/seller-outreach/threads/{mission_id}, which filters seller_leads to stage in {outreached, interested}. The intersection is EMPTY, so buttons can never be enabled from normal navigation. Reproduction: (1) seed a qualified lead, (2) send first outreach (advances stage to outreached), (3) open Conversations — the lead appears, click thread — both buttons are disabled with tooltip 'Outreach disabled — lead is outreached'. Mitigation: enable the buttons for stage in {qualified, outreached, interested} (re-outreach is a valid use case and backend already supports it)."
+}

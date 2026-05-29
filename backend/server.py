@@ -77,6 +77,8 @@ from routes import (  # noqa: F401
     seller_qualification, # Seller Acquisition OS — Qualification Engine
     seller_outreach,     # Seller Acquisition OS — Personalized Outreach Engine
     seller_lifecycle,    # Seller Acquisition OS — Onboarding + Retention monitor
+    seller_offers,       # Seller Acquisition OS · Phase 4 — AI offer artifact generator
+    seller_retention_intel,  # Seller Acquisition OS · Phase 8 — Churn-risk + workflows
 )
 
 

@@ -82,6 +82,7 @@ class OutreachGenerate(BaseModel):
     channel:    Optional[str] = None         # auto-pick if blank
     custom_brief: Optional[str] = None       # extra context for the LLM
     dry_run:    bool = False                 # generate only — don't record sent
+    attach_artifact: bool = False            # Phase 4: also generate + attach an audit artifact
 
 
 class OutreachBulk(BaseModel):
@@ -201,7 +202,8 @@ async def _llm_generate_body(lead: dict, offer: str, channel: str,
 async def _record_event(user_id: str, lead_id: str, event: str,
                          channel: Optional[str] = None,
                          body: Optional[str] = None,
-                         offer_type: Optional[str] = None) -> dict:
+                         offer_type: Optional[str] = None,
+                         extra: Optional[dict] = None) -> dict:
     if event not in EVENT_TYPES:
         raise HTTPException(400, f"Unknown event type: {event}")
     now = datetime.now(timezone.utc)
@@ -215,6 +217,8 @@ async def _record_event(user_id: str, lead_id: str, event: str,
         "body":       body,
         "created_at": now,
     }
+    if extra:
+        doc.update({k: v for k, v in extra.items() if k not in doc})
     await db.seller_outreach_events.insert_one(doc)
     return doc
 
@@ -282,11 +286,28 @@ async def generate_outreach(payload: OutreachGenerate, request: Request):
         "body":        body,
     }
 
+    # Phase 4 — optionally also generate the structured audit artifact.
+    artifact = None
+    if payload.attach_artifact and not payload.dry_run:
+        try:
+            from routes.seller_offers import generate_and_persist_artifact
+            artifact = await generate_and_persist_artifact(
+                user.user_id, lead, offer_type=offer,
+                custom_brief=payload.custom_brief,
+            )
+            out["artifact"] = artifact
+        except Exception:
+            logger.exception("outreach: artifact gen failed (continuing without)")
+
     if not payload.dry_run:
         # Phase 2: "send" = record + flip lead stage. Real channel sends
         # ship in Phase 3 via the existing OAuth modules.
+        event_extra = {}
+        if artifact:
+            event_extra["artifact_id"] = artifact["id"]
         evt = await _record_event(user.user_id, payload.lead_id, "sent",
-                                    channel=channel, body=body, offer_type=offer)
+                                    channel=channel, body=body, offer_type=offer,
+                                    extra=event_extra)
         out["event_id"] = evt["id"]
         new_stage = _advance_stage_for_event("sent")
         if new_stage:
