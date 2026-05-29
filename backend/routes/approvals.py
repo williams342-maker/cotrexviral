@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from core import db, api, logger
 from deps import get_current_user
+from routes.content_layer import propagate_status_to_variants
 
 
 class _SettingsPayload(BaseModel):
@@ -86,6 +87,7 @@ async def approve_post(post_id: str, request: Request):
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Pending post not found")
+    await propagate_status_to_variants(post_id, status="scheduled")
     logger.info("Post %s approved by user %s", post_id, user.user_id)
     return {"ok": True}
 
@@ -105,5 +107,6 @@ async def reject_post(post_id: str, payload: _RejectPayload, request: Request):
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Pending post not found")
+    await propagate_status_to_variants(post_id, status="rejected")
     logger.info("Post %s rejected by user %s", post_id, user.user_id)
     return {"ok": True}

@@ -8,6 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from core import db, app, logger
+from routes.content_layer import propagate_status_for_many, propagate_status_to_variants
 
 # Mongo-backed TTL lock so multiple uvicorn workers don't double-publish.
 SCHEDULER_LOCK_NAME = "publish_scheduled_posts"
@@ -51,6 +52,8 @@ async def _publish_due_posts_now() -> dict:
         {"id": {"$in": ids}, "status": "scheduled"},
         {"$set": {"status": "published", "published_at": now, "publish_mode": "scheduler"}},
     )
+    # Mirror the bulk status flip into content_variants + content_items.
+    await propagate_status_for_many(ids, status="published", published_at=now)
 
     # Dispatch to live platform APIs (currently: LinkedIn + TikTok).
     # Lazy import to avoid a circular dependency with route modules.
@@ -74,8 +77,10 @@ async def _publish_due_posts_now() -> dict:
 
     for post in due:
         platforms = post.get("platforms") or []
+        dispatch_results: dict = {}
         if "linkedin" in platforms and publish_to_linkedin:
             res = await publish_to_linkedin(post["user_id"], post["content"])
+            dispatch_results["linkedin"] = res
             await db.posts.update_one(
                 {"id": post["id"]},
                 {"$set": {"dispatch.linkedin": res}},
@@ -84,6 +89,7 @@ async def _publish_due_posts_now() -> dict:
                 logger.warning("scheduler: linkedin dispatch failed for %s: %s", post["id"], res.get("reason"))
         if "tiktok" in platforms and publish_to_tiktok:
             res = await publish_to_tiktok(post["user_id"], post["content"], post.get("media_url"))
+            dispatch_results["tiktok"] = res
             await db.posts.update_one(
                 {"id": post["id"]},
                 {"$set": {"dispatch.tiktok": res}},
@@ -99,6 +105,7 @@ async def _publish_due_posts_now() -> dict:
                 link=post.get("pinterest_link"),
                 title=post.get("pinterest_title"),
             )
+            dispatch_results["pinterest"] = res
             await db.posts.update_one(
                 {"id": post["id"]},
                 {"$set": {"dispatch.pinterest": res}},
@@ -110,6 +117,7 @@ async def _publish_due_posts_now() -> dict:
                 post["user_id"], post["content"],
                 image_url=post.get("media_url"),
             )
+            dispatch_results["facebook"] = res
             await db.posts.update_one(
                 {"id": post["id"]},
                 {"$set": {"dispatch.facebook": res}},
@@ -121,12 +129,21 @@ async def _publish_due_posts_now() -> dict:
                 post["user_id"], post["content"],
                 image_url=post.get("media_url"),
             )
+            dispatch_results["instagram"] = res
             await db.posts.update_one(
                 {"id": post["id"]},
                 {"$set": {"dispatch.instagram": res}},
             )
             if not res.get("ok"):
                 logger.warning("scheduler: instagram dispatch failed for %s: %s", post["id"], res.get("reason"))
+
+        # Mirror per-platform dispatch metadata (external_post_id, url, errors)
+        # into the matching `content_variants` rows.
+        if dispatch_results:
+            await propagate_status_to_variants(
+                post["id"],
+                external_dispatch=dispatch_results,
+            )
 
     return {"due": len(due), "published": result.modified_count, "ids": ids}
 

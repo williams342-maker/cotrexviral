@@ -35,6 +35,35 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 60) **🧬 Phase 2 — Writer migration to normalized content layer**
+  - **New module `routes/content_layer.py`** — the single source of truth for mirroring writes to legacy `posts` → normalized `content_items` + `content_variants`. Three public helpers:
+    - `mirror_post_to_normalized(post)` — creates 1 content_item + N variants (one per platform) for a freshly-inserted post, stamps `brand_id/content_item_id/variant_ids` cross-ref triple back on the legacy row. Idempotent (short-circuits if already mirrored). Best-effort (errors logged, never raised — the legacy row is still the read source-of-truth during the migration window).
+    - `propagate_status_to_variants(post_id, status, published_at, scheduled_at, body, error, external_dispatch)` — single-post propagation. Updates every variant tied to the post + the umbrella content_item. The `external_dispatch` kwarg lands per-platform external_post_id/external_url/error on the matching variant row only (no cross-platform bleed).
+    - `propagate_status_for_many(post_ids, status, published_at)` — bulk update for the scheduler's `update_many` path.
+    - `cascade_delete_for_posts(post_ids)` — when a scheduled post is cancelled, marks variants + items as `archived` (NOT physically deleted — preserves attribution / metrics).
+  - **Writer paths wired**:
+    - **`routes/channels.py::/channels/publish`** — both branches (single + N-week recurrence) call `mirror_post_to_normalized` immediately after `db.posts.insert_one`. Immediate-publish dispatch metadata propagates via `external_dispatch`.
+    - **`routes/channels.py::cancel_scheduled`** — `cascade_delete_for_posts` for the deleted post(s), including the recurrence-series scope=future/all path.
+    - **`routes/channels.py::update_scheduled`** — propagates body + scheduled_at edits into variants and the content_item intent/title.
+    - **`routes/auto_draft.py::_process_user`** — only mirrors on first upsert insert (checks `upsert_res.upserted_id`); re-runs of the cron for the same `(trend_id, platform)` don't duplicate content_items.
+    - **`routes/scheduler.py::_publish_due_posts_now`** — bulk flips status → published via `propagate_status_for_many`; per-post dispatch metadata propagated once at the end of each post's processing.
+    - **`routes/approvals.py::approve_post / reject_post`** — propagates `scheduled` / `rejected` into the normalized layer.
+  - **9 new pytest cases** (`tests/test_phase2_writer_migration.py`):
+    - mirror creates content_item + variants with correct status + cross-ref triple stamped on legacy post
+    - mirror is idempotent (second call → same ids, no duplicate rows)
+    - mirror handles empty-platforms post (writes an "unknown" platform variant rather than zero)
+    - propagate status flips every variant + the umbrella item
+    - propagate `external_dispatch` lands per-platform metadata on the right variant (no cross-platform bleed)
+    - propagate `body` edit updates variant body + content_item intent + title
+    - unknown status is rejected (no junk leaks into the normalized layer)
+    - bulk propagate hits every variant of every input post (3 posts × 2 platforms = 6 variants)
+    - cascade delete archives rather than physically deletes (preserves attribution)
+  - **88/88 regression** across phase2 writer migration + normalize migration + attribution + meta_publish_and_approvals + auto_draft + recurrence + pinterest_publish + analytics_and_carousel + series_ops. All passing.
+  - **Live e2e verified**: A real `POST /api/channels/publish` for a `linkedin + twitter` scheduled post produced both the legacy posts row AND a content_item + 2 content_variants (one per platform), with the brand_id/content_item_id/variant_ids cross-ref stamped back. Approving a `pending_approval` post via `POST /api/approvals/{id}/approve` flipped the variant status from `pending_approval` → `scheduled` AND the umbrella content_item too — within a single request round-trip.
+  - **Net effect**: Phase 2 is **complete**. The normalized layer is now the live mirror of every new write, and Phase 3 (cut over reads to the normalized layer as the actual source-of-truth) is now unblocked. The legacy `posts` collection remains the read source-of-truth during the migration window so nothing breaks; the next phase can move reads incrementally without writer surprises.
+
+
+
 - 2026-05-28 (part 59) **📊 Campaign performance attribution dashboard (Phase 1 of #5)**
   - **New module `routes/perf_metrics.py`** (deliberately not `performance.py` — that name was already taken by the mocked generic dashboard route):
     - `record_metric(variant_id, platform, date, raw_payload, …)` — idempotent upsert into `performance_metrics` keyed by `(variant_id, platform, date)`. Re-calling with the same key updates in place; the unique compound index from Phase 1 makes double-counting impossible.

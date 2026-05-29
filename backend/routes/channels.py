@@ -9,6 +9,11 @@ from core import db, api, logger
 from deps import get_current_user
 from models import ChannelConnectRequest, PublishRequest, ScheduledUpdate, OptimalTimesRequest
 from routes.ai import _llm, LlmChat, UserMessage  # reuse LLM client
+from routes.content_layer import (
+    mirror_post_to_normalized,
+    propagate_status_to_variants,
+    cascade_delete_for_posts,
+)
 
 
 SUPPORTED_PLATFORMS = [
@@ -160,6 +165,7 @@ async def publish(payload: PublishRequest, request: Request):
                 post["pinterest_link"] = payload.pinterest_link
                 post["pinterest_title"] = payload.pinterest_title
             await db.posts.insert_one(post)
+            await mirror_post_to_normalized(post)
             created_posts.append(post["id"])
         return {
             "ok": True,
@@ -188,8 +194,9 @@ async def publish(payload: PublishRequest, request: Request):
         if payload.pinterest_images:
             post["pinterest_images"] = payload.pinterest_images
     await db.posts.insert_one(post)
+    await mirror_post_to_normalized(post)
 
-    # Immediate dispatch to live APIs (currently: LinkedIn + TikTok + Pinterest).
+    # Immediate dispatch to live platform APIs (currently: LinkedIn + TikTok + Pinterest).
     # Scheduled posts are picked up by the background scheduler instead.
     dispatch = {}
     if not is_scheduled and "linkedin" in (payload.platforms or []):
@@ -222,6 +229,13 @@ async def publish(payload: PublishRequest, request: Request):
         )
     if dispatch:
         await db.posts.update_one({"id": post["id"]}, {"$set": {"dispatch": dispatch}})
+        # Mirror published status + per-platform external ids/urls into variants.
+        await propagate_status_to_variants(
+            post["id"],
+            status=post["status"],
+            published_at=post.get("published_at"),
+            external_dispatch=dispatch,
+        )
 
     # Memory ingest — store the post content + which platforms received it
     # so subsequent agent prompts can recall it ("write me another like
@@ -287,6 +301,7 @@ async def cancel_scheduled(post_id: str, request: Request, scope: str = "only"):
     group_id = target.get("recurrence_group_id")
     if scope == "only" or not group_id:
         await db.posts.delete_one({"id": post_id, "user_id": user.user_id, "status": "scheduled"})
+        await cascade_delete_for_posts([post_id])
         return {"ok": True, "deleted": 1, "scope": "only"}
 
     if scope not in {"future", "all"}:
@@ -299,7 +314,10 @@ async def cancel_scheduled(post_id: str, request: Request, scope: str = "only"):
     }
     if scope == "future":
         query["scheduled_at"] = {"$gte": target["scheduled_at"]}
+    victims = await db.posts.find(query, {"_id": 0, "id": 1}).to_list(500)
+    victim_ids = [v["id"] for v in victims]
     res = await db.posts.delete_many(query)
+    await cascade_delete_for_posts(victim_ids)
     return {"ok": True, "deleted": res.deleted_count, "scope": scope}
 
 
@@ -364,6 +382,12 @@ async def update_scheduled(post_id: str, payload: ScheduledUpdate, request: Requ
     )
     if not res.matched_count:
         raise HTTPException(status_code=404, detail="Scheduled post not found")
+    # Mirror content / scheduled_at edits into the variant rows.
+    await propagate_status_to_variants(
+        post_id,
+        body=updates.get("content"),
+        scheduled_at=updates.get("scheduled_at"),
+    )
     return {"ok": True}
 
 

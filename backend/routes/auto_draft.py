@@ -41,6 +41,7 @@ from pydantic import BaseModel, Field
 
 from core import api, db
 from deps import get_current_user
+from routes.content_layer import mirror_post_to_normalized
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +231,7 @@ async def _process_user(user_doc: dict) -> int:
         }
         # Upsert: insert if new, overwrite content/scheduled_at if a
         # previous run already queued this signal+platform.
-        await db.posts.update_one(
+        upsert_res = await db.posts.update_one(
             {"dedupe_key": dedupe_key, "user_id": user_id},
             {
                 "$set":          post,
@@ -239,6 +240,15 @@ async def _process_user(user_doc: dict) -> int:
             },
             upsert=True,
         )
+        # Mirror into normalized layer — only on first insert so we don't
+        # re-create content_items every cron tick.
+        if upsert_res.upserted_id is not None:
+            fresh = await db.posts.find_one(
+                {"dedupe_key": dedupe_key, "user_id": user_id},
+                {"_id": 0},
+            )
+            if fresh:
+                await mirror_post_to_normalized(fresh)
         queued += 1
 
     return queued
