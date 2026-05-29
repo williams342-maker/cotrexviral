@@ -28,10 +28,13 @@ def _admin_user_id():
 
 
 def _insert_pending(content: str = "Pending test post"):
-    """Drop a status=pending_approval post into the DB for the admin user."""
+    """Drop a status=pending_approval post into the DB for the admin user.
+    Phase 5: also mirrors into the normalized layer so strict-mode reads
+    (`STRICT_NORMALIZED_READS=true`) still surface it."""
     import sys
     sys.path.insert(0, "/app/backend")
     from core import db
+    from routes.content_layer import mirror_post_to_normalized
 
     user_id = _admin_user_id()
     post_id = f"appr_{secrets.token_hex(6)}"
@@ -47,6 +50,7 @@ def _insert_pending(content: str = "Pending test post"):
 
     async def go():
         await db.posts.insert_one(doc)
+        await mirror_post_to_normalized(doc)
     asyncio.get_event_loop().run_until_complete(go())
     return post_id
 
@@ -57,7 +61,14 @@ def _cleanup_post(post_id: str):
     from core import db
 
     async def go():
+        # Cascade: variants + content_item too (Phase 2 mirrored these).
+        ci = await db.content_variants.find_one(
+            {"post_id": post_id}, {"_id": 0, "content_item_id": 1},
+        )
         await db.posts.delete_one({"id": post_id})
+        await db.content_variants.delete_many({"post_id": post_id})
+        if ci and ci.get("content_item_id"):
+            await db.content_items.delete_one({"id": ci["content_item_id"]})
     asyncio.get_event_loop().run_until_complete(go())
 
 

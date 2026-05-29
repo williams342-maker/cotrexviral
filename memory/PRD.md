@@ -35,6 +35,30 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 63) **🔐 Phase 5 — Operator flip + count-source migration**
+  - **Operator flip** — set `STRICT_NORMALIZED_READS=true` in `/app/backend/.env` and restarted the backend. Strict mode is now LIVE on the preview environment. The violet **STRICT** pill renders next to "Content layer healthy" on the Admin Overview, confirming the cutover. Live verified: `GET /api/admin/content-layer/health` returns `{strict_mode: True, drift_triggered: False, mirror_coverage_pct: 100.0}` on production user data.
+  - **Test-data hygiene** — cleaned up 212 orphan `content_items` from prior test runs that survived cleanup races. After cleanup: 150 posts ↔ 150 content_items ↔ 150 content_variants ↔ exact alignment. Hardened `_cleanup_post` in `test_meta_publish_and_approvals.py` to cascade-delete the variants + content_item alongside the legacy post.
+  - **Five count-source migrations** (legacy `db.posts.count_documents` → normalized `content_items` / `content_variants`):
+    - `GET /api/admin/stats.total_posts` → `content_items.count_documents({})`.
+    - `GET /api/admin/users.[stats.posts]` (list) → `content_items.count_documents({user_id})`.
+    - `GET /api/admin/users/{id}.stats.posts` (detail) → `content_items.count_documents({user_id})`.
+    - `GET /api/marketing-os/dashboard.stats.pending_approvals` → `content_items.count_documents({user_id, status: pending_approval})`.
+    - `POST /api/admin/scheduler/run-once` (health) → `content_variants.count_documents({status: scheduled})`.
+  - **Test compatibility updates** — Phase 3 / Phase 4 tests that asserted lenient-fallback behavior were updated to be **strict-mode-aware** (assert `not in` when strict is on, `in` when lenient). Each test still serves as a regression for the OPPOSITE mode — if the operator flips the env back to False, the assertions remain valid. Also fixed `test_meta_publish_and_approvals._insert_pending` to mirror its post into the normalized layer (so the helper still works under strict mode).
+  - **5 new pytest cases** (`tests/test_phase5_count_migration.py`):
+    - `/api/admin/stats.total_posts` exactly matches `content_items.count`.
+    - `/api/admin/users/{id}.stats.posts` exactly matches user-scoped `content_items.count`.
+    - `/api/marketing-os/dashboard.stats.pending_approvals` reflects a freshly-seeded mirrored pending_approval (≥ 1).
+    - `/admin/scheduler/run-once` returns valid int counters from the normalized variant counts.
+    - Sanity check that `STRICT_NORMALIZED_READS=true` is live (`mirror_coverage_pct >= 99`).
+  - **111/111 regression** across phase5 + phase4 + phase3 + phase2 + normalize + attribution + meta_publish_and_approvals + auto_draft + recurrence + pinterest_publish + analytics_and_carousel + series_ops — all GREEN under live STRICT mode. No silent regressions.
+  - **Phase 5 carve-out — what was NOT done in this PR**:
+    - Physical drop of the `posts` collection. The legacy collection still hosts ≥ 6 fields with no normalized equivalent yet — `dispatch` (in-flight dispatch payload), `recurrence_group_id` / `_index` / `_total`, `pinterest_board_id` / `_link` / `_title` / `_images`, `media_url` (singular, distinct from variants `media_urls` list), `repeat_weeks`. These need to be ABSORBED into the `content_variants` schema with a migration before the legacy collection can be dropped.
+    - Remaining `db.posts` callsites: 28 (down from 50 at Phase 4 start). Most are non-trivial — engagement-metrics writes from `analytics.py`, winning-hook scans from `feedback_loop.py`, memory queries from `memory.py:541`, account cleanup `delete_many` cascades. Each requires its own focused PR with a backfill and read/write cutover.
+  - **Operator unblock for Phase 6**: extend `content_variants` schema → backfill missing fields → rewrite the remaining 28 callsites → stop writing to `posts` → drop the collection. Each step independently revertable via the same drift-coverage telemetry already in place.
+
+
+
 - 2026-05-29 (part 62) **🔒 Phase 4 — Strict-mode read cutover across remaining endpoints**
   - **New env flag `STRICT_NORMALIZED_READS`** (default `false`) in `core.py`. When flipped to `true`, all content_layer reads drop the lenient fallback and return ONLY posts that exist in the normalized layer. Operators flip the switch once `/admin/content-layer/health` shows zero drift sustained for a week.
   - **New helper `routes/content_layer.list_posts_via_normalized(user_id, limit, strict)`** for the "latest N posts" pattern (distinct from `resolve_post_ids_for_status` which is status-filtered). Reads `content_items` → joins to `posts` via the `content_item_id` cross-ref. Lenient mode merges un-mirrored stragglers into the candidate set and sorts by `created_at` desc before truncating — a strictly-newer un-mirrored post can still appear (no silent loss during the migration window).

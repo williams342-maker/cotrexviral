@@ -25,6 +25,7 @@ load_dotenv("/app/backend/.env")
 import sys
 sys.path.insert(0, "/app/backend")
 from routes import content_layer as CL  # noqa: E402
+from core import STRICT_NORMALIZED_READS  # noqa: E402
 
 API_URL = open("/app/frontend/.env").read().split("REACT_APP_BACKEND_URL=")[1].split("\n")[0].strip()
 TEST_TOKEN = "test_session_1779636592168"
@@ -93,8 +94,9 @@ class TestScheduledReads:
         _run(go())
 
     def test_list_scheduled_falls_back_for_unmirrored(self, cleanup):
-        """A scheduled post that escaped the mirror (no content_item_id) still
-        appears via the lenient fallback to the legacy posts query."""
+        """In lenient mode, a scheduled post that escaped the mirror (no
+        content_item_id) still appears via the lenient fallback to the
+        legacy posts query. In strict mode it should NOT appear."""
         async def go():
             post = {
                 "id":            uuid.uuid4().hex,
@@ -111,7 +113,10 @@ class TestScheduledReads:
             r = requests.get(f"{API_URL}/api/posts/scheduled", headers=HEADERS, timeout=20)
             assert r.status_code == 200, r.text
             ids = [p["id"] for p in r.json()]
-            assert post["id"] in ids, "Un-mirrored post should still surface via the lenient fallback"
+            if STRICT_NORMALIZED_READS:
+                assert post["id"] not in ids, "Strict mode must hide un-mirrored posts"
+            else:
+                assert post["id"] in ids, "Lenient mode should surface un-mirrored posts"
         _run(go())
 
     def test_list_scheduled_filters_by_time_range(self, cleanup):
@@ -182,7 +187,8 @@ class TestApprovalsReads:
         _run(go())
 
     def test_list_pending_falls_back_for_unmirrored(self, cleanup):
-        """An un-mirrored pending_approval still surfaces."""
+        """An un-mirrored pending_approval still surfaces in lenient mode;
+        is hidden in strict mode."""
         async def go():
             post = {
                 "id":           uuid.uuid4().hex,
@@ -199,7 +205,10 @@ class TestApprovalsReads:
             r = requests.get(f"{API_URL}/api/approvals", headers=HEADERS, timeout=20)
             assert r.status_code == 200, r.text
             ids = [p["id"] for p in r.json()["pending"]]
-            assert post["id"] in ids
+            if STRICT_NORMALIZED_READS:
+                assert post["id"] not in ids
+            else:
+                assert post["id"] in ids
         _run(go())
 
 
@@ -236,7 +245,8 @@ class TestResolveHelper:
 
     def test_resolver_finds_mirrored_and_unmirrored(self, cleanup):
         """`resolve_post_ids_for_status` returns the UNION of normalized
-        + un-mirrored posts and reports the un-mirrored count."""
+        + un-mirrored posts (when called with strict=False) and reports
+        the un-mirrored count regardless of strictness."""
         async def go():
             now = datetime.now(timezone.utc)
             mirrored = {
@@ -261,8 +271,9 @@ class TestResolveHelper:
             await _insert_unmirrored(unmirrored)
             cleanup["post_ids"].extend([mirrored["id"], unmirrored["id"]])
 
+            # Explicitly request lenient mode for this test (independent of env flag).
             post_ids, n_unmirrored = await CL.resolve_post_ids_for_status(
-                TEST_USER_ID, status="scheduled",
+                TEST_USER_ID, status="scheduled", strict=False,
             )
             assert mirrored["id"] in post_ids
             assert unmirrored["id"] in post_ids

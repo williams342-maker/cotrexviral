@@ -107,7 +107,10 @@ async def os_dashboard(request: Request):
     counts_task_active = db.campaigns.count_documents(
         {"user_id": uid, "status": "active"},
     )
-    counts_task_pending = db.posts.count_documents(
+    # Phase 5 — count via content_items (the normalized index). One row
+    # per platform-agnostic intent, so this is semantically equivalent to
+    # the legacy posts count.
+    counts_task_pending = db.content_items.count_documents(
         {"user_id": uid, "status": "pending_approval"},
     )
     counts_task_brand_voice = db.cortex_memory.count_documents(

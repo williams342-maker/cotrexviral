@@ -27,7 +27,7 @@ async def admin_stats(request: Request):
         "suspended_users": await db.users.count_documents({"status": "suspended"}),
         "admins": await db.users.count_documents({"is_admin": True}),
         "total_leads": await db.leads.count_documents({}),
-        "total_posts": await db.posts.count_documents({}),
+        "total_posts": await db.content_items.count_documents({}),  # Phase 5 — normalized count
         "total_reports": await db.reports.count_documents({}),
         "total_channels": await db.channels.count_documents({}),
         "open_tickets": await db.tickets.count_documents({"status": "open"}),
@@ -145,7 +145,7 @@ async def admin_list_users(request: Request, q: Optional[str] = None):
         u.setdefault("niche", "")
         uid = u["user_id"]
         u["stats"] = {
-            "posts": await db.posts.count_documents({"user_id": uid}),
+            "posts": await db.content_items.count_documents({"user_id": uid}),  # Phase 5 — normalized
             "leads": await db.leads.count_documents({"user_id": uid}),
             "reports": await db.reports.count_documents({"user_id": uid}),
             "channels": await db.channels.count_documents({"user_id": uid}),
@@ -165,7 +165,7 @@ async def admin_user_detail(user_id: str, request: Request):
     return {
         "user": u,
         "stats": {
-            "posts": await db.posts.count_documents({"user_id": user_id}),
+            "posts": await db.content_items.count_documents({"user_id": user_id}),  # Phase 5 — normalized
             "leads": await db.leads.count_documents({"user_id": user_id}),
             "reports": await db.reports.count_documents({"user_id": user_id}),
             "channels": await db.channels.count_documents({"user_id": user_id}),

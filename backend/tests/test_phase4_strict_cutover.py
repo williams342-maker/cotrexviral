@@ -28,6 +28,7 @@ load_dotenv("/app/backend/.env")
 import sys
 sys.path.insert(0, "/app/backend")
 from routes import content_layer as CL  # noqa: E402
+from core import STRICT_NORMALIZED_READS  # noqa: E402
 
 API_URL = open("/app/frontend/.env").read().split("REACT_APP_BACKEND_URL=")[1].split("\n")[0].strip()
 TEST_TOKEN = "test_session_1779636592168"
@@ -92,11 +93,15 @@ class TestActivityFeed:
         assert seeded["mirrored_id"] in ids
 
     def test_activity_lenient_includes_unmirrored(self, seeded):
-        """Default (lenient) mode tops up with un-mirrored stragglers."""
+        """Lenient mode tops up with un-mirrored stragglers. Strict mode
+        hides them."""
         r = requests.get(f"{API_URL}/api/activity", headers=HEADERS, timeout=20)
         assert r.status_code == 200, r.text
         ids = [it["id"] for it in r.json() if it["type"] == "post"]
-        assert seeded["unmirrored_id"] in ids
+        if STRICT_NORMALIZED_READS:
+            assert seeded["unmirrored_id"] not in ids
+        else:
+            assert seeded["unmirrored_id"] in ids
 
 
 class TestListPosts:
@@ -108,10 +113,15 @@ class TestListPosts:
         assert seeded["mirrored_id"] in ids
 
     def test_list_posts_lenient_includes_unmirrored(self, seeded):
+        """Lenient mode merges un-mirrored stragglers into the candidate set.
+        Strict mode excludes them."""
         r = requests.get(f"{API_URL}/api/posts", headers=HEADERS, timeout=20)
         assert r.status_code == 200, r.text
         ids = [p["id"] for p in r.json()]
-        assert seeded["unmirrored_id"] in ids
+        if STRICT_NORMALIZED_READS:
+            assert seeded["unmirrored_id"] not in ids
+        else:
+            assert seeded["unmirrored_id"] in ids
 
 
 class TestAdminRecentPosts:

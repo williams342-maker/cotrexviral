@@ -15,9 +15,10 @@ async def root():
 async def admin_scheduler_run_once(request: Request):
     """Admin debug: manually trigger the publish-due job once (bypasses scheduler lock)."""
     await require_admin(request)
-    before = await db.posts.count_documents({"status": "scheduled"})
+    # Phase 5 — health check reads via normalized variants instead of legacy posts.
+    before = await db.content_variants.count_documents({"status": "scheduled"})
     result = await _publish_due_posts_now()
-    after_scheduled = await db.posts.count_documents({"status": "scheduled"})
+    after_scheduled = await db.content_variants.count_documents({"status": "scheduled"})
     return {
         "ok": True,
         "worker": WORKER_ID,
