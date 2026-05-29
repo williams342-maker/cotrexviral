@@ -422,6 +422,28 @@ async def run_marketing_os(payload: _RunRequest, request: Request):
 
         yield _sse("os_persisted", {"run_id": run_id, "status": status})
 
+        # Real-time fanout for any open inbox sockets the user has.
+        # Best-effort: the SSE response is already done by this point;
+        # WS failures must NEVER block this generator's exit.
+        try:
+            from routes.realtime import broadcast_to_user
+            ev = (
+                "hitl_paused"      if status == "awaiting_approval"
+                else "run_failed"  if status == "failed"
+                else "run_completed"
+            )
+            await broadcast_to_user(user.user_id, ev, {
+                "run_id":            run_id,
+                "campaign_id":       campaign_id,
+                "brief":             payload.brief[:240],
+                "status":            status,
+                "skip_distribution": skip_distribution,
+                "summary":           summary_text[:400] if summary_text else "",
+                "transcript_len":    len(transcript),
+            })
+        except Exception:
+            logger.exception("ws broadcast failed for run %s", run_id)
+
     return StreamingResponse(
         event_stream(), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
@@ -596,6 +618,22 @@ async def _resume_run(run_id: str, payload: _ApprovalRequest, request: Request,
                 logger.exception("Failed to pin run %s onto campaign %s", new_run_id, campaign_id)
 
         yield _sse("os_persisted", {"run_id": new_run_id, "status": final_status})
+
+        # WS fanout — original paused run is now resolved, new resumed
+        # run completed (or failed). Inbox listeners use this to drop
+        # the resolved row from their pending queue and pop a toast.
+        try:
+            from routes.realtime import broadcast_to_user
+            await broadcast_to_user(user.user_id, "hitl_resolved", {
+                "run_id":           run_id,           # the resolved (paused) run
+                "resumed_into":     new_run_id,
+                "decision":         "approved" if approve else "rejected",
+                "status":           final_status,     # of the new resumed run
+                "summary":          summary_text[:400] if summary_text else "",
+                "campaign_id":      campaign_id,
+            })
+        except Exception:
+            logger.exception("ws broadcast failed for resolved run %s", run_id)
 
     return StreamingResponse(
         event_stream(), media_type="text/event-stream",

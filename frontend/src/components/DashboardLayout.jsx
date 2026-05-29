@@ -166,6 +166,7 @@ const DashboardLayout = ({ children, title, subtitle, headerExtra }) => {
           </main>
         </div>
       </div>
+      <HitlInboxBell />
     </div>
   );
 };

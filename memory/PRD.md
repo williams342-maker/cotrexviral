@@ -35,6 +35,35 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-28 (part 57) **📡 Real-time HITL approval inbox via WebSocket**
+  - **New backend module `routes/realtime.py`** (≈210 lines) — process-local connection registry + auth + fanout:
+    - **`/api/ws/hitl-inbox`** WebSocket endpoint mounted directly on the global `app` (FastAPI APIRouter doesn't yet expose `.websocket()`). Authenticates via three fallback paths: `?token=` query param, `session_token` cookie (browser default), or `Authorization: Bearer …` header.
+    - Sends an immediate **snapshot frame** on connect — current `awaiting_approval` runs (capped 20, transcript bodies stripped) so a fresh client doesn't have to wait for the next state change to discover what's pending.
+    - **Heartbeat**: client `ping` → server `pong`. Idle loop hangs on `ws.receive_text()`; everything else (broadcast frames) is pushed from elsewhere.
+    - **`broadcast_to_user(user_id, event, data)`** helper — best-effort fanout to every socket the user has open (multiple browser tabs all sync). Dead sockets pruned. Failures never block the caller.
+    - **Multi-worker note**: registry is process-local, fine for our single-worker setup. Migration path to Redis pub/sub flagged in module docstring for the eventual scale-out.
+  - **`routes/marketing_os.py` wires three broadcasts** at the end of every persisted run:
+    - `hitl_paused` — fresh run resolved as `awaiting_approval` (fires from the main streaming handler).
+    - `hitl_resolved` — original paused run was approved or rejected (fires from `_resume_run`).
+    - `run_completed` / `run_failed` — any other terminal state, used by future UI affordances.
+    - Each frame carries `{run_id, brief (240 chars), campaign_id, status, skip_distribution, transcript_len, summary (400 chars)}`.
+  - **New frontend hook `hooks/useHitlInbox.js`** — opens the WS, maintains `paused[]` array, handles **auto-reconnect with exponential backoff** (1.5s → 3s → 6s → 12s, capped at 30s), sends 25s heartbeats, and re-uses the natural `session_token` cookie + `?token=` query fallback. Returns `{paused, connected, lastEvent, removeRun}`.
+  - **New floating `<HitlInboxBell />`** mounted once in `DashboardLayout.jsx` so the inbox is visible from every dashboard route:
+    - **Hidden by default** when there are zero paused runs AND the WS is connected — no-noise default.
+    - Amber bell + count badge appears the instant a run pauses. Wiggle animation (subtle, not epileptic). Red dot when the WS disconnects so users know they might be missing updates.
+    - Popover lists every paused run with brief preview + age + `transcript_len`. Click → navigates to `/dashboard/command-center?expand_run=<id>`.
+    - Toast pops on every NEW `hitl_paused` and `hitl_resolved` event (de-duped on `{event}:{run_id}:{at}`).
+  - **CommandCenter `expand_run` deep-link** — when the URL carries `?expand_run=<id>`, the page scrolls to the matching `data-testid="activity-run-{id}"` row, pulses an amber ring on it for 2.4s, then strips the param. Same path is now also linkable from the 24h reminder email (potential future enhancement).
+  - **New CSS keyframe** `@keyframes wiggle` in `index.css` for the bell. ±8° rotation, 1s loop.
+  - **4 new pytest cases** (`tests/test_realtime_inbox.py`):
+    - **Unauthenticated WS handshake is rejected** (1008 policy violation).
+    - **Snapshot frame** delivered on successful auth.
+    - **Ping/pong heartbeat** round-trip.
+    - **Live end-to-end broadcast**: open WS → trigger a `requires_approval=True` run → `hitl_paused` frame arrives within 180s with the right `status`, `run_id`, and `transcript_len`. Skips cleanly on LLM budget cap.
+  - **25/25 critical tests pass** across realtime, HITL reminders, retry helper, HITL endpoints, memory-perf. Frontend lint clean, screenshot smoke test passed, no JS errors.
+  - **Manual verification**: traced through a real session at the websockets level — open WS gets snapshot, ping replies pong, triggering a paused run via curl delivers the `hitl_paused` frame in real-time.
+
+
 - 2026-05-28 (part 55) **🔁 Per-role retry-with-backoff in LangGraph nodes**
   - **New helper `_send_with_retry(chat, prompt)` in `routes/marketing_os_graph.py`** wraps every `send_with_usage` call site (both the role nodes and the summariser). Adaptive policy:
     - Up to 3 attempts on transient errors (timeouts, 5xx); backoff 1.5s → 3s.

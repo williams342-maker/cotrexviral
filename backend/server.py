@@ -51,6 +51,7 @@ from routes import (  # noqa: F401
     campaigns,       # Campaigns — first-class container for multi-post goals
     feedback_loop,   # Self-improving loop: published metrics → memory rows
     marketing_os,    # Marketing OS — 5-role chain + Command Center dashboard
+    realtime,        # WebSocket fanout: real-time HITL inbox
 )
 
 

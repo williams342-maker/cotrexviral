@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Command, Sparkles, Zap, TrendingUp, CheckSquare, Trophy,
   ChevronRight, Play, Activity, Loader2, Flame, ArrowRight, Bot,
@@ -191,6 +191,7 @@ const NewCampaignModal = ({ open, onClose, onCreated }) => {
 // ----------------------------------------------------------------------
 const CommandCenter = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -215,6 +216,30 @@ const CommandCenter = () => {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Deep-link from the HITL inbox bell or the reminder email: when
+  // `?expand_run=<id>` is present, scroll to the matching activity-feed
+  // row and pulse-highlight it so the user sees what they're being
+  // asked to review. Strip the param after the scroll so a reload
+  // doesn't re-trigger.
+  useEffect(() => {
+    const target = searchParams.get('expand_run');
+    if (!target || !data) return;
+    const el = document.querySelector(`[data-testid="activity-run-${target}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('ring-2', 'ring-amber-400/70', 'transition-shadow');
+    setTimeout(() => {
+      el.classList.remove('ring-2', 'ring-amber-400/70');
+    }, 2400);
+    // Remove the param from the URL.
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('expand_run');
+      return next;
+    }, { replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, searchParams]);
 
   const campaignsByStatus = useMemo(() => {
     const groups = { draft: [], active: [], completed: [] };
