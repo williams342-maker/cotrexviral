@@ -81,6 +81,22 @@ const Briefs = () => {
     }
   };
 
+  const toggleAutoApprove = async () => {
+    const next = !settings.auto_approve_briefs;
+    try {
+      const r = await axios.put(`${API}/briefs/settings`, { auto_approve_briefs: next }, { withCredentials: true });
+      setSettings(r.data);
+      toast({
+        title: next ? 'Auto-approve ON' : 'Auto-approve OFF',
+        description: next
+          ? 'Autopilot briefs that pass Atlas\'s weekly budget will spawn campaigns automatically.'
+          : 'Every brief lands in the inbox for your review.',
+      });
+    } catch (e) {
+      toast({ title: 'Update failed', description: e?.response?.data?.detail || e.message, variant: 'destructive' });
+    }
+  };
+
   const approve = async (b) => {
     setBusy(b.id);
     try {
@@ -172,6 +188,19 @@ const Briefs = () => {
               >
                 {autopilotOn ? <Zap size={12} /> : <Power size={12} />}
                 Autopilot: {autopilotOn ? 'ON' : 'OFF'}
+              </button>
+              <button
+                onClick={toggleAutoApprove}
+                disabled={!autopilotOn}
+                title={!autopilotOn ? 'Turn on Autopilot first' : ''}
+                className={`text-[11.5px] font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 border transition-colors ${
+                  settings.auto_approve_briefs && autopilotOn
+                    ? 'bg-violet-50 border-violet-300 text-violet-700 hover:bg-violet-100'
+                    : 'bg-white border-neutral-300 text-neutral-500 hover:bg-neutral-50 disabled:opacity-50'
+                }`}
+                data-testid="auto-approve-toggle"
+              >
+                {settings.auto_approve_briefs ? '✦' : '○'} Auto-approve: {settings.auto_approve_briefs ? 'ON' : 'OFF'}
               </button>
               <span className="text-[10.5px] text-neutral-500 tabular-nums">{settings.cadence_label}</span>
             </div>

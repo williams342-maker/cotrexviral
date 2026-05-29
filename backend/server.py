@@ -63,6 +63,7 @@ from routes import (  # noqa: F401
     oauth_youtube,   # YouTube OAuth (Google) — channel upload + read scopes
     experiments,     # Head-to-head variant testing (Ori) — Phase 4 of Growth Team
     briefs,          # Atlas brief proposals + autopilot scanner — Phase 3 of Growth Team
+    autonomy,        # Per-agent weekly budget caps — Phase 5 of Growth Team
 )
 
 

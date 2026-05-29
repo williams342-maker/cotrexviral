@@ -40,6 +40,56 @@ ALLOWED_MODES = {"manual", "autopilot"}
 
 
 # ---------------------------------------------------------------------
+# Auto-approval helpers — Phase 5 integration
+# ---------------------------------------------------------------------
+async def _maybe_auto_approve(user_id: str, brief: dict) -> Optional[dict]:
+    """If the user opted into auto-approve AND Atlas has budget headroom,
+    spawn the campaign immediately and return the created campaign doc.
+    Returns None if the brief should stay `pending` (default HITL path)."""
+    settings = await db.autopilot_settings.find_one(
+        {"user_id": user_id}, {"_id": 0, "auto_approve_briefs": 1},
+    ) or {}
+    if not settings.get("auto_approve_briefs"):
+        return None
+
+    from routes.autonomy import can_auto_approve, record_usage
+    allowed, reason = await can_auto_approve("atlas", user_id)
+    if not allowed:
+        logger.info("brief auto-approve gated for user=%s: %s", user_id, reason)
+        return None
+
+    now = datetime.now(timezone.utc)
+    campaign_doc = {
+        "id":              str(uuid.uuid4()),
+        "user_id":         user_id,
+        "name":            brief["title"][:120],
+        "goal":            "awareness",
+        "custom_goal":     None,
+        "audience":        None,
+        "content_pillars": [],
+        "kpi_targets":     {brief.get("target_metric") or "engagements": 0},
+        "start_date":      now,
+        "end_date":        None,
+        "status":          "draft",
+        "platforms":       brief.get("suggested_platforms") or [],
+        "notes":           (f"Auto-approved by Atlas (Phase 5 autonomy budget).\n"
+                            f"Reason: {reason}\n\n"
+                            f"Hypothesis: {brief.get('hypothesis') or '—'}\n\n"
+                            f"Brief body:\n{brief['body']}\n\n"
+                            f"Rationale: {brief.get('rationale') or '—'}"),
+        "plan_text":       None,
+        "proposed_brief_id": brief["id"],
+        "created_at":      now,
+        "updated_at":      now,
+    }
+    await db.campaigns.insert_one(campaign_doc)
+    # Burn one irreversible from Atlas's weekly budget.
+    await record_usage("atlas", user_id, irreversible=1)
+    campaign_doc.pop("_id", None)
+    return campaign_doc
+
+
+# ---------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------
 async def _gather_atlas_facts(user_id: str) -> dict:
@@ -185,12 +235,18 @@ def _fallback_briefs(facts: dict, max_briefs: int) -> list[dict]:
 
 async def _persist_proposals(user_id: str, briefs: list[dict],
                              *, source: str = "manual") -> list[dict]:
-    """Insert N briefs as `pending`. Returns the inserted rows."""
+    """Insert N briefs as `pending`. Returns the inserted rows.
+
+    Phase 5: when `source == 'autopilot'` AND the user opted into
+    `auto_approve_briefs` AND Atlas has weekly budget headroom, the
+    brief is inserted as `approved` with a campaign already spawned —
+    skipping the HITL inbox entirely."""
     now = datetime.now(timezone.utc)
     docs: list[dict] = []
     for b in briefs:
+        bid = uuid.uuid4().hex
         doc = {
-            "id":                 uuid.uuid4().hex,
+            "id":                 bid,
             "user_id":            user_id,
             "proposer_agent":     "atlas",
             "title":              b["title"],
@@ -201,12 +257,25 @@ async def _persist_proposals(user_id: str, briefs: list[dict],
             "target_metric":      b.get("target_metric"),
             "status":             "pending",
             "source":             source,  # "manual" | "autopilot"
+            "auto_approved":      False,
             "created_at":         now,
             "decided_at":         None,
             "decided_by":         None,
             "resolved_into_campaign_id": None,
             "edited_body":        None,
         }
+
+        # Phase 5 auto-approve path — autopilot-only, opt-in, budget-gated.
+        campaign = None
+        if source == "autopilot":
+            campaign = await _maybe_auto_approve(user_id, doc)
+        if campaign:
+            doc["status"]                    = "approved"
+            doc["auto_approved"]             = True
+            doc["decided_at"]                = now
+            doc["decided_by"]                = "atlas (auto-approved by autonomy budget)"
+            doc["resolved_into_campaign_id"] = campaign["id"]
+
         await db.proposed_briefs.insert_one(doc)
         doc.pop("_id", None)
         docs.append(doc)
@@ -216,9 +285,10 @@ async def _persist_proposals(user_id: str, briefs: list[dict],
         try:
             from routes.realtime import broadcast_to_user
             await broadcast_to_user(user_id, "briefs_proposed", {
-                "count":    len(docs),
-                "brief_id": docs[0]["id"],
-                "title":    docs[0]["title"],
+                "count":          len(docs),
+                "brief_id":       docs[0]["id"],
+                "title":          docs[0]["title"],
+                "auto_approved":  sum(1 for d in docs if d.get("auto_approved")),
             })
         except Exception:
             logger.debug("briefs broadcast skipped", exc_info=True)
@@ -237,7 +307,8 @@ class EditRequest(BaseModel):
 
 
 class AutopilotPatch(BaseModel):
-    briefs_mode: str  # "manual" | "autopilot"
+    briefs_mode: Optional[str] = None  # "manual" | "autopilot"
+    auto_approve_briefs: Optional[bool] = None  # Phase 5 opt-in
 
 
 # ---------------------------------------------------------------------
@@ -251,23 +322,31 @@ async def get_brief_settings(request: Request):
         {"user_id": user.user_id}, {"_id": 0},
     ) or {}
     return {
-        "briefs_mode":    doc.get("briefs_mode", "manual"),
-        "cadence_label":  "Daily at 09:00 UTC" if doc.get("briefs_mode") == "autopilot" else "Manual only",
-        "last_scan_at":   doc.get("last_brief_scan_at"),
-        "max_per_scan":   MAX_BRIEFS_PER_SCAN,
+        "briefs_mode":         doc.get("briefs_mode", "manual"),
+        "cadence_label":       "Daily at 09:00 UTC" if doc.get("briefs_mode") == "autopilot" else "Manual only",
+        "auto_approve_briefs": bool(doc.get("auto_approve_briefs", False)),
+        "last_scan_at":        doc.get("last_brief_scan_at"),
+        "max_per_scan":        MAX_BRIEFS_PER_SCAN,
     }
 
 
 @api.put("/briefs/settings")
 async def update_brief_settings(payload: AutopilotPatch, request: Request):
     user = await get_current_user(request)
-    if payload.briefs_mode not in ALLOWED_MODES:
-        raise HTTPException(status_code=400,
-                            detail=f"briefs_mode must be one of {sorted(ALLOWED_MODES)}")
+    set_fields: dict = {"updated_at": datetime.now(timezone.utc)}
+    if payload.briefs_mode is not None:
+        if payload.briefs_mode not in ALLOWED_MODES:
+            raise HTTPException(status_code=400,
+                                detail=f"briefs_mode must be one of {sorted(ALLOWED_MODES)}")
+        set_fields["briefs_mode"] = payload.briefs_mode
+    if payload.auto_approve_briefs is not None:
+        set_fields["auto_approve_briefs"] = bool(payload.auto_approve_briefs)
+    if len(set_fields) == 1:
+        raise HTTPException(status_code=400, detail="No fields to update")
     now = datetime.now(timezone.utc)
     await db.autopilot_settings.update_one(
         {"user_id": user.user_id},
-        {"$set": {"briefs_mode": payload.briefs_mode, "updated_at": now},
+        {"$set": set_fields,
          "$setOnInsert": {"user_id": user.user_id, "created_at": now}},
         upsert=True,
     )
@@ -388,6 +467,10 @@ async def approve_brief(brief_id: str, request: Request):
             "resolved_into_campaign_id": campaign_doc["id"],
         }},
     )
+    # Phase 5: stamp Atlas's ledger so manual approvals also count toward
+    # the weekly irreversible cap (consistency with auto-approve path).
+    from routes.autonomy import record_usage
+    await record_usage("atlas", user.user_id, irreversible=1)
     updated = await db.proposed_briefs.find_one({"id": brief_id}, {"_id": 0})
     return {"brief": updated, "campaign": {k: v for k, v in campaign_doc.items() if k != "_id"}}
 

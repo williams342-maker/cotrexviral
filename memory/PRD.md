@@ -35,6 +35,49 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 70) **🛡️ Phase 5 — Autonomy Budgets (per-agent weekly caps, owned by Jules)**
+  - **New `routes/autonomy.py`** — Jules's domain. Each persona's `autonomy_budget` (already encoded in the `agent_personas` registry) is now an enforceable hard cap. Three dimensions, all weekly: **tokens**, **USD**, **irreversible_count**. A side effect is "irreversible" when it creates user-visible state we can't undo for free (auto-approving a brief, future: publishing a post, sending an email).
+  - **`agent_usage_ledger` collection** — one row per `(agent_id, user_id, iso_week)`. `_iso_week_key()` partitions by `YYYY-Www` so each Monday rolls over automatically; no cron-based reset needed. `record_usage()` is an atomic `$inc` upsert + best-effort (logs but never raises on failure — a ledger hiccup must not block the calling agent).
+  - **`check_budget(agent_id, user_id)`** — returns the full snapshot: `tokens_used/cap/pct`, `usd_used/cap/pct`, `irreversible_used/cap/pct`, `can_act` (all three under cap), `headroom_pct` (max of the three, used for UI tinting).
+  - **`can_auto_approve(agent_id, user_id) -> (bool, reason)`** — the gate the briefs path calls. Human-readable reason so the brief row can audit-stamp WHY it was/wasn't auto-approved.
+  - **3 new endpoints**:
+    - `GET /api/agents/budgets` — list snapshot for all 8 personas + summary `{at_risk (≥80%), exhausted (can_act=false), iso_week}`
+    - `GET /api/agents/budgets/{agent_id}` — single
+    - `POST /api/agents/budgets/reset` — admin-only test helper, wipes the current week's row for one agent (lets ops rehearse "0% / 100%" without waiting until Monday)
+  - **Phase 3 ↔ Phase 5 wiring** — the auto-approval gate:
+    - New `auto_approve_briefs` toggle on `autopilot_settings` (default `False`, OPT-IN). Surfaced on the briefs hero card; only enabled when Autopilot itself is ON.
+    - When `_persist_proposals` sees `source="autopilot"` AND `auto_approve_briefs=true` AND `can_auto_approve("atlas", user_id)` is true → spawn the campaign immediately, flip brief to `approved`, set `auto_approved=True`, stamp `decided_by="atlas (auto-approved by autonomy budget)"` + `resolved_into_campaign_id`. Skips the HITL inbox entirely.
+    - Atlas's irreversible counter ticks by **+1** for every auto-approval AND every manual operator approval (consistency — both paths spawn the same kind of artifact, both should count).
+    - Manual `/briefs/propose` ALWAYS lands as pending — operator clicked the button, they want to review the result.
+    - Cap exhaustion = silent fallback to HITL. The brief stays pending, lands in the inbox like a normal Phase 3 proposal. No errors, no surprises.
+    - **`auto_approved` field** stamped on the brief row + the realtime `briefs_proposed` WS frame carries `auto_approved` count so the bell can tint differently when nothing needs review.
+  - **`/dashboard/autonomy` page** (`Autonomy.jsx`):
+    - Rose-themed Jules hero card with current ISO week + 2 KPI pills (at-risk count amber when >0, exhausted count rose when >0)
+    - Table of all 8 agents with 3 progress bars per row (tokens / USD / irreversible). Bar tone shifts emerald → amber → rose at 80% / 100%.
+    - "Paused" rose badge appears under any agent whose `can_act=false`.
+    - Footer note explains the auto-approval gating contract in plain English.
+  - **Sidebar nav** — `Autonomy` link added between `Experiments` and `Growth Team` (lucide `ShieldAlert` icon — same as Jules's persona icon).
+  - **Briefs UI updates**:
+    - New `Auto-approve` button on the hero card (disabled when Autopilot is OFF, violet pill when ON). Toggling fires a partial-PATCH on `/briefs/settings`.
+    - Cards now show a violet **`✦ Auto-approved`** badge next to the proposer name when the brief was bypassed-HITL.
+  - **15 new pytest cases** (`tests/test_autonomy.py`):
+    - Auth required on every endpoint (401 without token)
+    - List endpoint returns shape for all 8 personas with every required field
+    - Single agent GET works; unknown agent → 404
+    - `record_usage` atomic increment (2× +1 irreversible = 2; 2× +500 tokens = 1000)
+    - `check_budget` % math: burn to exact cap → `irreversible_pct=100`, `can_act=false`
+    - `can_auto_approve` blocks when irreversible cap reached + reason cites it
+    - `can_auto_approve` allows when budget healthy
+    - Admin reset wipes the current week's row (verified via check_budget read)
+    - Auto-approve happy path: autopilot + opt-in + budget OK → status=approved, auto_approved=true, campaign spawned with "Auto-approved" in notes
+    - Auto-approve opt-out: autopilot + opt-in=false → falls back to pending
+    - Auto-approve budget gate: opted in but cap exhausted → falls back to pending
+    - Manual source never auto-approves regardless of opt-in setting
+    - Partial-PATCH on `/briefs/settings` for the `auto_approve_briefs` flag works in isolation (no `briefs_mode` required)
+  - **75/75 regression** across autonomy + briefs + experiments + growth_team + growth_goals + app_config + youtube_oauth. All green under live STRICT mode.
+  - **Phase 5 net effect**: trusted briefs now compound on their own. Set autonomy budgets once, opt into auto-approve, and Atlas spawns 1-3 campaigns/week without your involvement — staying inside the boundaries you set. The day Atlas hits the cap, the inbox flow resumes automatically. Phase 6 (Agent↔Agent messaging) is the last piece — let Atlas query Lyra/Rae before routing to the operator (or the auto-approve gate) so the proposals get smarter, not just faster.
+
+
 - 2026-05-29 (part 69) **🧭 Phase 3 — Briefs as Proposals (Atlas auto-proposes, operator approves)**
   - **New `routes/briefs.py`** — first-class proposal layer. The UX shift from "user asks, agent drafts" → "agent proposes, user approves" is realized here. Atlas reads open Growth Goals + recent Listening Signals (last 7d) + past rejection memories, then drafts up to 3 campaign briefs per scan. Each lands in `proposed_briefs` as `pending` and waits for the operator's Approve/Edit/Reject decision.
   - **Per-user runtime toggle** (`autopilot_settings` collection): `briefs_mode = manual | autopilot`. Manual (default) means only the "Propose now" button fires Atlas. Autopilot means a daily 09:00 UTC cron runs the same scan for that user — anti-spam baked in via a 20h cooldown on `last_brief_scan_at` (handles double-firing during deploys/restarts). Switch modes from the Briefs hero card; no redeploy required.
