@@ -80,6 +80,14 @@ async def record_usage(
             },
             upsert=True,
         )
+        # P2: forward the USD delta to Stripe's metered billing pipeline.
+        # No-op unless the user opted into the Cortex Autopilot SKU. Best-effort.
+        if usd and float(usd) > 0:
+            try:
+                from routes.metered_billing import tick_autopilot_meter
+                await tick_autopilot_meter(user_id, float(usd))
+            except Exception:
+                logger.debug("autopilot meter tick skipped", exc_info=True)
         # Phase 5: alert when usage crosses the 80% / 100% headroom lines.
         # Best-effort — never blocks the ledger tick on alert dispatch.
         try:

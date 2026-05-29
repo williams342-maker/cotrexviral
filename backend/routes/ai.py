@@ -218,7 +218,9 @@ async def ai_seo_review(payload: AIRequest, request: Request):
     )
     chat = await _llm_for_user(user.user_id, f"seo-{user.user_id}", system)
     msg = UserMessage(text=f"URL: {payload.url}\n\nContent:\n{snippet}")
-    raw = await chat.send_message(msg)
+    raw, _usage = await send_with_usage(chat, msg,
+                                         agent_id="rae", user_id=user.user_id,
+                                         model="gpt-5")
     data = _safe_json(raw)
 
     # store report
@@ -254,7 +256,9 @@ async def ai_site_scan(payload: AIRequest, request: Request):
     )
     chat = await _llm_for_user(user.user_id, f"scan-{user.user_id}", system)
     msg = UserMessage(text=f"URL: {payload.url}\n\nContent:\n{snippet}")
-    raw = await chat.send_message(msg)
+    raw, _usage = await send_with_usage(chat, msg,
+                                         agent_id="rae", user_id=user.user_id,
+                                         model="gpt-5")
     data = _safe_json(raw)
 
     report = {
@@ -283,7 +287,9 @@ async def ai_insights(payload: AIRequest, request: Request):
     )
     chat = await _llm_for_user(user.user_id, f"insights-{user.user_id}", system)
     text = payload.context or payload.prompt or "general small business marketing"
-    raw = await chat.send_message(UserMessage(text=text))
+    raw, _usage = await send_with_usage(chat, UserMessage(text=text),
+                                         agent_id="rae", user_id=user.user_id,
+                                         model="gpt-5")
     data = _safe_json(raw)
     await record_ai_generation(user.user_id, "insights")
     # Pre-canned follow-up actions the SPA renders as quick-action chips so the
@@ -326,7 +332,9 @@ async def ai_insights_followup(payload: _FollowupRequest, request: Request):
         "unless the user explicitly asks for more depth."
     )
     chat = await _llm_for_user(user.user_id, f"insights-{user.user_id}", answer_system)
-    answer = await chat.send_message(UserMessage(text=payload.message))
+    answer, _usage = await send_with_usage(chat, UserMessage(text=payload.message),
+                                            agent_id="rae", user_id=user.user_id,
+                                            model="gpt-5")
 
     # Lightweight second call for follow-ups. Use a separate session so this
     # meta-question doesn't pollute the planning conversation memory.
@@ -342,9 +350,9 @@ async def ai_insights_followup(payload: _FollowupRequest, request: Request):
         f"insights-meta-{user.user_id}-{int(datetime.now(timezone.utc).timestamp())}",
         meta_system,
     )
-    raw_meta = await meta.send_message(UserMessage(
+    raw_meta, _usage_meta = await send_with_usage(meta, UserMessage(
         text=f"USER QUESTION:\n{payload.message}\n\nAI ANSWER:\n{answer[:1500]}",
-    ))
+    ), agent_id="rae", user_id=user.user_id, model="gpt-5")
     follow_ups = _safe_json(raw_meta)
     if not isinstance(follow_ups, list):
         follow_ups = []
@@ -368,7 +376,9 @@ async def ai_generate_post(payload: SocialPostRequest, request: Request):
     )
     if payload.listing_url:
         prompt += f"\nListing/Source URL: {payload.listing_url}"
-    raw = await chat.send_message(UserMessage(text=prompt))
+    raw, _usage = await send_with_usage(chat, UserMessage(text=prompt),
+                                         agent_id="nova", user_id=user.user_id,
+                                         model="gpt-5")
     data = _safe_json(raw)
     await record_ai_generation(user.user_id, "post")
     return data
@@ -388,7 +398,9 @@ async def ai_generate_newsletter(payload: NewsletterRequest, request: Request):
         f"Topic: {payload.topic}\nAudience: {payload.audience}\n"
         f"Tone: {payload.tone}\nSections: {payload.sections}"
     )
-    raw = await chat.send_message(UserMessage(text=prompt))
+    raw, _usage = await send_with_usage(chat, UserMessage(text=prompt),
+                                         agent_id="nova", user_id=user.user_id,
+                                         model="gpt-5")
     data = _safe_json(raw)
     await db.reports.insert_one({
         "id": str(uuid.uuid4()),
@@ -419,7 +431,9 @@ async def ai_generate_content(payload: BlogRequest, request: Request):
         f"Topic: {payload.topic}\nKeywords: {', '.join(payload.keywords or [])}\n"
         f"Tone: {payload.tone}\nTarget length: ~{length_words} words"
     )
-    raw = await chat.send_message(UserMessage(text=prompt))
+    raw, _usage = await send_with_usage(chat, UserMessage(text=prompt),
+                                         agent_id="nova", user_id=user.user_id,
+                                         model="gpt-5")
     data = _safe_json(raw)
     await db.reports.insert_one({
         "id": str(uuid.uuid4()),
@@ -444,7 +458,9 @@ async def ai_generate_update(payload: UpdateRequest, request: Request):
     )
     chat = await _llm_for_user(user.user_id, f"update-{user.user_id}", system)
     prompt = f"Product: {payload.product}\nTone: {payload.tone}\nWhat's new:\n{payload.changes}"
-    raw = await chat.send_message(UserMessage(text=prompt))
+    raw, _usage = await send_with_usage(chat, UserMessage(text=prompt),
+                                         agent_id="nova", user_id=user.user_id,
+                                         model="gpt-5")
     data = _safe_json(raw)
     await db.reports.insert_one({
         "id": str(uuid.uuid4()),
@@ -473,7 +489,9 @@ async def ai_generate_video_script(payload: VideoScriptRequest, request: Request
         f"Platform: {payload.platform}\nDuration: ~{payload.duration_seconds}s\n"
         f"Tone: {payload.tone}\nTopic: {payload.topic}"
     )
-    raw = await chat.send_message(UserMessage(text=prompt))
+    raw, _usage = await send_with_usage(chat, UserMessage(text=prompt),
+                                         agent_id="nova", user_id=user.user_id,
+                                         model="gpt-5")
     data = _safe_json(raw)
     await db.reports.insert_one({
         "id": str(uuid.uuid4()),
@@ -534,7 +552,9 @@ async def ai_multi_post(payload: MultiPostRequest, request: Request):
         f"Listing/News: {payload.listing}\nTone: {payload.tone}\n"
         f"Generate posts for these platforms: {', '.join(payload.platforms)}"
     )
-    raw = await chat.send_message(UserMessage(text=prompt))
+    raw, _usage = await send_with_usage(chat, UserMessage(text=prompt),
+                                         agent_id="nova", user_id=user.user_id,
+                                         model="gpt-5")
     data = _safe_json(raw)
     return data
 

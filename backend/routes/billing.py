@@ -68,6 +68,26 @@ PLANS = {
         "annual_amount": 990_00,
         "trial_days": 14,
     },
+    # ---- Cortex Autopilot — metered SKU (P2) ----
+    # Subscribers get $0/month base + 1.5x markup on every dollar of agent
+    # LLM spend (the `agent_usage_ledger` USD column drives the meter).
+    # Customers see "Cortex Autopilot — pay only for what your agents
+    # spend" on the pricing page. Provisioning is bespoke (see below).
+    "cortex_autopilot": {
+        "name": "Cortex Autopilot",
+        "description": "Autonomous AI growth team — pay only for what your agents spend. $0 base + metered usage.",
+        "monthly_amount": 0,
+        "annual_amount": 0,
+        "trial_days": 0,
+        "metered": True,
+        # Stripe `Meter` event name. Must match
+        # routes.metered_billing.AUTOPILOT_METER_EVENT_NAME.
+        "meter_event_name": "cortex_autopilot_usage_usd_cents",
+        # 150 cents charged per UNIT (= 1 cent of LLM spend). I.e. customer
+        # pays $1.50 for every $1.00 their agents burn. Tweak by editing
+        # the Stripe price in the dashboard — this only seeds the default.
+        "metered_unit_amount_cents": 150,
+    },
 }
 
 
@@ -120,6 +140,12 @@ async def ensure_stripe_products():
             )
             logger.info("Stripe: created product %s", product.id)
 
+        # Metered SKUs (Cortex Autopilot) take a different shape: ONE recurring
+        # metered Price referencing a Stripe `Meter`, instead of N flat prices.
+        if plan.get("metered"):
+            await _ensure_metered_price(plan_id, plan, product)
+            continue
+
         # Ensure prices
         for interval, amount_key in [("month", "monthly_amount"), ("year", "annual_amount")]:
             cache_key = f"{plan_id}_{interval}"
@@ -158,6 +184,106 @@ async def ensure_stripe_products():
                 }},
                 upsert=True,
             )
+
+
+# -----------------------------------------------------------------------------
+# Metered (usage-based) price provisioning — Cortex Autopilot SKU
+# -----------------------------------------------------------------------------
+async def _ensure_metered_price(plan_id: str, plan: dict, product) -> None:
+    """For a metered plan, ensure:
+      1. A Stripe Meter with event_name=plan["meter_event_name"] exists.
+      2. A recurring Price tied to that Meter exists for this Product.
+    Both are cached in `stripe_products` under key `{plan_id}_metered`.
+
+    Robust to partial state: if the Meter exists but the Price doesn't,
+    we (re)create the Price. If the Stripe account already has BOTH the
+    meter and a matching price (e.g. created manually in the dashboard),
+    we just cache and move on.
+    """
+    event_name = plan["meter_event_name"]
+    cache_key  = f"{plan_id}_metered"
+    if cache_key in PRICE_CACHE:
+        return
+
+    # 1. Locate or create the Meter.
+    meter_id = None
+    try:
+        meters = stripe.billing.Meter.list(limit=100)
+        for m in meters.auto_paging_iter():
+            if m.get("event_name") == event_name:
+                meter_id = m["id"]
+                break
+    except Exception:
+        logger.exception("Stripe Meter.list failed — assuming none yet")
+
+    if not meter_id:
+        try:
+            meter = stripe.billing.Meter.create(
+                display_name=f"{plan['name']} usage (USD cents)",
+                event_name=event_name,
+                default_aggregation={"formula": "sum"},
+                customer_mapping={
+                    "event_payload_key": "stripe_customer_id",
+                    "type":              "by_id",
+                },
+                value_settings={"event_payload_key": "value"},
+            )
+            meter_id = meter["id"]
+            logger.info("Stripe: created Meter %s for plan %s", meter_id, plan_id)
+        except Exception:
+            logger.exception("Stripe Meter.create failed for plan %s — skipping metered provisioning", plan_id)
+            return
+
+    # 2. Locate or create the metered Price.
+    price_id = None
+    try:
+        prices = stripe.Price.list(product=product.id, active=True, limit=100)
+        for pr in prices.auto_paging_iter():
+            recurring = pr.recurring.to_dict() if pr.recurring else {}
+            if (
+                recurring.get("usage_type") == "metered"
+                and recurring.get("meter") == meter_id
+                and pr.currency == "usd"
+            ):
+                price_id = pr.id
+                break
+    except Exception:
+        logger.exception("Stripe Price.list for metered plan %s failed", plan_id)
+
+    if not price_id:
+        try:
+            price = stripe.Price.create(
+                product=product.id,
+                currency="usd",
+                unit_amount=plan["metered_unit_amount_cents"],
+                recurring={
+                    "interval":   "month",
+                    "usage_type": "metered",
+                    "meter":      meter_id,
+                },
+                metadata={"cortexviral_plan": plan_id, "interval": "month"},
+            )
+            price_id = price.id
+            logger.info("Stripe: created metered Price %s for plan %s", price_id, plan_id)
+        except Exception:
+            logger.exception("Stripe Price.create (metered) failed for plan %s", plan_id)
+            return
+
+    PRICE_CACHE[cache_key] = price_id
+    await db.stripe_products.update_one(
+        {"key": cache_key},
+        {"$set": {
+            "key":         cache_key,
+            "plan":        plan_id,
+            "interval":    "metered",
+            "price_id":    price_id,
+            "product_id":  product.id,
+            "meter_id":    meter_id,
+            "event_name":  event_name,
+            "updated_at":  datetime.now(timezone.utc),
+        }},
+        upsert=True,
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -486,6 +612,16 @@ async def stripe_webhook(request: Request):
                 subscription_status=sub.get("status"),
                 period_end=period_end,
             )
+            # P2: Cortex Autopilot opt-in — set the flag the metered ticker reads.
+            if plan == "cortex_autopilot":
+                try:
+                    from routes.metered_billing import set_autopilot_enabled
+                    await set_autopilot_enabled(
+                        user_id, enabled=(sub.get("status") in ("active", "trialing")),
+                        reason=f"webhook:{etype}",
+                    )
+                except Exception:
+                    logger.exception("autopilot opt-in flag update failed for %s", user_id)
 
     elif etype == "customer.subscription.deleted":
         sub = data
@@ -500,6 +636,16 @@ async def stripe_webhook(request: Request):
                     "updated_at": datetime.now(timezone.utc),
                 }},
             )
+            # P2: explicitly disable autopilot on cancellation so we stop
+            # forwarding ledger USD to the dead subscription.
+            try:
+                from routes.metered_billing import set_autopilot_enabled
+                await set_autopilot_enabled(
+                    user_doc["user_id"], enabled=False,
+                    reason="webhook:customer.subscription.deleted",
+                )
+            except Exception:
+                logger.exception("autopilot disable on cancel failed")
 
     elif etype == "customer.subscription.trial_will_end":
         # Fires ~3 days before trial ends. We email the user a heads-up.

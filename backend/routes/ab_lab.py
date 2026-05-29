@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from core import api, logger
 from deps import get_current_user
 from routes.plans import assert_has_feature, assert_can_generate_ai, record_ai_generation
-from routes.ai import _llm_for_user
+from routes.ai import _llm_for_user, send_with_usage
 from emergentintegrations.llm.chat import UserMessage
 
 
@@ -126,7 +126,10 @@ async def ab_variations(payload: ABLabRequest, request: Request):
         f"Generate {count} hook variations — each a DIFFERENT archetype. "
         "Then score each. Highest-scoring variant first."
     )
-    raw = await chat.send_message(UserMessage(text=prompt))
+    raw, _usage = await send_with_usage(
+        chat, UserMessage(text=prompt),
+        agent_id="nova", user_id=user.user_id, model="gpt-5",
+    )
     variants = _safe_lab_json(raw)
     if not variants:
         logger.warning("A/B Hook Lab: LLM produced unparseable payload")

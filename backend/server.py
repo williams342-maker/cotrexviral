@@ -67,6 +67,7 @@ from routes import (  # noqa: F401
     agent_messaging, # Agent ↔ Agent pub-sub bus — Phase 6 of Growth Team
     uploads,         # Compose video uploads (YouTube)
     digests,         # Sunday Week-in-Review digest
+    metered_billing, # Cortex Autopilot SKU — metered Stripe billing on agent_usage_ledger
 )
 
 

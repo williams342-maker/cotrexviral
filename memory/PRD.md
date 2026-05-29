@@ -35,6 +35,37 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 77) **🟣 P2 — Cortex Autopilot SKU (Stripe metered billing) + full LLM ledger audit**
+
+  **A. Cortex Autopilot — Stripe metered billing on `agent_usage_ledger`**
+  - New `routes/metered_billing.py` — exposes `tick_autopilot_meter(user_id, usd, *, ledger_seq)` and `GET /api/billing/autopilot/status`.
+  - Each tick POSTs `stripe.billing.MeterEvent.create(event_name="cortex_autopilot_usage_usd_cents", payload={stripe_customer_id, value=<cents>}, identifier=<user_id>:<iso_week>:<seq>)`. Deterministic identifiers → Stripe dedupes accidental re-deliveries. Best-effort: Stripe outages never block `record_usage()`.
+  - Local audit mirror: every tick writes to `autopilot_meter_events` so support can reconcile billing disputes without hitting Stripe.
+  - Opt-in gate: tick is a no-op unless `users.autopilot_enabled = True`. That flag is owned by the Stripe webhook handler (NOT the user), set on `customer.subscription.created/updated` for the `cortex_autopilot` plan and cleared on `customer.subscription.deleted`. Audit log written to `autopilot_audit`.
+  - Hook: `routes.autonomy.record_usage()` calls `tick_autopilot_meter(user_id, usd)` after writing the ledger row, only when `usd > 0`. Wrapped in `try/except` so meter hiccups never break the ledger.
+  - `billing.PLANS["cortex_autopilot"]` — new plan: `$0/mo base + metered`. `meter_event_name`, `metered_unit_amount_cents=150` (50% markup on raw LLM cost).
+  - `ensure_stripe_products()` now provisions the Stripe `Meter` + the metered `Price` on startup. Verified live: `Stripe: created Meter mtr_test_61U... + metered Price price_1Tc...`. Idempotent — re-startups detect existing meter/price via `event_name` + `recurring.meter` and skip recreation.
+
+  **B. Full LLM ledger audit — every user-facing call site now ticks the agent_usage_ledger**
+  - `routes/ai.py` — 10 call sites converted from `chat.send_message()` → `send_with_usage(..., agent_id=..., user_id=...)`:
+    - SEO Review (`rae`), Site Scan (`rae`), Insights (`rae`), Insights Followup answer + meta (`rae` ×2)
+    - Generate Post (`nova`), Newsletter (`nova`), Blog content (`nova`), Update (`nova`), Video Script (`nova`), Multi-Post (`nova`)
+  - `routes/ab_lab.py` — Hook variant generator (`nova`).
+  - `routes/channels.py` — Optimal-times rationale (`echo`).
+  - `routes/trends.py` + `routes/support.py` deliberately NOT touched — those are global/anonymous LLM calls (trend synthesis, helpdesk chatbot) not attributable to a growth-team persona.
+
+  **C. Regression coverage**
+  - `tests/test_metered_billing.py` (14 tests, all pass): unit tests of the 7 tick contracts (zero/negative/opt-out/no-customer/happy-path/error-swallow/min-cent), record_usage integration (×3), `/billing/autopilot/status` endpoint (×3), webhook flag helper.
+  - `tests/test_llm_attribution_audit.py` (3 tests, all pass): static-source check that no bare `chat.send_message()` remains in user-facing routes, every `agent_id="..."` resolves to a real persona, and the expected persona coverage matrix (`nova`/`rae`/`echo`) is fully populated. Catches future regressions cheaply (1.6s wall-clock).
+  - Full regression sweep: **171 passed, 2 skipped, 0 failed** across briefs / autonomy / experiments / agent-messaging / team-perf / all OAuth providers / app_config / uploads / metered_billing / attribution_audit / stripe_webhook / token_costs.
+
+  **What this unlocks**
+  - Customer subscribes to "Cortex Autopilot" via Stripe Checkout (no code change to checkout — uses existing `/billing/checkout-session?plan=cortex_autopilot`).
+  - Webhook flips `users.autopilot_enabled = True`.
+  - Every `record_usage()` call (~every LLM round-trip) forwards the USD delta to Stripe in real time.
+  - Stripe meters → invoiced at cycle end at the configured markup. No additional infrastructure required.
+
+
 - 2026-05-29 (part 76) **🟣 P1 — Execution-layer key rotation (LinkedIn / TikTok / Pinterest) + brief-propose flake fix**
 
   **A. Briefs propose flake fix (P0 wrap-up)**

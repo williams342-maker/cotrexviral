@@ -486,7 +486,11 @@ async def ai_optimal_times(payload: OptimalTimesRequest, request: Request):
             )
             chat = _llm(f"times-{user.user_id}", system)
             ask = f"Niche: {payload.niche}\nAudience: {payload.audience}\nPlatforms: {', '.join(payload.platforms)}"
-            rationale = await chat.send_message(UserMessage(text=ask))
+            from routes.ai import send_with_usage
+            rationale, _usage = await send_with_usage(
+                chat, UserMessage(text=ask),
+                agent_id="echo", user_id=user.user_id, model="gpt-5",
+            )
         except Exception:
             rationale = None
 
