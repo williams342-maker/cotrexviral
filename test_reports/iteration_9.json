@@ -1,0 +1,51 @@
+{
+  "summary": "End-to-end testing of Seller Acquisition OS Phase 2 (Outreach/Conversations) and Phase 3 (Onboarding/Retention/Analytics). Ran the full backend regression suite (22/22 pass across test_seller_os_phase1.py + test_seller_os_phase23.py) and exercised the 4 new live pages through the public preview URL. Seeded a real seller-acquisition mission (TEST_Woodworking_Sellers_iter9) → discovery (64 leads) → qualification (64 accepted) → outreach + 'replied' event → onboarding to drive each page's happy path with real data.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Conversations · 'Send another offer'",
+        "issue": "Button is visible on threads whose lead has already advanced past `qualified` (e.g. stage=interested/onboarding/active). Clicking POSTs /api/seller-outreach/generate which then returns 400 ('cannot outreach non-qualified lead'). The action surfaces a destructive toast — desired behavior on the API side, but the UI should either hide the button or disable it with a tooltip when stage != 'qualified'. Repro: open Conversations, open the only seeded thread (stage=Interested · replied), click 'Send another offer' → 400. Backend test test_cannot_outreach_non_qualified_lead already enforces this guard, so this is purely a UX affordance gap.",
+        "affected_selectors": ["[data-testid='conv-send-offer']"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "Sidebar (Seller OS)",
+        "issues": ["On the /retention route the sidebar briefly renders Mission Control with the active-violet tint in addition to Retention. Looks like a transient/double-active state after route mount. Other Seller-OS sub-routes (Conversations, Onboarding, Analytics) correctly highlight only one item. Low priority."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_seller_os_phase23.py",
+    "/app/backend/tests/test_seller_os_phase1.py",
+    "/app/test_reports/pytest/seller_os_phase23_iter9.xml"
+  ],
+  "action_items": [
+    "Optional UX polish: in SellerConversationsLive, hide or disable 'Send another offer' when `active.stage !== 'qualified'` (or surface a 'Outreach paused — already replied' badge instead).",
+    "Optional polish: investigate why /dashboard/seller-os/retention temporarily shows Mission Control with active styling alongside Retention in the sidebar."
+  ],
+  "critical_code_review_comments": [
+    "SellerLifecycle.jsx is ~530 lines and contains 4 unrelated route components + KpiTile. Consider splitting into SellerConversations.jsx, SellerOnboarding.jsx, SellerRetention.jsx, SellerAnalytics.jsx — current bundling makes future per-page edits riskier and grows the smallest chunked import.",
+    "`SellerConversationsLive.load()` returns early after setting the first mission (`return; // useEffect will refire`) — relies on `[missionId]` dep to refetch. Works, but momentarily flickers the loading spinner and double-fetches /api/missions when the user changes missions. Consider passing the mission id explicitly to the threads call inside the same effect.",
+    "Discovery endpoint requires `niche` in body (returns 422 otherwise). Phase 1 mission already stores `seller_target_niche`, so the backend could default `niche` from the mission when missing instead of forcing the client to pass it. Not blocking, but unintuitive (cost me one seeding round).",
+    "`SellerOnboardingLive.load` does three serial GETs to /api/seller-leads (stage=interested|onboarding|active). Promise.all would cut load latency to ~1 RTT.",
+    "SellerAnalyticsLive aggregates funnel rows but Discovery -> Qualified row shows 63/0 (0%) because the discovered counter is decremented when leads advance to qualified. The KPI semantics ('current stage size') is correct, but the funnel-conversion math gives misleading 0% ratios. Consider tracking historical maxima per stage (or use a stage-transitions collection) so the funnel reads `discovered (cumulative) -> qualified (cumulative)`.",
+    "`pct(n, d) = round((n/d)*1000)/10` floors very small ratios to 0 with no minimum visualization. Tiny pipelines (1 interested out of 1 outreach) still show '0%' bar width because outreached=0 in the snapshot. See item above."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (22/22 tests across test_seller_os_phase1.py + test_seller_os_phase23.py)",
+    "frontend": "100% — all 4 pages render, every wired POST fires (verified via request interceptor), sidebar shows all 7 sub-routes, zero JS console errors"
+  },
+  "test_credentials": "Session token test_session_1779636592168 (user_test1779636592168, is_admin=true) — set both as cookie `session_token` and localStorage key `session_token`. Read from /app/memory/test_credentials.md.",
+  "seed_data_creation": "Created seller_acquisition mission `60959c1455fb4db1af03ae0136ee58a9` (title=TEST_Woodworking_Sellers_iter9, niche=woodworking, target=25). Discovery produced 64 leads, qualification accepted all 64. Generated outreach for lead b53bc3919b7d4e3e99cff6542233cb15 (Woodworking Studio #9), posted a 'replied' event to advance it to `interested`, then onboarded it via the UI to `active`. Funnel snapshot at end of run: discovered=0, qualified=63, outreached=0, interested=0, onboarding=0, active=1, total=64.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 2/3 frontend is wired and stable. Pipeline seed mission ID `60959c1455fb4db1af03ae0136ee58a9` is left in the DB so the 4 Seller OS pages have populated data — re-use it (don't recreate) to avoid duplicate seller_acquisition missions. `/api/seller-discovery/run` REQUIRES `niche` in the body even though the mission stores seller_target_niche. Auth on the preview URL works via cookie `session_token` OR Authorization Bearer header — front-end uses cookie via axios `withCredentials: true`. The Conversations 'Send another offer' UX flaw is the only real frontend ticket. Funnel-conversion math on Analytics is technically misleading (snapshot-based ratios, not cumulative) — could be reworked into a stage_transitions collection later.",
+  "rca of the issue": "N/A — no blocking issues. UX/code-quality observations only."
+}

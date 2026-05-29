@@ -39,8 +39,11 @@ import SellerMissionControl from './pages/dashboard/seller/SellerMissionControl'
 import SellerDiscovery from './pages/dashboard/seller/SellerDiscovery';
 import QualifiedSellers from './pages/dashboard/seller/QualifiedSellers';
 import {
-  SellerConversations, SellerOnboarding, SellerRetention, SellerAnalytics,
-} from './pages/dashboard/seller/SellerPlaceholders';
+  SellerConversationsLive as SellerConversations,
+  SellerOnboardingLive as SellerOnboarding,
+  SellerRetentionLive as SellerRetention,
+  SellerAnalyticsLive as SellerAnalytics,
+} from './pages/dashboard/seller/SellerLifecycle';
 import Memory from './pages/dashboard/Memory';
 import Approvals from './pages/dashboard/Approvals';
 import Trends from './pages/dashboard/Trends';

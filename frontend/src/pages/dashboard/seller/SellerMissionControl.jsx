@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { API } from '../../context/AuthContext';
-import DashboardLayout from '../../components/DashboardLayout';
+import { API } from '../../../context/AuthContext';
+import DashboardLayout from '../../../components/DashboardLayout';
 import {
   Loader2, ShoppingBag, Search, Sparkles, MessageSquare, Inbox,
   CheckCircle2, TrendingUp, Target, ArrowRight,
 } from 'lucide-react';
-import { useToast } from '../../hooks/use-toast';
+import { useToast } from '../../../hooks/use-toast';
 
 /* Seller OS Mission Control — top-level view of every Seller-Acquisition
    mission with its 8 funnel KPIs. Click into a mission → drilldown. */
