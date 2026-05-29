@@ -200,6 +200,21 @@ async def _fetch_pages(user_token: str) -> list[dict]:
         return r.json().get("data", []) or []
 
 
+async def _fetch_fb_user_id(user_token: str) -> str:
+    """Returns the user's Facebook **app-scoped** user_id. Same id Meta
+    sends in the data-deletion-callback signed_request, so we can map
+    a deletion-request payload back to the right `*_connections` row."""
+    async with httpx.AsyncClient(timeout=10) as cli:
+        r = await cli.get(_graph_url("me"), params={
+            "access_token": user_token,
+            "fields": "id",
+        })
+        if r.status_code != 200:
+            logger.warning("Meta /me failed: %s %s", r.status_code, r.text[:300])
+            return ""
+        return (r.json() or {}).get("id", "") or ""
+
+
 async def _resolve_instagram_accounts(pages: list[dict]) -> list[dict]:
     """For each Page, ask Graph API for the linked instagram_business_account.
     Returns a list of {page_id, ig_user_id, ig_username} for Pages that have
@@ -251,6 +266,7 @@ async def facebook_callback(request: Request, code: str = "", state: str = "",
     expires_in = int(tok.get("expires_in", 60 * 24 * 3600))
 
     pages = await _fetch_pages(user_token)
+    fb_user_id = await _fetch_fb_user_id(user_token)
     now = datetime.now(timezone.utc)
     handle = pages[0]["name"] if pages else "Facebook"
 
@@ -259,6 +275,7 @@ async def facebook_callback(request: Request, code: str = "", state: str = "",
         {
             "$set": {
                 "user_id": user_id,
+                "fb_user_id": fb_user_id,
                 "user_access_token": user_token,
                 "user_token_expires_at": now + timedelta(seconds=expires_in),
                 "pages": pages,  # each includes its own Page access_token
@@ -307,6 +324,7 @@ async def instagram_callback(request: Request, code: str = "", state: str = "",
 
     pages = await _fetch_pages(user_token)
     ig_accounts = await _resolve_instagram_accounts(pages)
+    fb_user_id = await _fetch_fb_user_id(user_token)
 
     now = datetime.now(timezone.utc)
     if not ig_accounts:
@@ -324,6 +342,7 @@ async def instagram_callback(request: Request, code: str = "", state: str = "",
         {
             "$set": {
                 "user_id": user_id,
+                "fb_user_id": fb_user_id,
                 "user_access_token": user_token,
                 "user_token_expires_at": now + timedelta(seconds=expires_in),
                 "pages": pages,
