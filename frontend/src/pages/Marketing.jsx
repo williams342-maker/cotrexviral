@@ -6,6 +6,7 @@ import CVPipeline from '../components/cv/CVPipeline';
 import CVResults from '../components/cv/CVResults';
 import CVFaq, { DEFAULT_FAQS } from '../components/cv/CVFaq';
 import CVCTAFooter from '../components/cv/CVCTAFooter';
+import CVBuiltByMakers from '../components/cv/CVBuiltByMakers';
 import CVFooter from '../components/cv/CVFooter';
 import CVSeo, { ORG_SCHEMA, SOFTWARE_SCHEMA, buildFaqSchema } from '../components/cv/CVSeo';
 import { SelectAgentModal, AgentChatModal } from '../components/Modals';
@@ -46,6 +47,7 @@ const Marketing = () => {
         <CVFaq />
         <CVCTAFooter onGetStarted={openSelect} />
       </main>
+      <CVBuiltByMakers />
       <CVFooter />
 
       <SelectAgentModal

@@ -35,6 +35,16 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-28 (part 54) **🧱 "Built by Makers. Powered by Innovation." sibling-brand strip on the homepage**
+  - **New component** `components/cv/CVBuiltByMakers.jsx` — three-card strip wired between `<CVCTAFooter />` and `<CVFooter />` on `pages/Marketing.jsx`.
+  - **Brand-faithful typographic logos** (neither williamscnc.com nor craftersmarket.org exposes a clean standalone logo file — both use stylized wordmarks, so scraping favicons would have been low-quality). Each card mirrors the actual identity of the target site:
+    - **Williams CNC** — copper `#b87333` on carbon `#0e0c09`, serif "WILLIAMS / CNC" stacked, matches williamscnc.com's actual palette and font treatment. Links to `https://williamscnc.com`.
+    - **Crafters Market** — industrial orange `#ff4500` on `#0a0a0a`, "CRAFTERS / MARKET" stacked with the `◆` glyph eyebrow that craftersmarket.org uses across its site. Links to `https://craftersmarket.org`.
+    - **CortexViral** — violet/fuchsia/cyan gradient wordmark + the "C" mark in a violet-tinted rounded plate, matching the rest of the marketing site's brand. Internal link to `/`.
+  - **A11y / UX**: each card has `data-testid="built-by-makers-card-{key}"`, external links carry `rel="noopener noreferrer"` + `target="_blank"`, `ArrowUpRight` icon affordance, hover state increases border opacity and slides the arrow.
+  - Gradient section headline matches the existing CortexViral marketing site language. Lint clean, no JS errors, screenshot verified.
+
+
 - 2026-05-28 (part 53) **📊 CSV export of `retrieve_relevant` latency samples**
   - **Backend**: new endpoint `GET /api/admin/memory-perf/samples.csv` — admin-only, dumps the in-process rolling deque as a 2-column CSV (`index,latency_ms`) with `Content-Disposition: attachment; filename=memory_perf_samples.csv` so browsers download it directly. Always includes the header row even when the window is empty.
   - **Frontend**: small *Export CSV* button on the `MemoryPerfCallout` in both states — neutral pill on the healthy state, violet outline next to the *Open migration plan* CTA on the triggered state (`data-testid="memory-perf-csv-export-healthy"` / `memory-perf-csv-export-triggered"`).
