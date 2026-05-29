@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Sparkles, Search, Radar, Share2, Send, Inbox, FileText, LogOut, ChevronRight, Wand2, LifeBuoy, ShieldCheck, Users as UsersIcon, Ticket as TicketIcon, History, Megaphone, Activity, TrendingUp, Calendar, Webhook, Settings as SettingsIcon, User as UserIcon, Map as MapIcon, Bot, Brain, CheckSquare, Users2, Command, KeyRound, Ear, Target as TargetIcon } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Search, Radar, Share2, Send, Inbox, FileText, LogOut, ChevronRight, Wand2, LifeBuoy, ShieldCheck, Users as UsersIcon, Ticket as TicketIcon, History, Megaphone, Activity, TrendingUp, Calendar, Webhook, Settings as SettingsIcon, User as UserIcon, Map as MapIcon, Bot, Brain, CheckSquare, Users2, Command, KeyRound, Ear, Target as TargetIcon, FlaskConical } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ImpersonateBanner from './ImpersonateBanner';
 import BroadcastBanner from './BroadcastBanner';
@@ -10,6 +10,7 @@ const items = [
   { to: '/dashboard/command-center', label: 'Command Center', icon: Command },
   { to: '/dashboard/standups', label: 'Monday Standup', icon: Sparkles },
   { to: '/dashboard/goals', label: 'Goals', icon: TargetIcon },
+  { to: '/dashboard/experiments', label: 'Experiments', icon: FlaskConical },
   { to: '/dashboard/growth-team', label: 'Growth Team', icon: Users2 },
   { to: '/dashboard/listening', label: 'Listening', icon: Ear },
   { to: '/dashboard/team', label: 'AI Team', icon: Users2 },

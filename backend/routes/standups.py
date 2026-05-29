@@ -73,6 +73,10 @@ async def _gather_user_facts(user_id: str, since: datetime) -> dict:
     goals = await db.growth_goals.find({"user_id": user_id, "status": {"$ne": "completed"}},
                                         {"_id": 0}).to_list(10)
 
+    # Experiments — Phase 4. Ori references recent winners + running tests.
+    from routes.experiments import gather_experiment_facts
+    experiment_facts = await gather_experiment_facts(user_id, limit=5)
+
     return {
         "since":             since.isoformat(),
         "posts_published":   posts_published,
@@ -82,6 +86,7 @@ async def _gather_user_facts(user_id: str, since: datetime) -> dict:
         "perf_total":        perf_total,
         "listening_signals": listening_signals,
         "goals":             goals,
+        "experiments":       experiment_facts,
     }
 
 

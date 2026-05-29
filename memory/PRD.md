@@ -35,6 +35,62 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 68) **🧪 Phase 4 — Experiments (head-to-head variant testing, owned by Ori)**
+  - **New `routes/experiments.py`** — first-class A/B testing layer. An experiment pits 2 `content_variants` against each other on ONE metric. The hot read merges the stored row with live `performance_rollups` data so the UI shows real-time leader + margin.
+  - **5 supported metrics**: `engagements` (default), `impressions`, `clicks`, `reach`, `ctr`. All map to `performance_rollups.windows.all_time.*` — i.e. cumulative since the variant was first measured.
+  - **`MIN_MARGIN_PCT = 10.0`** threshold — the conclude path declares a winner ONLY when the margin clears 10%. Tighter margins are filed as `inconclusive` and NO memory row is written. This protects the signal layer from statistical noise polluting future briefs.
+  - **Endpoints**:
+    - `GET /api/experiments/metrics` — surfaces the 5-metric enum + threshold to the frontend
+    - `GET /api/variants/recent?limit=50` — recent `content_variants` for the variant picker dropdowns
+    - `POST /api/experiments` — create with `{name, hypothesis?, variant_a_id, variant_b_id, metric}`; rejects same-id pair (400) + cross-user variant access (404) + unknown metric (400)
+    - `GET /api/experiments?status=…` — list with hydrated `variant_a`/`variant_b` blocks (live perf snapshot + body preview + samples count + platform), plus `live_leader` (a/b/tie), `live_margin_pct`, `can_conclude` (true only when margin already clears threshold). Summary stats: `running_count / completed_count / inconclusive_count / avg_winner_margin_pct`.
+    - `GET /api/experiments/{id}` — single hydrated row
+    - `POST /api/experiments/{id}/conclude` — Ori's moment. Re-pulls live perf, picks the winner if margin ≥ 10%, writes a `cortex_memory` row with `kind="experiment_winner"` + `dedupe_key="experiment:{id}"` so the next conclude on the same id overwrites instead of duplicating. Memory text format: `Experiment '{name}': {platform} variant "{winner_body}" beat "{loser_body}" on {metric} by X% ({winner_value} vs {loser_value}). Hypothesis: ...`. Sets the experiment row to `completed` + stamps `winner_variant_id`, `winner_margin_pct`, `conclusion_text`, `memory_id`. **Returns 404 (not 409) on a non-running experiment** — keeps the same shape as `auto_complete` in growth_goals.
+    - `DELETE /api/experiments/{id}` — hard delete the experiment row. **Memory rows stay** — the learning is durable even if the operator archives the experiment record.
+  - **`gather_experiment_facts(user_id)`** — small helper called from the standup generator's `_gather_user_facts`. Surfaces `{running_experiments, recent_results}` (last 5 completed/inconclusive). Ori's persona prompt is voice-tuned to "name 1 winning pattern (with the % uplift) and 1 mystery to investigate next week" — this is where those numbers come from.
+  - **`/dashboard/experiments` page** (`Experiments.jsx`):
+    - Cyan Ori hero card with the manifesto + new-experiment CTA
+    - 4 KPI tiles (running / completed / inconclusive / avg margin %)
+    - 2-column experiment card grid; each card has a side-by-side `VariantPanel` pair with the live metric value + samples count + platform + 3-line body preview (mono font, white-on-neutral). Winner panel gets `ring-emerald-500 + Trophy badge`; leader (still running) gets `ring-cyan-400 + "Leading" pill`.
+    - Bottom of each card: either `Conclude — Ori writes the winner` button (cyan when `can_conclude=true`, neutral grayed when margin not decisive yet) or a slate conclusion block with sparkles icon (completed) / triangle icon (inconclusive) + the `conclusion_text`.
+    - New-experiment modal: name (required), hypothesis (optional, 600 chars), variant A + B selects sourced from `/variants/recent` (each option shows `[platform] body preview`), metric dropdown. Submit disabled until name + both variants chosen.
+  - **Sidebar nav** — `Experiments` link added between `Goals` and `Growth Team` (lucide `FlaskConical` icon).
+  - **10 new pytest cases** (`tests/test_experiments.py`):
+    - All endpoints require auth (401 on every method without token)
+    - Metrics enum surfaces the 5-metric registry + threshold value
+    - Create rejects same-variant id (400)
+    - Create rejects unknown metric (400)
+    - Create + list round-trip; live_leader/live_margin_pct computed from seeded rollups (120 vs 80 → 50% margin, leader=a)
+    - Conclude with decisive margin → completed, winner_variant_id stamped, memory row written with kind=experiment_winner + correct meta
+    - Conclude with sub-threshold margin (105 vs 100 → 5%) → inconclusive, NO memory row
+    - Conclude on non-running experiment → 404
+    - `/variants/recent` includes seeded variants
+    - `gather_experiment_facts` returns recent results for Ori
+  - **45/45 regression** across experiments + growth_team + growth_goals + app_config + youtube_oauth. All green under live STRICT mode.
+  - **Phase 4 net effect**: the team's knowledge is now durable. Win once, the learning lives in memory forever; retrieve it the next time a brief touches the same platform/metric. Losing variants disappear from the signal layer — exactly the survivorship pattern we want for compounding growth. Phase 5 (Autonomy budgets) is unblocked — once we trust the experiment results, we can let Atlas auto-propose A/B tests within a budget cap without HITL.
+
+
+- 2026-05-29 (part 67) **📺 YouTube OAuth (Google) — channel sign-in + token refresh layer**
+  - **New `routes/oauth_youtube.py`** — full four-endpoint shape (`/start`, `/callback`, `/status`, `/disconnect`) mirroring the existing Meta/LinkedIn/TikTok integrations. Lazy-resolves credentials via `app_config.get_config()` so the admin can rotate Google Cloud Console keys live via `/admin/integrations` (no redeploy).
+  - **Scopes (minimum required)**: `youtube.upload` + `youtube.readonly`. App review reviewers reject submissions that ask for more — anything broader is deferred to a future scope-bump PR.
+  - **Refresh-token handling**: `access_type=offline + prompt=consent` forces Google to issue a refresh_token on every connect. The callback persists both tokens; reconnects that silently skip consent (Google's default behavior) preserve the existing refresh_token instead of clobbering it with `None`. `refresh_youtube_token(user_id)` is a public helper for the future publish/analytics path — returns a valid access token, refreshing transparently when the cached one is within 60s of expiry. Returns None on missing connection / missing refresh_token / Google `invalid_grant` (caller decides whether to surface a reconnect prompt).
+  - **`/disconnect` revokes the refresh token at Google's `/revoke` endpoint** before deleting the local row. Best-effort — failure to revoke is logged but doesn't block local disconnect.
+  - **Channel hydration**: callback also hits `/youtube/v3/channels?mine=true` and stores a snapshot of `{channel_id, title, thumbnail_url, subscriber_count, video_count, view_count, custom_url}`. Surfaces "No YouTube channel on this account" as a distinct redirect status (`?youtube=no_channel`) so the UI prompts the user to create one before reconnecting.
+  - **Admin Integrations** — 3 new keys registered in `app_config.ALLOWED_KEYS` under group `youtube`:
+    - `YOUTUBE_CLIENT_ID` (non-secret)
+    - `YOUTUBE_CLIENT_SECRET` (secret — masked once saved)
+    - `YOUTUBE_REDIRECT_URI` (optional override for preview-vs-prod testing)
+  - **Channels page** — YouTube card now has a real connect/disconnect button when `configured=true`. Post-callback toasts cover `connected` / `denied` / `no_channel`.
+  - **6 new pytest cases** (`tests/test_youtube_oauth.py`):
+    - Auth required on /start, /status, DELETE (401 without token)
+    - App-config registry exposes all 3 YouTube keys with correct group + secret flags
+    - Client ID set/clear round-trip via /admin/app-config (DB → unset)
+    - Status endpoint reports configured=false + connected=false when no creds are set
+  - **17/17 regression** across youtube_oauth + app_config (11 existing pass with no changes despite ALLOWED_KEYS growing).
+  - **Operator playbook**: Admin creates Google Cloud project → enables YouTube Data API v3 → configures OAuth consent screen with `youtube.upload + youtube.readonly` scopes → creates Web app OAuth Client ID with redirect URIs for both prod (cortexviral.com) and preview → pastes Client ID + Secret into `/admin/integrations`. The connect button on `/dashboard/channels` goes live within 60s (cache TTL).
+  - **What's NOT in this PR** (Phase 4 of YouTube — separate scope): `publish_to_youtube()` resumable video upload + `fetch_youtube_post_metrics()` stats fetcher + Compose UI for video uploads. The token refresh helper is ready; just the publish/analytics business logic needs wiring.
+
+
 - 2026-05-29 (part 66) **🎯 Phase 2 — Growth Goals (durable OKRs owned by Vera)**
   - **New `routes/growth_goals.py`** — first-class OKR layer. Each goal links a measurable metric to a target + deadline. **`current` is auto-computed live** on every read from the normalized content layer + listening signals + performance rollups — nobody manually updates progress.
   - **8 supported metrics** (the registry is the only place to add new ones — keeps the resolver + frontend dropdown in sync):

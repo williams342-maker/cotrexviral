@@ -40,6 +40,7 @@ import Team from './pages/dashboard/Team';
 import Standups from './pages/dashboard/Standups';
 import Listening from './pages/dashboard/Listening';
 import Goals from './pages/dashboard/Goals';
+import Experiments from './pages/dashboard/Experiments';
 import AdminOverview from './pages/admin/AdminOverview';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminTickets from './pages/admin/AdminTickets';
@@ -95,6 +96,7 @@ function AppRouter() {
       <Route path="/dashboard/standups" element={<ProtectedRoute><Standups /></ProtectedRoute>} />
       <Route path="/dashboard/listening" element={<ProtectedRoute><Listening /></ProtectedRoute>} />
       <Route path="/dashboard/goals" element={<ProtectedRoute><Goals /></ProtectedRoute>} />
+      <Route path="/dashboard/experiments" element={<ProtectedRoute><Experiments /></ProtectedRoute>} />
       <Route path="/dashboard/insights" element={<ProtectedRoute><Insights /></ProtectedRoute>} />
       <Route path="/dashboard/seo" element={<ProtectedRoute><SeoReview /></ProtectedRoute>} />
       <Route path="/dashboard/scan" element={<ProtectedRoute><SiteScan /></ProtectedRoute>} />
