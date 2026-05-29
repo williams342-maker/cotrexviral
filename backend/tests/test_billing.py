@@ -40,11 +40,17 @@ def test_billing_me_requires_auth():
 
 
 def test_billing_me_returns_plan_for_authed_user():
+    """Auth'd user gets a plan back from /billing/me. The exact set of
+    valid plans is whatever PLANS currently defines — we import it so
+    this stays correct as the catalog evolves."""
+    from routes.billing import PLANS
+    valid_plans = {"free", *PLANS.keys()}
     r = httpx.get(f"{API_URL}/api/billing/me", headers=HEADERS, timeout=10)
     r.raise_for_status()
     body = r.json()
-    # Test user starts on free
-    assert body["plan"] in ("free", "pro", "scale")
+    assert body["plan"] in valid_plans, (
+        f"billing/me returned plan={body['plan']!r}, expected one of {sorted(valid_plans)}"
+    )
     assert "publishable_key" in body
 
 

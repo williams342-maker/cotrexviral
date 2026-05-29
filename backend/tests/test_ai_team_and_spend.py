@@ -101,8 +101,12 @@ class TestLLMSpendEndpoint:
         assert r.status_code == 401
 
     def test_empty_window_returns_zeros(self):
+        # Scope the admin query to THIS test user so other users' rows in
+        # the same window (other dev sessions, prod traffic on the same
+        # Mongo, etc.) don't pollute the totals after our targeted wipe.
         _wipe_usage()
-        r = httpx.get(f"{API_URL}/api/admin/llm-spend?days=1", headers=H, timeout=10)
+        r = httpx.get(f"{API_URL}/api/admin/llm-spend?days=1&user_id={USER_ID}",
+                      headers=H, timeout=10)
         assert r.status_code == 200
         body = r.json()
         assert body["total_calls"] == 0
@@ -123,7 +127,10 @@ class TestLLMSpendEndpoint:
             timeout=90,
         )
         assert r.status_code == 200, r.text
-        r = httpx.get(f"{API_URL}/api/admin/llm-spend?days=1", headers=H, timeout=10)
+        # Scope by user so concurrent dev/prod traffic doesn't leak into
+        # our assertions.
+        r = httpx.get(f"{API_URL}/api/admin/llm-spend?days=1&user_id={USER_ID}",
+                      headers=H, timeout=10)
         body = r.json()
         assert body["total_calls"] >= 1
         assert body["total_estimated_cost"] > 0

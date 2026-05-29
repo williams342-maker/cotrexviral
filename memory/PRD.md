@@ -35,6 +35,21 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 80) **🟢 Fixed 2 pre-existing flakes — full test suite now deterministic**
+
+  **Flake #1 — `test_billing_me_returns_plan_for_authed_user`**
+  - Root cause: assertion hardcoded the old plan names (`pro`/`scale`) but the catalog now ships `starter`/`growth`/`agency`/`cortex_autopilot`. Whenever the test user's plan reflected the current catalog, the assertion fired.
+  - Fix: assertion now imports `PLANS` from `routes/billing.py` and accepts any valid plan + `free`. Self-healing as the catalog evolves.
+
+  **Flake #2 — `test_empty_window_returns_zeros` (and the related `test_chat_records_a_spend_row`)**
+  - Root cause: `GET /api/admin/llm-spend` aggregates **cross-tenant** but the test fixture `_wipe_usage()` only purged the admin user's rows. Any other user with `llm_usage` rows in the last 24h polluted the totals.
+  - Fix: added optional `user_id` query param to `/api/admin/llm-spend` — when present, the `$match` pipeline scopes by user before facet'ing. Both tests now call `?user_id={USER_ID}` so they're deterministic regardless of background traffic. Default behavior (no `user_id`) preserved for the admin dashboard.
+
+  **Verified**
+  - Both originally-flaky tests pass: ✅✅
+  - Full `tests/test_billing.py` + `tests/test_ai_team_and_spend.py` regression: **23 passed in 19.66s**, zero collateral damage.
+
+
 - 2026-05-29 (part 79) **🟣 Autonomous Marketing OS — Phases 1+2+3 (Mission-driven refactor)**
 
   Refactored CortexViral from a 9-agent dashboard into a mission-driven autonomous marketing OS. **All 9 existing personas preserved internally as services**; users now interact with Cortex + 4 teams + Missions.

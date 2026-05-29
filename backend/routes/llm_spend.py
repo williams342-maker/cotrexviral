@@ -162,21 +162,30 @@ async def record_llm_call(
 
 
 @api.get("/admin/llm-spend")
-async def admin_llm_spend(request: Request, days: int = 30):
+async def admin_llm_spend(request: Request, days: int = 30,
+                          user_id: Optional[str] = None):
     """Aggregate LLM spend over the trailing `days` window. Admin-only.
 
     `days` is clamped to 1..365 so callers can't accidentally page through
     every row in the collection. Empty windows return zero counts rather
     than 404 — useful right after launch when no calls have happened yet.
+
+    Pass `user_id` to scope the aggregate to a single user. Default is
+    cross-tenant. Tests rely on this filter to stay deterministic.
     """
     await require_admin(request)
     days = max(1, min(365, int(days or 30)))
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
+    # Build the $match: window AND (optionally) user.
+    match: dict = {"ts": {"$gte": since}}
+    if user_id:
+        match["user_id"] = user_id
+
     # One $facet pipeline → all aggregates in a single round-trip. Cheaper
     # than 4 sequential queries when the dashboard auto-refreshes.
     pipeline = [
-        {"$match": {"ts": {"$gte": since}}},
+        {"$match": match},
         {"$facet": {
             "totals": [
                 {"$group": {"_id": None,
