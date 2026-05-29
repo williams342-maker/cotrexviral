@@ -35,6 +35,43 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 66) **🎯 Phase 2 — Growth Goals (durable OKRs owned by Vera)**
+  - **New `routes/growth_goals.py`** — first-class OKR layer. Each goal links a measurable metric to a target + deadline. **`current` is auto-computed live** on every read from the normalized content layer + listening signals + performance rollups — nobody manually updates progress.
+  - **8 supported metrics** (the registry is the only place to add new ones — keeps the resolver + frontend dropdown in sync):
+    - `posts_published` — total cross-platform published count since start_date
+    - `instagram.posts` / `facebook.posts` / `linkedin.posts` / `tiktok.posts` — per-platform variants of the same
+    - `total_impressions` / `total_engagements` — pulled from `performance_rollups.windows.all_time`
+    - `listening_signals` — Lyra's captured signals since start_date
+  - **Endpoints**:
+    - `GET /api/goals/metrics` — surfaces the metric enum for the frontend dropdown (always matches the backend resolver)
+    - `POST /api/goals` — create with `{title, description?, metric, target, deadline?, start_date?}`; `start_date` defaults to now, `owner_agent` always `vera`
+    - `GET /api/goals?status=…` — returns items + summary stats (`active_count`, `completed_count`, `avg_progress_pct`, `overdue_count`). Each item hydrated with live `current`, `progress_pct` (capped at 100), `is_overdue`
+    - `PATCH /api/goals/{id}` — title/description/target/deadline/status edits. Status enum: `active|completed|abandoned`
+    - `DELETE /api/goals/{id}` — hard delete (no restore)
+    - `POST /api/goals/{id}/auto-complete` — idempotent flip to `completed` when `current >= target`. Called by the standup generator + the Goals dashboard polling.
+  - **`is_overdue` flag** — set true when `deadline < now AND status=active AND current < target`. Renders the card with a rose bar + "Overdue" pill so Vera + the operator see it instantly.
+  - **`/dashboard/goals` page** (`Goals.jsx`) — gorgeous one-page editor:
+    - Vera hero card with new-goal CTA
+    - 4 KPI tiles (Active, Avg progress %, Completed, Overdue with rose tone if > 0)
+    - Goal card grid: progress bar (violet/emerald/rose based on status), `current/target` tabular numbers, status pill, metric mono-tag, deadline, archive + delete actions
+    - New-goal modal with title / description / metric dropdown / target / deadline date picker
+    - Empty state with a friendly "Create your first goal" CTA
+  - **Sidebar nav** — "Goals" added between Monday Standup and Growth Team (uses lucide `Target`).
+  - **Standup integration** — `_gather_user_facts` already pulled `growth_goals` for Vera (added in Phase 1). With Phase 2 alive, Vera's standup contribution will now naturally reference active goals + their progress %. Tested in `test_growth_goals.py::TestStandupIntegration`.
+  - **8 new pytest cases** (`tests/test_growth_goals.py`):
+    - Metrics enum surfaces the supported list (verifies the registry covers headline metrics)
+    - Full CRUD round-trip (create → list → patch → filter-by-status → delete)
+    - Unknown metric rejected (400)
+    - target=0 rejected by Pydantic (422)
+    - `is_overdue` flag set true when deadline is past + target unreachable
+    - `progress_pct` capped at 100 even when current > target
+    - `auto-complete` endpoint returns the right `{completed, current}` shape
+    - Standup generation still works and includes goal facts
+  - **76/76 regression** across growth_goals + growth_team + app_config + meta_data_deletion + phase5 + phase4 + phase3 + phase2 writer migration. All passing under live STRICT_NORMALIZED_READS mode.
+  - **Phase 2 net effect**: outcomes are now durable. Set the goal once, the team tracks it weekly, the standup surfaces progress. Phase 3 (Briefs as proposals) is unblocked — Atlas can now read the open goals + listening signals and auto-propose campaign briefs aligned to them.
+
+
+
 - 2026-05-29 (part 65) **👥 Autonomous Growth Team — Phase 1 + Social Listening Engine**
   - **8 agent personas seeded** (`routes/agent_personas.py`). Each persona has `{id, name, role, tagline, voice, color, icon, owns, collabs, autonomy_budget, system_prompt}` — the team is now a first-class concept:
     - **Vera** (CMO) — OKR-obsessed, owns goals/budget/platform mix

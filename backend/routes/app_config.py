@@ -57,6 +57,18 @@ ALLOWED_KEYS: dict[str, dict] = {
         "secret":      False,
         "group":       "meta",
     },
+    "IG_APP_ID": {
+        "label":       "Instagram — App ID",
+        "description": "Instagram-specific App ID (from developers.facebook.com → Instagram product → API setup). Falls back to META_APP_ID if blank.",
+        "secret":      False,
+        "group":       "meta",
+    },
+    "IG_APP_SECRET": {
+        "label":       "Instagram — App Secret",
+        "description": "Instagram-specific App Secret. Falls back to META_APP_SECRET if blank.",
+        "secret":      True,
+        "group":       "meta",
+    },
 }
 
 _CACHE_TTL_SECONDS = 60

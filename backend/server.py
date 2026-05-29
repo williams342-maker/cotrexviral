@@ -59,6 +59,7 @@ from routes import (  # noqa: F401
     agent_personas,  # Autonomous Growth Team — persona roster
     standups,        # Weekly Standup generator (Monday-morning artifact)
     listening,       # Social Listening Engine (Lyra's signals)
+    growth_goals,    # Durable OKRs owned by Vera
 )
 
 

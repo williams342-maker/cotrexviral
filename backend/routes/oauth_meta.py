@@ -68,6 +68,24 @@ async def _meta_app_secret() -> str:
     return (await get_config("META_APP_SECRET")) or ""
 
 
+async def _ig_app_id() -> str:
+    """Instagram-specific App ID. Falls back to META_APP_ID for users who
+    haven't created a separate Instagram app."""
+    return (await get_config("IG_APP_ID")) or (await get_config("META_APP_ID")) or ""
+
+
+async def _ig_app_secret() -> str:
+    return (await get_config("IG_APP_SECRET")) or (await get_config("META_APP_SECRET")) or ""
+
+
+async def _app_id_for(provider: str) -> str:
+    return await (_ig_app_id() if provider == "instagram" else _meta_app_id())
+
+
+async def _app_secret_for(provider: str) -> str:
+    return await (_ig_app_secret() if provider == "instagram" else _meta_app_secret())
+
+
 async def _meta_graph_version() -> str:
     return (await get_config("META_GRAPH_VERSION", default="v22.0")) or "v22.0"
 
@@ -126,12 +144,12 @@ async def _post_oauth_redirect(provider: str, query: str) -> str:
     return f"{base}/dashboard/channels?{query}"
 
 
-async def _check_configured():
-    if not (await _meta_app_id()) or not (await _meta_app_secret()):
+async def _check_configured(provider: str = "facebook"):
+    if not (await _app_id_for(provider)) or not (await _app_secret_for(provider)):
         raise HTTPException(
             status_code=503,
             detail=(
-                "Meta OAuth not configured. Set META_APP_ID and META_APP_SECRET "
+                f"{provider.title()} OAuth not configured. Set credentials "
                 "via /admin/integrations or in /app/backend/.env."
             ),
         )
@@ -141,7 +159,7 @@ async def _check_configured():
 
 async def _start_oauth(request: Request, provider: str, scopes: List[str]) -> dict:
     user = await get_current_user(request)
-    await _check_configured()
+    await _check_configured(provider)
     state = secrets.token_urlsafe(24)
     await db.oauth_states.insert_one({
         "_id": state,
@@ -151,7 +169,7 @@ async def _start_oauth(request: Request, provider: str, scopes: List[str]) -> di
         "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
     })
     params = {
-        "client_id": await _meta_app_id(),
+        "client_id": await _app_id_for(provider),
         "redirect_uri": await _redirect_uri(provider),
         "state": state,
         "response_type": "code",
@@ -180,8 +198,8 @@ async def _exchange_code(code: str, provider: str) -> dict:
 
     Returns the long-lived token payload (access_token, expires_in).
     """
-    app_id = await _meta_app_id()
-    app_secret = await _meta_app_secret()
+    app_id = await _app_id_for(provider)
+    app_secret = await _app_secret_for(provider)
     async with httpx.AsyncClient(timeout=20) as cli:
         # 1. Short-lived user token
         short = await cli.get(await _graph_url("oauth/access_token"), params={
@@ -286,7 +304,7 @@ async def facebook_callback(request: Request, code: str = "", state: str = "",
     user_id = state_doc["user_id"]
     await db.oauth_states.delete_one({"_id": state})
 
-    await _check_configured()
+    await _check_configured("facebook")
     tok = await _exchange_code(code, "facebook")
     user_token = tok["access_token"]
     expires_in = int(tok.get("expires_in", 60 * 24 * 3600))
@@ -343,7 +361,7 @@ async def instagram_callback(request: Request, code: str = "", state: str = "",
     user_id = state_doc["user_id"]
     await db.oauth_states.delete_one({"_id": state})
 
-    await _check_configured()
+    await _check_configured("instagram")
     tok = await _exchange_code(code, "instagram")
     user_token = tok["access_token"]
     expires_in = int(tok.get("expires_in", 60 * 24 * 3600))
