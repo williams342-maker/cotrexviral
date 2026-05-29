@@ -65,6 +65,7 @@ from routes import (  # noqa: F401
     briefs,          # Atlas brief proposals + autopilot scanner — Phase 3 of Growth Team
     autonomy,        # Per-agent weekly budget caps — Phase 5 of Growth Team
     agent_messaging, # Agent ↔ Agent pub-sub bus — Phase 6 of Growth Team
+    uploads,         # Compose video uploads (YouTube)
 )
 
 

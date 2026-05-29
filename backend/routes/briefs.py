@@ -137,18 +137,22 @@ async def _llm_propose_briefs(facts: dict, max_briefs: int = MAX_BRIEFS_PER_SCAN
         return _fallback_briefs(facts, max_briefs)
 
     # Phase 6 hand-offs — Atlas consults the team before drafting briefs.
-    # Best-effort; each handoff failure logs + skips, never blocks proposal.
+    # All three queries fan out in parallel via asyncio.gather so we add
+    # at most one LLM round-trip of latency instead of three. Best-effort:
+    # each handoff failure logs + skips, never blocks proposal.
     lyra_answer: Optional[str] = None    # signal-theme analysis
     ori_answer:  Optional[str] = None    # past-experiment recall
     rae_answer:  Optional[str] = None    # audience-fit gut check
     signals = facts.get("signals") or []
     goals   = facts.get("goals") or []
-    if user_id:
+    if user_id and (goals or len(signals) >= 3):
         try:
             from routes.agent_messaging import query_agent
+            import asyncio as _aio2
 
-            # Atlas → Lyra: theme detection (only when ≥3 signals to merge).
-            if len(signals) >= 3:
+            async def _ask_lyra():
+                if len(signals) < 3:
+                    return None
                 sigs_compact = "\n".join(
                     f"  • [{s.get('sentiment','?')}|{s.get('signal_type','mention')}] "
                     f"{(s.get('text') or '')[:140]}"
@@ -161,13 +165,11 @@ async def _llm_propose_briefs(facts: dict, max_briefs: int = MAX_BRIEFS_PER_SCAN
                            "If they don't cohere, say so."),
                     context_str=sigs_compact,
                 )
-                if r.get("ok"):
-                    lyra_answer = r.get("response")
+                return r.get("response") if r.get("ok") else None
 
-            # Atlas → Ori: have we tested this kind of brief before? Ori
-            # has the memory of `experiment_winner` rows. Asks once per
-            # propose call, citing the active goals as the proxy topic.
-            if goals:
+            async def _ask_ori():
+                if not goals:
+                    return None
                 goals_compact = "\n".join(
                     f"  • {g['title']} — metric {g['metric']}"
                     for g in goals[:5]
@@ -179,13 +181,11 @@ async def _llm_propose_briefs(facts: dict, max_briefs: int = MAX_BRIEFS_PER_SCAN
                            "Cite specific learnings if you have them."),
                     context_str=goals_compact,
                 )
-                if r.get("ok"):
-                    ori_answer = r.get("response")
+                return r.get("response") if r.get("ok") else None
 
-            # Atlas → Rae: audience-fit gut check. Asks Rae which platform
-            # mix would resonate given the goals + signals. Rae is the
-            # community persona — she knows the audience texture.
-            if signals or goals:
+            async def _ask_rae():
+                if not (signals or goals):
+                    return None
                 rae_context = ""
                 if goals:
                     rae_context += "Goals:\n" + "\n".join(
@@ -201,8 +201,11 @@ async def _llm_propose_briefs(facts: dict, max_briefs: int = MAX_BRIEFS_PER_SCAN
                            "the audience care about most this week? Be specific."),
                     context_str=rae_context.strip(),
                 )
-                if r.get("ok"):
-                    rae_answer = r.get("response")
+                return r.get("response") if r.get("ok") else None
+
+            lyra_answer, ori_answer, rae_answer = await _aio2.gather(
+                _ask_lyra(), _ask_ori(), _ask_rae(), return_exceptions=False,
+            )
         except Exception as exc:
             logger.debug("Atlas hand-offs partially skipped: %s", exc)
 

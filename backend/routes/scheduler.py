@@ -248,6 +248,13 @@ async def start_scheduler():
     except Exception:
         logger.exception("scheduler: failed to register brief_autopilot_daily")
 
+    # Uploaded-video cleanup — daily 04:00 UTC sweep of expired assets.
+    try:
+        from routes.uploads import register_upload_cleanup_job
+        register_upload_cleanup_job(scheduler)
+    except Exception:
+        logger.exception("scheduler: failed to register uploads_cleanup_daily")
+
     scheduler.start()
     logger.info("scheduler: started (worker=%s, every 60s)", WORKER_ID)
 

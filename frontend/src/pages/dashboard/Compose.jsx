@@ -69,6 +69,8 @@ const Compose = () => {
   const [ytVideoUrl, setYtVideoUrl] = useState('');
   const [ytTitle, setYtTitle] = useState('');
   const [ytPrivacy, setYtPrivacy] = useState('private');
+  const [ytUploading, setYtUploading] = useState(false);
+  const [ytUploadName, setYtUploadName] = useState('');
 
   const pinterestSelected = !!selected.pinterest;
   const youtubeSelected = !!selected.youtube;
@@ -543,11 +545,30 @@ const Compose = () => {
                   type="url"
                   value={ytVideoUrl}
                   onChange={(e) => setYtVideoUrl(e.target.value)}
-                  placeholder="https://…/video.mp4"
+                  placeholder="https://…/video.mp4 — or upload below"
                   data-testid="compose-yt-video-url"
                   className="h-9 rounded-lg border-neutral-300 text-[12.5px]"
                 />
-                <div className="text-[10.5px] text-neutral-500 mt-1">Direct URL to an .mp4 / .mov / .webm. We download → resumable upload to YouTube. Max 256 MiB.</div>
+                <div className="text-[10.5px] text-neutral-500 mt-1">Paste a hosted URL, or click below to upload from your computer.</div>
+                <div className="mt-2 flex items-center gap-2">
+                  <label className={`text-[11.5px] font-semibold px-3 py-1.5 rounded-lg border cursor-pointer flex items-center gap-1.5 ${ytUploading ? 'bg-neutral-100 border-neutral-200 text-neutral-400 cursor-wait' : 'bg-white border-red-300 text-red-700 hover:bg-red-50'}`}>
+                    {ytUploading ? <Loader2 size={12} className="animate-spin" /> : '⬆'}
+                    {ytUploading ? 'Uploading…' : 'Upload from computer'}
+                    <input
+                      type="file"
+                      accept="video/*"
+                      disabled={ytUploading}
+                      onChange={(e) => uploadYouTubeVideo(e.target.files?.[0])}
+                      className="hidden"
+                      data-testid="compose-yt-file"
+                    />
+                  </label>
+                  {ytUploadName && !ytUploading && (
+                    <span className="text-[11px] text-neutral-600 truncate" title={ytUploadName} data-testid="compose-yt-uploaded-name">
+                      ✓ {ytUploadName}
+                    </span>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="text-[11px] font-medium text-neutral-600 mb-1 block">Title <span className="text-neutral-400">(optional, ≤ 100 chars — defaults to first caption line)</span></label>

@@ -87,7 +87,7 @@ function AppRouter() {
       <Route path="/tools/:slug" element={<NicheToolPage />} />
       <Route path="/blog" element={<BlogIndex />} />
       <Route path="/blog/:slug" element={<BlogPost />} />
-      <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/dashboard/command-center" replace /></ProtectedRoute>} />
+      <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/dashboard/team-performance" replace /></ProtectedRoute>} />
       <Route path="/dashboard/command-center" element={<ProtectedRoute><CommandCenter /></ProtectedRoute>} />
       <Route path="/dashboard/campaigns/:id" element={<ProtectedRoute><CampaignDetail /></ProtectedRoute>} />
       <Route path="/dashboard/overview" element={<ProtectedRoute><Overview /></ProtectedRoute>} />

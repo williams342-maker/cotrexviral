@@ -93,10 +93,13 @@ async def _gather_user_facts(user_id: str, since: datetime) -> dict:
 # ---------------------------------------------------------------------
 # Per-persona contribution generator
 # ---------------------------------------------------------------------
-async def _combined_contributions(facts: dict) -> list[dict]:
+async def _combined_contributions(facts: dict, *, user_id: str | None = None) -> list[dict]:
     """ONE LLM call that produces ALL 8 contributions. Replaces per-persona
     parallel calls — fewer round trips, lower cost, no event loop pressure.
-    Returns a list ordered to match `PERSONAS`."""
+    Returns a list ordered to match `PERSONAS`.
+
+    Phase 5: when `user_id` is provided, the LLM call's token usage is
+    attributed to Rae's weekly ledger (she owns the standup ritual)."""
     if not EMERGENT_LLM_KEY:
         return [{"agent_id": p["id"], "text": _fallback_contribution(p, facts)} for p in PERSONAS]
 
@@ -203,7 +206,7 @@ async def generate_standup_for_user(user_id: str, *, days: int = 7) -> dict:
     facts = await _gather_user_facts(user_id, since)
 
     # ONE LLM call for all 8 contributions (combined prompt).
-    combined = await _combined_contributions(facts)
+    combined = await _combined_contributions(facts, user_id=user_id)
     persona_by_id = {p["id"]: p for p in PERSONAS}
     contributions = [
         {

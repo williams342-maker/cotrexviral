@@ -35,6 +35,42 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 74) **🏠 Homepage → Team Performance + standup ledger ticks + YouTube file upload**
+
+  **A. Homepage redirect → `/dashboard/team-performance`**
+  - `App.js` — one-line route swap: `<Navigate to="/dashboard/team-performance">` replaces the prior `command-center` default. Every logged-in user lands on the bird's-eye view, not the legacy command center.
+  - Sidebar nav stays intact — Team Performance link continues to work alongside every other route.
+
+  **B. Standup generator ticks the ledger (Rae's bucket)**
+  - `_combined_contributions(facts, *, user_id)` — gained an optional `user_id` kwarg. When passed, the one consolidated LLM call attributes its token+USD spend to Rae via `send_with_usage(agent_id="rae", user_id=...)`.
+  - `generate_standup_for_user` now passes its own `user_id` straight through. Standups are a 1x/week call, so this is a small steady tick — but it closes the last LLM call site that wasn't yet hitting the ledger.
+  - **Coverage state**: ALL recurrent LLM call sites (briefs, agent-bus, standups) tick the ledger. The Autonomy + Team Performance budget bars now show full-spectrum burn — no agent flies under the radar.
+
+  **C. YouTube file upload (multipart) for users without a hosted CDN**
+  - New `routes/uploads.py` with 3 endpoints + a daily cleanup job:
+    - `POST /api/uploads/video` (auth required) — streams a multipart video to disk in 1 MiB chunks under `/app/backend/uploads/videos/{uuid}.{ext}`. Enforces 256 MiB cap (matches `publish_to_youtube.MAX_VIDEO_BYTES`), enforces `Content-Type: video/*` allow-list (415 on anything else). Inserts a `uploaded_videos` row with `{asset_id, user_id, filename, ext, size, path, created_at, expires_at}` (TTL = 24h). Returns `{url, asset_id, bytes, content_type, expires_at}`. URL points at our own `GET /api/uploads/videos/{filename}` so the YouTube publisher (or any downstream) can download it.
+    - `GET /api/uploads/videos/{filename}` — streams the file back in 64 KiB chunks via FastAPI `StreamingResponse`. **No auth on this route** — the asset_id is a 128-bit uuid4 which acts as the capability token (not enumerable). Path-traversal blocked at two layers: rejects any `/`, `..`, or leading-dot in the filename + verifies the resolved path stays under `UPLOAD_ROOT.resolve()` via `relative_to`. Sends `Content-Type`, `Content-Length`, `Cache-Control: public, max-age=3600`, and `Content-Disposition: inline; filename="..."` headers.
+    - `DELETE /api/uploads/videos/{asset_id}` (auth required) — operator can evict an upload before TTL fires. Unlinks the file + deletes the DB row.
+    - `run_upload_cleanup()` — async helper that scans `uploaded_videos` for `expires_at < now`, unlinks each file, deletes the row. Idempotent. Wired into the scheduler at 04:00 UTC daily via `register_upload_cleanup_job` (idempotent — only adds the job when missing).
+  - **Why we serve the file ourselves** (instead of mounting `StaticFiles`): Kubernetes ingress only proxies `/api/*` to the backend. Anything else routes to React. Keeping the URL under `/api/uploads/...` is the only way it reaches the backend in production — same pattern as every other backend route.
+  - `Compose.jsx` — new file picker inside the YouTube panel: red-bordered "Upload from computer" label wraps a hidden `<input type="file" accept="video/*">`. On select, `uploadYouTubeVideo(file)` POSTs to `/uploads/video` with `multipart/form-data`, drops the returned URL straight into `ytVideoUrl`. Client-side 256 MiB pre-check; loader state during upload; checkmark + filename pill on success. Reset on publish.
+  - **Brief side-fix**: while wiring the upload, also discovered the brief-page Atlas multi-handoff was serial (3 LLM calls before the brief LLM call = 4 round-trips = preview ingress timeout at 60s under cold-start). Replaced with `asyncio.gather(_ask_lyra(), _ask_ori(), _ask_rae())` — now ~1 round-trip of latency instead of 3. Verified by re-running the previously-flaky `test_handoffs_dont_crash_propose` (62s pass, well under timeout).
+  - **7 new pytest cases** (`tests/test_uploads.py`):
+    - Auth required on POST + DELETE (401 without token)
+    - Multipart upload writes the file + inserts the DB row + returns the right URL
+    - GET round-trips the bytes exactly
+    - Path traversal blocked across 3 attack vectors (`..%2Fpasswd`, `../../etc/passwd`, leading dot)
+    - 415 on `text/plain` content-type
+    - DELETE removes the row AND the file on disk
+    - `run_upload_cleanup` deletes rows with backdated `expires_at`
+
+  **Tests + regression**
+  - **42/42 across the bundle** (uploads + compose_ledger_echo_ori + team_perf_youtube_handoffs + autonomy + youtube_oauth). All green.
+  - Atlas-handoff parallelization shaves ~20s off every brief propose call.
+
+  **Operator UX**: every login now opens with "what did my team do this week?" — the homepage finally matches the product's autonomous-team positioning. The Compose form is end-to-end: paste a URL or upload a file, hit publish, the scheduler dispatches to YouTube. The budget bars now reflect every LLM dollar burned across every agent, every flow. The team is observable, accountable, and demonstrably autonomous.
+
+
 - 2026-05-29 (part 73) **🔌 Compose-YouTube wiring + LLM ledger ticks + Echo→Ori handoff**
 
   **A. Compose page now publishes to YouTube**
