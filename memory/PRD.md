@@ -35,6 +35,33 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-28 (part 59) **📊 Campaign performance attribution dashboard (Phase 1 of #5)**
+  - **New module `routes/perf_metrics.py`** (deliberately not `performance.py` — that name was already taken by the mocked generic dashboard route):
+    - `record_metric(variant_id, platform, date, raw_payload, …)` — idempotent upsert into `performance_metrics` keyed by `(variant_id, platform, date)`. Re-calling with the same key updates in place; the unique compound index from Phase 1 makes double-counting impossible.
+    - `recompute_rollup(variant_id)` — rebuilds the `performance_rollups` row by aggregating the time-series into `{last_7d, last_30d, all_time}` windows. CTR is recomputed from summed `clicks / impressions` (not averaged across days — that would lie).
+    - `record_metrics_from_post_refresh(post, vendor_metrics)` — fanout helper called from the existing 6h `analytics._refresh_post` cron. Looks up each variant's platform from `content_variants`, writes one daily row per `(variant, platform)`, and recomputes the affected rollups. Errors caught + logged; never raised — the engagement refresh source-of-truth must keep running.
+  - **Hook wired into `routes/analytics.py::_refresh_post`** — every existing engagement refresh now ALSO mirrors into the normalized layer. **Passive mirror**, not source-of-truth: Phase 2 changes that.
+  - **Two new API endpoints**:
+    - `GET /api/attribution/overview?campaign_id=<id?>` — returns `{platforms, windows, top_items, variants_tracked, brand_id}`. Filters to a specific campaign when `campaign_id` is set (resolves via `content_items.campaign_id`); otherwise rolls up everything the user's brand owns. Top-5 content_items by 30d engagement; platform breakdown is all-time totals; windows carry impressions/reach/clicks/engagements/CTR/samples for 7d/30d/all-time.
+    - `GET /api/attribution/timeseries?days=<1-180>&campaign_id=<id?>` — daily totals grouped by `(date, platform)` for the line chart. Mongo aggregation pipeline so we never pull the raw time-series into Python.
+  - **New frontend component `components/AttributionPanel.jsx`** mounted on `CampaignDetail.jsx` right under the existing KPI row:
+    - **Three window tiles** (Last 7d / Last 30d / All time) showing impressions, reach, clicks, engagements, CTR each.
+    - **Platform breakdown pills** (cyan-tinted) — one per platform with engagements headline + impressions + CTR.
+    - **Top-5 content cards** sorted by 30d engagement with title, impressions, engagements.
+    - **Graceful empty state** when `variants_tracked === 0` — explains the 6h refresh cadence + tells the user what variants are tracked. Loading and error states both styled.
+    - `data-testid`s on every element for testing-agent access.
+  - **End-to-end verified live** on the test user — wrote 3 synthetic days of metrics via `record_metric`, the rollup correctly computed `all_time.ctr = 2.96% = 136/4600` and `engagements = 138` (sum of likes+comments+shares+saves across all rows). The overview endpoint reflected the writes immediately; the timeseries endpoint returned the per-day breakdown.
+  - **7 new pytest cases** (`tests/test_attribution.py`):
+    - `record_metric` idempotency (3 calls → 1 row via the unique compound index)
+    - Rollup windows + CTR math (writes across `today, -10d, -100d` → last_7d/last_30d/all_time arithmetic + CTR check)
+    - Auth required on both endpoints
+    - Overview returns the known shape with all required keys
+    - Overview reflects a freshly-written metric in the same request
+    - Timeseries `?days=1` correctly excludes older rows
+  - **All 40 critical tests pass** across attribution + normalize migration + LangGraph orchestrator + HITL endpoints + memory-perf + HITL reminders + realtime inbox.
+  - **Dashboard ships immediate value today**: the moment the existing engagement refresh cron has real data for any user, the panel surfaces it. Until then it renders a clean empty state.
+
+
 - 2026-05-28 (part 58) **🧱 Phase 1 — Data model normalization (decisions 1c + 2a + 3c + 4a)**
   - **New module `models_normalized.py`** — Pydantic shapes for `Brand`, `ContentItem`, `ContentVariant`, `PerformanceMetric`, `PerformanceRollup`, plus a `NORMALIZED_INDEXES` registry the migration auto-creates. Schema designed for many-brands-per-user (FK propagated everywhere) even though Phase 1 only mints one default brand per user (decision 1c).
   - **New module `routes/brands.py`** — `ensure_default_brand_for_user(user_id, name_hint)` returns the user's default brand_id, creating one named "{name_hint}'s Brand" on first call. Idempotent.

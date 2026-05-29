@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import RunOSModal from '../../components/RunOSModal';
+import AttributionPanel from '../../components/AttributionPanel';
 import { wordDiff } from '../../utils/diff';
 import { API } from '../../context/AuthContext';
 import { useToast } from '../../hooks/use-toast';
@@ -362,6 +363,9 @@ const CampaignDetail = () => {
           <KpiTile icon={MousePointer}  label="Clicks"      value={fmt(m.clicks)}       accent="amber"  testid="kpi-clicks" />
           <KpiTile icon={Inbox}         label="Leads"       value={fmt(m.leads)}        accent="emerald" testid="kpi-leads" />
         </div>
+
+        {/* Normalized attribution panel — reads from performance_rollups */}
+        <AttributionPanel campaignId={id} />
 
         {/* Audience / Pillars / Platforms */}
         <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">

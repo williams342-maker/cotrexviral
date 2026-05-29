@@ -118,6 +118,16 @@ async def _refresh_post(post: dict) -> dict | None:
     update = {f"metrics.{plat}": data for plat, data in metrics.items()}
     update["metrics.last_refreshed_at"] = datetime.now(timezone.utc)
     await db.posts.update_one({"id": post["id"]}, {"$set": update})
+
+    # Mirror into the normalized `performance_metrics` + recompute the
+    # per-variant rollup. Best-effort: a failure here must NOT kill
+    # the engagement refresh — that's the source-of-truth for now.
+    try:
+        from routes.perf_metrics import record_metrics_from_post_refresh
+        await record_metrics_from_post_refresh(post, metrics)
+    except Exception:
+        logger.exception("perf_metrics mirror failed for post %s", post.get("id"))
+
     return metrics
 
 

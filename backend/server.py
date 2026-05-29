@@ -52,6 +52,7 @@ from routes import (  # noqa: F401
     feedback_loop,   # Self-improving loop: published metrics → memory rows
     marketing_os,    # Marketing OS — 5-role chain + Command Center dashboard
     realtime,        # WebSocket fanout: real-time HITL inbox
+    perf_metrics,    # Performance metrics — time-series + rollup + attribution API
 )
 
 
