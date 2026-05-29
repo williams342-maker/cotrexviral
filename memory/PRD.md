@@ -35,6 +35,50 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 72) **📊 Team Performance + Atlas multi-handoff + YouTube publish/analytics (operator UX polish + Phase 6 expansion + execution layer)**
+
+  **A. `/dashboard/team-performance` — bird's-eye view of the week**
+  - New `GET /api/agents/team-performance` endpoint (in `routes/autonomy.py`). Concurrent reads (asyncio.gather) of: briefs (all + this week), experiments (all), posts published this week, listening signals this week, agent_messages this week, cortex_memory experiment_winner writes this week, weekly_standups this week, growth_goals active. ~30ms cold, ~10ms warm.
+  - Per-agent contribution map: Vera (`active goals + avg progress %`), Atlas (`proposed/approved/auto-approved/avg decision min`), Nova (`posts published`), Rae (`standups generated`), Lyra (`signals captured + bus replies`), Echo (`posts scheduled/published`), Ori (`running/winners/inconclusive/memory writes`), Jules (`bus messages`). Each row carries `headline` (one-line sentence) + `verbs` (label→value chips) so the UI is data-driven, not hard-coded.
+  - Each row also includes `headroom_pct` (from `check_budget`) + `can_act` so the operator sees who's near their cap at the same glance.
+  - `TeamPerformance.jsx` page: 3 KPI tiles (briefs / experiments / signals) + 1 row per agent with persona-colored avatar pill, headline, verb chips (color-tinted by persona), and a 40-wide budget-headroom bar (green / amber / rose).
+  - Sidebar: new `Team Performance` link under `Agent Chatter` (BarChart3 icon).
+  - **Week semantics**: `_week_bounds()` returns Monday 00:00 UTC → Sunday 23:59 UTC for the calling ISO week. Old briefs/experiments outside that window are excluded automatically — verified by pytest seeding 1 brief inside + 1 outside.
+
+  **B. Atlas multi-handoff (Phase 6 expansion)**
+  - Atlas now consults THREE teammates before drafting briefs (was 1 — just Lyra):
+    - **Atlas → Lyra** — "what's the shared theme across these signals?" (fires when ≥3 signals)
+    - **Atlas → Ori** — "have we tested winning patterns in your memory I should lean into?" (fires when ≥1 active goal — Ori has `experiment_winner` rows tagged by metric)
+    - **Atlas → Rae** — "which platform(s) will the audience care about most this week?" (fires when goals OR signals exist — Rae is the community persona)
+  - All three answers (when present) are appended to Atlas's brief-generation prompt under labeled blocks (`LYRA'S ANALYSIS`, `ORI'S MEMORY OF PAST WINNERS`, `RAE'S AUDIENCE-FIT GUT CHECK`). Atlas's system prompt was tweaked to "use these to merge redundant briefs / lean into winning patterns / respect platform mix".
+  - Each handoff is best-effort + logged. If Ori errors, Lyra still runs. If all three error, brief proposal still works (operator just doesn't get the multi-agent flavor). Verified by a pytest case that seeds 1 goal + 3 signals, fires `/api/briefs/propose`, and asserts ≥1 `agent_messages` row landed within 5 minutes from `atlas → {lyra,ori,rae}`.
+  - **Net effect**: briefs become noticeably sharper after a few experiment cycles. Atlas merges redundant signals (Lyra), cites learned patterns (Ori), and proposes platforms the audience actually engages with (Rae) — all in one prompt.
+
+  **C. YouTube publish + analytics (execution layer)**
+  - `routes/oauth_youtube.publish_to_youtube()` — full resumable upload via Google's `/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status` endpoint. Two-step:
+    1. POST initiate session with metadata → 200 + `Location` header
+    2. PUT the video bytes to the Location URL
+  - **Input contracts**: requires `video_url` (we download from URL → upload to YT); enforces YT API caps client-side (title ≤100, description ≤5000, tags total ≤500 chars, `privacy ∈ {public, unlisted, private}` default `private` for safety). Hard cap on payload size: `MAX_VIDEO_BYTES = 256 MiB` (anything larger should use a future signed-URL flow).
+  - Returns standard `{ok, video_id, permalink, privacy, title, bytes}` shape (same as Pinterest/LinkedIn/etc.) so the scheduler dispatcher and analytics rollups treat YouTube the same as everything else.
+  - `fetch_youtube_post_metrics(user_id, video_id)` — pulls `/videos?id=X&part=statistics`. Returns `{views, likes, comments, favorites, fetched_at}` matching `performance_metrics` schema. None on failure (caller decides whether to log).
+  - **Scheduler wiring**: `routes/scheduler.publish_due_scheduled_posts` now dispatches to `publish_to_youtube` when `"youtube" in platforms`, sourcing `video_url` from `post.get("video_url") or post.get("media_url")`, title from `post.get("youtube_title") or post.get("title")`, tags from `post.get("youtube_tags") or post.get("hashtags")`, privacy from `post.get("youtube_privacy") or "private"`. Dispatch result mirrored into `post.dispatch.youtube` like the other channels.
+  - **Validation pytest** (live upload tests skipped as they need a real OAuth token + a video file):
+    - `publish_to_youtube` rejects missing `video_url` (`reason="youtube_requires_video_url"`)
+    - rejects invalid privacy values (`reason="invalid_privacy_status"`)
+    - returns `reason="not_connected"` when no token exists (no DB row in `youtube_connections`)
+    - `fetch_youtube_post_metrics` returns `None` when not connected
+
+  **Tests + regression**
+  - 8 new pytest cases (`tests/test_team_perf_youtube_handoffs.py`):
+    - team-performance: auth, shape (all 8 personas with required fields), week-bounded aggregation
+    - publish_to_youtube: 3 input-validation cases
+    - fetch_youtube_post_metrics: not-connected returns None
+    - Atlas multi-handoff: propose call writes ≥1 `agent_messages` row from Atlas → {Lyra, Ori, Rae}
+  - **79/79 regression** across team_perf + agent_messaging + autonomy + briefs + experiments + growth_team + growth_goals + youtube_oauth. All green.
+
+  **Operator UX win**: Team Performance is now the homepage-worthy view for the autonomous-team UX. One page tells you exactly what each agent did this week + whether they're near their cap. The verb chips give you quick-scan counters; the headroom bar gives you the "anything to worry about?" answer. The Atlas multi-handoff means even with auto-approve OFF, the briefs are noticeably more grounded than before. The YouTube layer unlocks the second-most-requested execution target after Instagram.
+
+
 - 2026-05-29 (part 71) **💬 Phase 6 — Agent ↔ Agent Messaging (the final layer)**
   - **New `routes/agent_messaging.py`** — generic LLM-mediated bus where any persona can query any other persona. Routes through the target's `system_prompt` so the answer comes back in the right voice (Lyra sounds like Lyra, Rae sounds like Rae). Persists every exchange in `agent_messages` for audit + the new chatter UI.
   - **`query_agent(user_id, from_agent, to_agent, query, context_str, thread_id?)`** — public helper. Returns `{message_id, response, ok}`. Failures (unknown agent, LLM timeout, etc.) are caught + recorded as `errored` rows so the audit log is never empty. Falls back to a deterministic acknowledgement when `EMERGENT_LLM_KEY` is unset — keeps the system functional in test envs.

@@ -136,30 +136,75 @@ async def _llm_propose_briefs(facts: dict, max_briefs: int = MAX_BRIEFS_PER_SCAN
     if not EMERGENT_LLM_KEY:
         return _fallback_briefs(facts, max_briefs)
 
-    # Phase 6 hand-off — Atlas → Lyra. Best-effort; on failure we proceed
-    # with the original signal list. Only fires when there are ≥3 signals
-    # (otherwise there's nothing to merge).
-    lyra_answer: Optional[str] = None
+    # Phase 6 hand-offs — Atlas consults the team before drafting briefs.
+    # Best-effort; each handoff failure logs + skips, never blocks proposal.
+    lyra_answer: Optional[str] = None    # signal-theme analysis
+    ori_answer:  Optional[str] = None    # past-experiment recall
+    rae_answer:  Optional[str] = None    # audience-fit gut check
     signals = facts.get("signals") or []
-    if user_id and len(signals) >= 3:
+    goals   = facts.get("goals") or []
+    if user_id:
         try:
             from routes.agent_messaging import query_agent
-            sigs_compact = "\n".join(
-                f"  • [{s.get('sentiment','?')}|{s.get('signal_type','mention')}] "
-                f"{(s.get('text') or '')[:140]}"
-                for s in signals[:8]
-            )
-            r = await query_agent(
-                user_id=user_id, from_agent="atlas", to_agent="lyra",
-                query=("Given these listening signals, what's the strongest "
-                       "shared theme worth ONE brief instead of multiple? "
-                       "If they don't cohere, say so."),
-                context_str=sigs_compact,
-            )
-            if r.get("ok"):
-                lyra_answer = r.get("response")
+
+            # Atlas → Lyra: theme detection (only when ≥3 signals to merge).
+            if len(signals) >= 3:
+                sigs_compact = "\n".join(
+                    f"  • [{s.get('sentiment','?')}|{s.get('signal_type','mention')}] "
+                    f"{(s.get('text') or '')[:140]}"
+                    for s in signals[:8]
+                )
+                r = await query_agent(
+                    user_id=user_id, from_agent="atlas", to_agent="lyra",
+                    query=("Given these listening signals, what's the strongest "
+                           "shared theme worth ONE brief instead of multiple? "
+                           "If they don't cohere, say so."),
+                    context_str=sigs_compact,
+                )
+                if r.get("ok"):
+                    lyra_answer = r.get("response")
+
+            # Atlas → Ori: have we tested this kind of brief before? Ori
+            # has the memory of `experiment_winner` rows. Asks once per
+            # propose call, citing the active goals as the proxy topic.
+            if goals:
+                goals_compact = "\n".join(
+                    f"  • {g['title']} — metric {g['metric']}"
+                    for g in goals[:5]
+                )
+                r = await query_agent(
+                    user_id=user_id, from_agent="atlas", to_agent="ori",
+                    query=("Looking at these active goals, have we tested any "
+                           "winning patterns in your memory I should lean into? "
+                           "Cite specific learnings if you have them."),
+                    context_str=goals_compact,
+                )
+                if r.get("ok"):
+                    ori_answer = r.get("response")
+
+            # Atlas → Rae: audience-fit gut check. Asks Rae which platform
+            # mix would resonate given the goals + signals. Rae is the
+            # community persona — she knows the audience texture.
+            if signals or goals:
+                rae_context = ""
+                if goals:
+                    rae_context += "Goals:\n" + "\n".join(
+                        f"  • {g['title']}" for g in goals[:3]
+                    )
+                if signals:
+                    rae_context += ("\n\nSignals:\n" + "\n".join(
+                        f"  • {(s.get('text') or '')[:120]}" for s in signals[:5]
+                    ))
+                r = await query_agent(
+                    user_id=user_id, from_agent="atlas", to_agent="rae",
+                    query=("Given these goals and signals, which platform(s) will "
+                           "the audience care about most this week? Be specific."),
+                    context_str=rae_context.strip(),
+                )
+                if r.get("ok"):
+                    rae_answer = r.get("response")
         except Exception as exc:
-            logger.debug("Atlas→Lyra hand-off skipped: %s", exc)
+            logger.debug("Atlas hand-offs partially skipped: %s", exc)
 
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
@@ -189,6 +234,18 @@ async def _llm_propose_briefs(facts: dict, max_briefs: int = MAX_BRIEFS_PER_SCAN
                 f"\nLYRA'S ANALYSIS OF THE SIGNALS (use this to merge redundant briefs):\n"
                 f"  {lyra_answer}\n"
             )
+        ori_block = ""
+        if ori_answer:
+            ori_block = (
+                f"\nORI'S MEMORY OF PAST WINNERS (lean into these patterns when relevant):\n"
+                f"  {ori_answer}\n"
+            )
+        rae_block = ""
+        if rae_answer:
+            rae_block = (
+                f"\nRAE'S AUDIENCE-FIT GUT CHECK (respect this when picking platforms):\n"
+                f"  {rae_answer}\n"
+            )
 
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
@@ -207,7 +264,7 @@ async def _llm_propose_briefs(facts: dict, max_briefs: int = MAX_BRIEFS_PER_SCAN
         prompt = (
             f"OPEN GOALS:\n{goals_str}\n\n"
             f"RECENT LISTENING SIGNALS (last 7d):\n{sigs_str}\n"
-            f"{lyra_block}\n"
+            f"{lyra_block}{ori_block}{rae_block}\n"
             f"RECENT REJECTIONS (avoid resembling these):\n{rejects_str}\n\n"
             f"Propose UP TO {max_briefs} campaign brief(s). Output a strict JSON array. "
             "Each object MUST have exactly these keys: "

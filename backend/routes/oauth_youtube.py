@@ -382,3 +382,175 @@ async def refresh_youtube_token(user_id: str) -> Optional[str]:
         }},
     )
     return new_access
+
+
+# ===========================================================================
+# Publish — resumable video upload via /upload/youtube/v3/videos
+# ===========================================================================
+YOUTUBE_UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
+YOUTUBE_VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
+YT_TITLE_LIMIT = 100
+YT_DESCRIPTION_LIMIT = 5000
+YT_TAG_LIMIT = 500  # total chars across all tags
+
+# Max video bytes we'll proxy through our server. Anything larger should
+# be uploaded directly from the browser via a future signed-URL flow.
+MAX_VIDEO_BYTES = 256 * 1024 * 1024  # 256 MiB
+
+# Allowed privacyStatus values per YouTube API.
+ALLOWED_YT_PRIVACY = {"public", "unlisted", "private"}
+
+
+async def publish_to_youtube(
+    user_id: str,
+    text: str,
+    *,
+    video_url: Optional[str] = None,
+    title: Optional[str] = None,
+    tags: Optional[list[str]] = None,
+    category_id: Optional[str] = "22",  # 22 = People & Blogs (safe default)
+    privacy: str = "private",  # safe default — operator promotes manually
+) -> dict:
+    """Upload a video to the user's channel + return {ok, video_id, permalink, ...}.
+
+    Two-step resumable upload:
+      1. POST initiate session (metadata only) → 200 with Location header
+      2. PUT the video bytes to the Location URL
+
+    Constraints we enforce client-side:
+      • title         truncated to 100 chars (YT hard limit)
+      • description   truncated to 5000 chars
+      • tags          total combined length ≤500 chars
+      • privacy       must be one of {public, unlisted, private}
+      • size          ≤ MAX_VIDEO_BYTES (we stream this through our server)
+
+    Returns the standard publish_to_* shape so the scheduler dispatch
+    table can record success/failure uniformly with the other channels.
+    """
+    if not video_url:
+        return {"ok": False, "reason": "youtube_requires_video_url"}
+    if privacy not in ALLOWED_YT_PRIVACY:
+        return {"ok": False, "reason": "invalid_privacy_status"}
+
+    token = await refresh_youtube_token(user_id)
+    if not token:
+        return {"ok": False, "reason": "not_connected"}
+
+    # Trim caption-derived metadata.
+    caption = (text or "").strip()
+    yt_title = (title or caption.split("\n", 1)[0] or "Untitled").strip()[:YT_TITLE_LIMIT]
+    yt_description = caption[:YT_DESCRIPTION_LIMIT]
+    # Normalize + trim tags so we don't trip YouTube's 500-char ceiling.
+    safe_tags: list[str] = []
+    used = 0
+    for t in (tags or []):
+        clean = (t or "").strip().lstrip("#")
+        if not clean:
+            continue
+        if used + len(clean) + 1 > YT_TAG_LIMIT:
+            break
+        safe_tags.append(clean)
+        used += len(clean) + 1
+
+    snippet: dict = {
+        "title":       yt_title,
+        "description": yt_description,
+        "tags":        safe_tags,
+    }
+    if category_id:
+        snippet["categoryId"] = str(category_id)
+    body = {
+        "snippet": snippet,
+        "status":  {"privacyStatus": privacy, "selfDeclaredMadeForKids": False},
+    }
+
+    try:
+        # Download the source video into memory. Larger files would need
+        # the chunked upload path — track this as a future task.
+        async with httpx.AsyncClient(timeout=120) as cli:
+            r = await cli.get(video_url, follow_redirects=True)
+        if r.status_code >= 400:
+            return {"ok": False, "reason": "video_url_fetch_failed",
+                    "status": r.status_code}
+        video_bytes = r.content
+        if len(video_bytes) > MAX_VIDEO_BYTES:
+            return {"ok": False, "reason": "video_too_large",
+                    "size": len(video_bytes), "max": MAX_VIDEO_BYTES}
+
+        content_type = r.headers.get("content-type") or "video/mp4"
+        # Step 1 — open the resumable session.
+        async with httpx.AsyncClient(timeout=30) as cli:
+            init = await cli.post(
+                YOUTUBE_UPLOAD_URL,
+                params={"uploadType": "resumable",
+                        "part":       "snippet,status"},
+                headers={
+                    "Authorization":              f"Bearer {token}",
+                    "Content-Type":               "application/json; charset=UTF-8",
+                    "X-Upload-Content-Type":      content_type,
+                    "X-Upload-Content-Length":    str(len(video_bytes)),
+                },
+                json=body,
+            )
+        if init.status_code not in (200, 201) or "location" not in {k.lower(): v for k, v in init.headers.items()}:
+            return {"ok": False, "reason": "init_failed",
+                    "status": init.status_code, "body": init.text[:400]}
+        upload_url = {k.lower(): v for k, v in init.headers.items()}["location"]
+
+        # Step 2 — PUT the bytes in one shot (single-request resumable
+        # variant; for chunked, we'd loop with Content-Range headers).
+        async with httpx.AsyncClient(timeout=300) as cli:
+            put = await cli.put(
+                upload_url,
+                content=video_bytes,
+                headers={"Content-Type": content_type,
+                         "Content-Length": str(len(video_bytes))},
+            )
+        if put.status_code not in (200, 201):
+            return {"ok": False, "reason": "upload_failed",
+                    "status": put.status_code, "body": put.text[:400]}
+        vid = put.json() or {}
+        video_id = vid.get("id")
+        if not video_id:
+            return {"ok": False, "reason": "no_video_id_returned",
+                    "body": put.text[:400]}
+        return {
+            "ok":         True,
+            "video_id":   video_id,
+            "permalink":  f"https://youtube.com/watch?v={video_id}",
+            "privacy":    privacy,
+            "title":      yt_title,
+            "bytes":      len(video_bytes),
+        }
+    except httpx.HTTPError as exc:
+        return {"ok": False, "reason": "network_error", "detail": str(exc)[:300]}
+
+
+async def fetch_youtube_post_metrics(user_id: str, video_id: str) -> Optional[dict]:
+    """Returns {views, likes, comments, dislikes, favorites, fetched_at}
+    or None on failure. Maps directly onto our `performance_metrics`
+    schema so the analytics scheduler can record a snapshot uniformly."""
+    token = await refresh_youtube_token(user_id)
+    if not token:
+        return None
+    async with httpx.AsyncClient(timeout=15) as cli:
+        r = await cli.get(
+            YOUTUBE_VIDEOS_URL,
+            params={"id": video_id, "part": "statistics"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    if r.status_code != 200:
+        logger.warning("YouTube stats fetch failed for %s/%s: %s %s",
+                       user_id, video_id, r.status_code, r.text[:300])
+        return None
+    items = (r.json() or {}).get("items") or []
+    if not items:
+        return None
+    st = items[0].get("statistics") or {}
+    return {
+        "views":      int(st.get("viewCount") or 0),
+        "likes":      int(st.get("likeCount") or 0),
+        "comments":   int(st.get("commentCount") or 0),
+        "favorites":  int(st.get("favoriteCount") or 0),
+        "fetched_at": datetime.now(timezone.utc),
+    }

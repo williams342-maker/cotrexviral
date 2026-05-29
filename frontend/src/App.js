@@ -44,6 +44,7 @@ import Experiments from './pages/dashboard/Experiments';
 import Briefs from './pages/dashboard/Briefs';
 import Autonomy from './pages/dashboard/Autonomy';
 import Chatter from './pages/dashboard/Chatter';
+import TeamPerformance from './pages/dashboard/TeamPerformance';
 import AdminOverview from './pages/admin/AdminOverview';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminTickets from './pages/admin/AdminTickets';
@@ -103,6 +104,7 @@ function AppRouter() {
       <Route path="/dashboard/briefs" element={<ProtectedRoute><Briefs /></ProtectedRoute>} />
       <Route path="/dashboard/autonomy" element={<ProtectedRoute><Autonomy /></ProtectedRoute>} />
       <Route path="/dashboard/chatter" element={<ProtectedRoute><Chatter /></ProtectedRoute>} />
+      <Route path="/dashboard/team-performance" element={<ProtectedRoute><TeamPerformance /></ProtectedRoute>} />
       <Route path="/dashboard/insights" element={<ProtectedRoute><Insights /></ProtectedRoute>} />
       <Route path="/dashboard/seo" element={<ProtectedRoute><SeoReview /></ProtectedRoute>} />
       <Route path="/dashboard/scan" element={<ProtectedRoute><SiteScan /></ProtectedRoute>} />

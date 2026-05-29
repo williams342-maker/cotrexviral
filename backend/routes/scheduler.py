@@ -74,6 +74,10 @@ async def _publish_due_posts_now() -> dict:
     except Exception:  # pragma: no cover
         publish_to_facebook = None
         publish_to_instagram = None
+    try:
+        from routes.oauth_youtube import publish_to_youtube
+    except Exception:  # pragma: no cover
+        publish_to_youtube = None
 
     for post in due:
         platforms = post.get("platforms") or []
@@ -136,6 +140,21 @@ async def _publish_due_posts_now() -> dict:
             )
             if not res.get("ok"):
                 logger.warning("scheduler: instagram dispatch failed for %s: %s", post["id"], res.get("reason"))
+        if "youtube" in platforms and publish_to_youtube:
+            res = await publish_to_youtube(
+                post["user_id"], post["content"],
+                video_url=post.get("video_url") or post.get("media_url"),
+                title=post.get("youtube_title") or post.get("title"),
+                tags=post.get("youtube_tags") or post.get("hashtags"),
+                privacy=post.get("youtube_privacy") or "private",
+            )
+            dispatch_results["youtube"] = res
+            await db.posts.update_one(
+                {"id": post["id"]},
+                {"$set": {"dispatch.youtube": res}},
+            )
+            if not res.get("ok"):
+                logger.warning("scheduler: youtube dispatch failed for %s: %s", post["id"], res.get("reason"))
 
         # Mirror per-platform dispatch metadata (external_post_id, url, errors)
         # into the matching `content_variants` rows.
