@@ -1,58 +1,87 @@
-import React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Sparkles, Search, Radar, Share2, Send, Inbox, FileText, LogOut, ChevronRight, Wand2, LifeBuoy, ShieldCheck, Users as UsersIcon, Ticket as TicketIcon, History, Megaphone, Activity, TrendingUp, Calendar, Webhook, Settings as SettingsIcon, User as UserIcon, Map as MapIcon, Bot, Brain, CheckSquare, Users2, Command, KeyRound, Ear, Target as TargetIcon, FlaskConical, Compass, ShieldAlert, MessagesSquare, BarChart3 } from 'lucide-react';
+import React, { useState } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import {
+  LayoutDashboard, Rocket, Bot, Wand2, BarChart3, Settings as SettingsIcon,
+  Calendar, CheckSquare, Users2, Brain, TrendingUp, FileText, Inbox,
+  KeyRound, User as UserIcon, LogOut, ChevronRight, ChevronDown,
+  Command as CommandIcon,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ImpersonateBanner from './ImpersonateBanner';
 import BroadcastBanner from './BroadcastBanner';
 import HitlInboxBell from './HitlInboxBell';
+import CommandPalette from './CommandPalette';
 
-const items = [
-  { to: '/dashboard/command-center', label: 'Command Center', icon: Command },
-  { to: '/dashboard/standups', label: 'Monday Standup', icon: Sparkles },
-  { to: '/dashboard/briefs', label: 'Briefs Inbox', icon: Compass },
-  { to: '/dashboard/goals', label: 'Goals', icon: TargetIcon },
-  { to: '/dashboard/experiments', label: 'Experiments', icon: FlaskConical },
-  { to: '/dashboard/autonomy', label: 'Autonomy', icon: ShieldAlert },
-  { to: '/dashboard/chatter', label: 'Agent Chatter', icon: MessagesSquare },
-  { to: '/dashboard/team-performance', label: 'Team Performance', icon: BarChart3 },
-  { to: '/dashboard/growth-team', label: 'Growth Team', icon: Users2 },
-  { to: '/dashboard/listening', label: 'Listening', icon: Ear },
-  { to: '/dashboard/team', label: 'AI Team', icon: Users2 },
-  { to: '/dashboard/agent', label: 'Agents', icon: Bot, exact: true },
-  { to: '/dashboard/memory', label: 'Memory', icon: Brain },
-  { to: '/dashboard/trends', label: 'Trends', icon: TrendingUp },
-  { to: '/dashboard/approvals', label: 'Approvals', icon: CheckSquare },
-  { to: '/dashboard/overview', label: 'Overview', icon: LayoutDashboard },
-  { to: '/dashboard/main', label: 'Activity', icon: Activity },
-  { to: '/dashboard/performance', label: 'Performance', icon: TrendingUp },
-  { to: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
-  { to: '/dashboard/insights', label: 'AI Insights', icon: Sparkles },
-  { to: '/dashboard/studio', label: 'Content Studio', icon: Wand2 },
-  { to: '/dashboard/seo', label: 'SEO Review', icon: Search },
-  { to: '/dashboard/scan', label: 'Site Scan', icon: Radar },
-  { to: '/dashboard/channels', label: 'Integrations', icon: Share2 },
-  { to: '/dashboard/compose', label: 'Compose & Publish', icon: Send },
-  { to: '/dashboard/posts', label: 'Posts', icon: FileText },
-  { to: '/dashboard/leads', label: 'Leads', icon: Inbox },
-  { to: '/dashboard/help', label: 'Help & Support', icon: LifeBuoy },
-  { to: '/dashboard/settings/account', label: 'Account', icon: UserIcon },
+/* The new compact sidebar — 5 top-level intents, each with ≤3 children.
+   Everything else is reachable from Ctrl+K (CommandPalette).
+
+     🏠 Dashboard
+     🚀 Campaigns    → Active / Calendar / Approvals
+     🤖 Agents       → Team / Memory / Trends
+     ✍️ Content      → Studio / Posts
+     📊 Analytics    → Performance / Leads
+     ⚙️ Settings     → Integrations / Account
+*/
+const SECTIONS = [
+  // Top-level link (no children) — special-cased in render.
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard/team-performance' },
+  {
+    id: 'campaigns', label: 'Campaigns', icon: Rocket,
+    children: [
+      { to: '/dashboard/campaigns/active', label: 'Active',    icon: Rocket    },
+      { to: '/dashboard/calendar',         label: 'Calendar',  icon: Calendar  },
+      { to: '/dashboard/approvals',        label: 'Approvals', icon: CheckSquare },
+    ],
+  },
+  {
+    id: 'agents', label: 'Agents', icon: Bot,
+    children: [
+      { to: '/dashboard/team',   label: 'Team',   icon: Users2     },
+      { to: '/dashboard/memory', label: 'Memory', icon: Brain      },
+      { to: '/dashboard/trends', label: 'Trends', icon: TrendingUp },
+    ],
+  },
+  {
+    id: 'content', label: 'Content', icon: Wand2,
+    children: [
+      { to: '/dashboard/studio', label: 'Studio', icon: Wand2    },
+      { to: '/dashboard/posts',  label: 'Posts',  icon: FileText },
+    ],
+  },
+  {
+    id: 'analytics', label: 'Analytics', icon: BarChart3,
+    children: [
+      { to: '/dashboard/performance', label: 'Performance', icon: BarChart3 },
+      { to: '/dashboard/leads',       label: 'Leads',       icon: Inbox     },
+    ],
+  },
+  {
+    id: 'settings', label: 'Settings', icon: SettingsIcon,
+    children: [
+      { to: '/dashboard/channels',         label: 'Integrations', icon: KeyRound },
+      { to: '/dashboard/settings/account', label: 'Account',      icon: UserIcon },
+    ],
+  },
 ];
 
-const adminItems = [
-  { to: '/admin', label: 'Admin Overview', icon: ShieldCheck, exact: true },
-  { to: '/admin/users', label: 'Users', icon: UsersIcon },
-  { to: '/admin/tickets', label: 'Support Inbox', icon: TicketIcon },
-  { to: '/admin/broadcasts', label: 'Broadcasts', icon: Megaphone },
-  { to: '/admin/audit-log', label: 'Audit Log', icon: History },
-  { to: '/admin/webhook-events', label: 'Webhook Events', icon: Webhook },
-  { to: '/admin/settings', label: 'System Settings', icon: SettingsIcon },
-  { to: '/admin/integrations', label: 'Integrations', icon: KeyRound },
-  { to: '/admin/roadmap', label: 'Roadmap', icon: MapIcon },
-];
+// Detect Mac for the Ctrl+K hint label.
+const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || '');
 
 const DashboardLayout = ({ children, title, subtitle, headerExtra }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Section open state — section auto-opens when its child is active so
+  // a deep-link refresh doesn't hide the user's current location.
+  const initial = {};
+  for (const s of SECTIONS) {
+    if (!s.children) continue;
+    initial[s.id] = s.children.some((c) => location.pathname.startsWith(c.to));
+  }
+  const [openSections, setOpenSections] = useState(initial);
+
+  const toggle = (id) => setOpenSections((s) => ({ ...s, [id]: !s[id] }));
 
   return (
     <div className="cv-dash-scope min-h-screen text-zinc-200 relative overflow-x-hidden" style={{ background: '#09090B' }}>
@@ -67,15 +96,26 @@ const DashboardLayout = ({ children, title, subtitle, headerExtra }) => {
         <ImpersonateBanner />
         <div className="flex">
           {/* Sidebar */}
-          <aside className="w-64 shrink-0 min-h-screen sticky top-0 pb-24 border-r border-white/5"
-            style={{ background: 'rgba(9, 9, 14, 0.78)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
+          <aside
+            className="w-64 shrink-0 min-h-screen sticky top-0 pb-24 border-r border-white/5 flex flex-col"
+            style={{ background: 'rgba(9, 9, 14, 0.78)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+            data-testid="dash-sidebar"
+          >
+            {/* Logo */}
             <div className="p-5 border-b border-white/5">
-              <button onClick={() => navigate('/')} className="flex items-center gap-2.5 group" data-testid="dash-sidebar-logo">
+              <button
+                onClick={() => navigate('/')}
+                className="flex items-center gap-2.5 group"
+                data-testid="dash-sidebar-logo"
+              >
                 <span className="relative inline-block w-9 h-9">
-                  <span className="absolute inset-0 rounded-lg cv-pulse" style={{
-                    background: 'radial-gradient(circle, rgba(124,58,237,.45), rgba(6,182,212,.2) 60%, transparent 75%)',
-                    filter: 'blur(8px)',
-                  }} />
+                  <span
+                    className="absolute inset-0 rounded-lg cv-pulse"
+                    style={{
+                      background: 'radial-gradient(circle, rgba(124,58,237,.45), rgba(6,182,212,.2) 60%, transparent 75%)',
+                      filter: 'blur(8px)',
+                    }}
+                  />
                   <img src="/cortex-logo.png" alt="CortexViral" className="relative w-9 h-9 object-contain" />
                 </span>
                 <span className="cv-display font-semibold text-[15px] text-white">
@@ -87,52 +127,106 @@ const DashboardLayout = ({ children, title, subtitle, headerExtra }) => {
               </button>
             </div>
 
-            <nav className="p-3 flex flex-col gap-1">
-              {items.map((it) => (
-                <NavLink
-                  key={it.to}
-                  to={it.to}
-                  end={it.exact}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2.5 rounded-xl text-[14px] font-medium transition-all ${
-                      isActive
-                        ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-lg'
-                        : 'text-zinc-400 hover:bg-white/5 hover:text-white'
-                    }`
-                  }
-                >
-                  <it.icon size={17} />
-                  {it.label}
-                </NavLink>
-              ))}
+            {/* Ctrl+K hint button */}
+            <button
+              onClick={() => {
+                // Synthesize a real Ctrl+K keydown so the global listener catches it.
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: !isMac, metaKey: isMac }));
+              }}
+              data-testid="dash-sidebar-cmdk-trigger"
+              className="mx-3 mt-3 flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-white/5 bg-white/[0.03] hover:bg-white/[0.06] text-zinc-400 hover:text-white transition group"
+            >
+              <span className="flex items-center gap-2 text-[12.5px]">
+                <CommandIcon size={13} />
+                <span className="font-medium">Quick find</span>
+              </span>
+              <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-zinc-400 group-hover:text-zinc-200">
+                {isMac ? '⌘K' : 'Ctrl K'}
+              </kbd>
+            </button>
 
-              {user?.is_admin && (
-                <>
-                  <div className="mt-4 mb-1 px-3 text-[10.5px] uppercase tracking-[0.2em] text-zinc-500 font-semibold">Admin</div>
-                  {adminItems.map((it) => (
+            {/* Sections */}
+            <nav className="flex-1 p-3 pt-4 flex flex-col gap-0.5 overflow-y-auto">
+              {SECTIONS.map((section) => {
+                // Top-level no-child entry (Dashboard).
+                if (!section.children) {
+                  return (
                     <NavLink
-                      key={it.to}
-                      to={it.to}
-                      end={it.exact}
+                      key={section.id}
+                      to={section.to}
+                      end
+                      data-testid={`nav-${section.id}`}
                       className={({ isActive }) =>
-                        `flex items-center gap-3 px-3 py-2.5 rounded-xl text-[14px] font-medium transition-all ${
+                        `flex items-center gap-3 px-3 py-2.5 rounded-xl text-[14px] font-semibold transition-all ${
                           isActive
-                            ? 'bg-violet-600 text-white shadow-lg'
-                            : 'text-zinc-400 hover:bg-violet-500/10 hover:text-violet-300'
+                            ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-lg'
+                            : 'text-zinc-300 hover:bg-white/5 hover:text-white'
                         }`
                       }
                     >
-                      <it.icon size={17} />
-                      {it.label}
+                      <section.icon size={17} />
+                      {section.label}
                     </NavLink>
-                  ))}
-                </>
-              )}
+                  );
+                }
+
+                const isOpen = !!openSections[section.id];
+                const hasActiveChild = section.children.some((c) => location.pathname.startsWith(c.to));
+
+                return (
+                  <div key={section.id} className="flex flex-col">
+                    <button
+                      onClick={() => toggle(section.id)}
+                      data-testid={`nav-section-${section.id}`}
+                      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-[14px] font-semibold transition-all ${
+                        hasActiveChild
+                          ? 'text-white bg-white/[0.04]'
+                          : 'text-zinc-300 hover:bg-white/5 hover:text-white'
+                      }`}
+                    >
+                      <span className="flex items-center gap-3">
+                        <section.icon size={17} />
+                        {section.label}
+                      </span>
+                      {isOpen ? (
+                        <ChevronDown size={14} className="text-zinc-500" />
+                      ) : (
+                        <ChevronRight size={14} className="text-zinc-500" />
+                      )}
+                    </button>
+
+                    {/* Children */}
+                    {isOpen && (
+                      <div className="ml-3 pl-3 mt-0.5 flex flex-col gap-0.5 border-l border-white/5">
+                        {section.children.map((child) => (
+                          <NavLink
+                            key={child.to}
+                            to={child.to}
+                            data-testid={`nav-${section.id}-${child.label.toLowerCase()}`}
+                            className={({ isActive }) =>
+                              `flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all ${
+                                isActive
+                                  ? 'bg-gradient-to-r from-violet-600/80 to-blue-600/80 text-white shadow'
+                                  : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                              }`
+                            }
+                          >
+                            <child.icon size={13} />
+                            {child.label}
+                          </NavLink>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </nav>
 
             {/* User block */}
-            <div className="absolute bottom-0 left-0 right-0 w-64 p-4 border-t border-white/5"
-              style={{ background: 'rgba(9, 9, 14, 0.9)' }}>
+            <div
+              className="w-64 p-4 border-t border-white/5"
+              style={{ background: 'rgba(9, 9, 14, 0.9)' }}
+            >
               <div className="flex items-center gap-3">
                 {user?.picture ? (
                   <img src={user.picture} alt={user?.name} className="w-9 h-9 rounded-full ring-2 ring-violet-500/30 shadow-sm" />
@@ -145,7 +239,12 @@ const DashboardLayout = ({ children, title, subtitle, headerExtra }) => {
                   <div className="text-[13px] font-semibold truncate text-white">{user?.name || 'Account'}</div>
                   <div className="text-[11px] text-zinc-500 truncate">{user?.email}</div>
                 </div>
-                <button onClick={logout} className="p-1.5 rounded-lg hover:bg-white/5 text-zinc-400 hover:text-white transition-colors" title="Sign out" data-testid="dash-sidebar-logout">
+                <button
+                  onClick={logout}
+                  className="p-1.5 rounded-lg hover:bg-white/5 text-zinc-400 hover:text-white transition-colors"
+                  title="Sign out"
+                  data-testid="dash-sidebar-logout"
+                >
                   <LogOut size={15} />
                 </button>
               </div>
@@ -178,6 +277,7 @@ const DashboardLayout = ({ children, title, subtitle, headerExtra }) => {
         </div>
       </div>
       <HitlInboxBell />
+      <CommandPalette />
     </div>
   );
 };

@@ -35,6 +35,44 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 78) **🟣 Sidebar redesign — 5-intent IA + Ctrl+K command palette + new Active Campaigns page**
+
+  **A. Dashboard IA cut from 29 → 11 items** (sidebar)
+  - Replaced the flat 29-item sidebar with 5 collapsible top-level intents:
+    - 🏠 **Dashboard** (→ `/dashboard/team-performance`)
+    - 🚀 **Campaigns** → Active / Calendar / Approvals
+    - 🤖 **Agents** → Team / Memory / Trends
+    - ✍️ **Content** → Studio / Posts
+    - 📊 **Analytics** → Performance / Leads
+    - ⚙️ **Settings** → Integrations / Account
+  - Sections auto-expand when the active route is inside them (deep-link refresh never hides the user's current location).
+  - Active sub-route gets the violet→blue gradient pill; parent shows a softer white tint indicating "section contains your current page".
+
+  **B. Ctrl+K Command Palette** (`components/CommandPalette.jsx`)
+  - Global `Ctrl+K` / `⌘K` listener mounted at the layout level — works from any dashboard route.
+  - Sidebar exposes a dedicated "Quick find ⌘K" button that dispatches the same key event so non-keyboard users get the same affordance.
+  - Built on `shadcn/ui/command` (cmdk under the hood) — instant fuzzy search, keyboard nav, ESC to close.
+  - 35+ commands organised into 7 groups: Dashboard / Campaigns / Agents / Content / Analytics / Settings / Admin (admin group hidden for non-admins).
+  - All previously-orphaned pages (Command Center, Standups, Goals, Experiments, Autonomy, Chatter, Listening, Briefs Inbox, SEO Review, Site Scan, Compose, Insights, Help, Activity, Growth Team roster, Agent Workspace, all Admin pages) live here.
+
+  **C. New `/dashboard/campaigns/active` page** (`pages/dashboard/ActiveCampaigns.jsx`)
+  - Lists all the user's campaigns from `GET /api/campaigns`. No backend change required — endpoint pre-existed.
+  - Status tabs with live counts: Active / Draft / Completed / All.
+  - Each campaign rendered as a tile: name + goal + KPI chips + platform dots + created date + status badge. Click → drills into existing `/dashboard/campaigns/:id` detail.
+  - Empty state nudges the operator into Briefs Inbox (where Atlas proposals turn into campaigns) — closes the loop between proposal and execution.
+  - Header CTA "New from brief" → `/dashboard/briefs`.
+
+  **D. Verified live**
+  - Smoke screenshot confirms: sidebar renders with all 5 sections + Ctrl+K trigger, Active Campaigns page loads with real Mongo data (101 total campaigns visible, 8 drafts), Ctrl+K opens the palette with all 7 groups, palette search filters correctly (e.g. typing "brief" surfaces Briefs Inbox).
+  - No backend regressions; frontend lint + webpack compile clean.
+
+  **Files touched**
+  - NEW `components/CommandPalette.jsx` (~170 lines)
+  - NEW `pages/dashboard/ActiveCampaigns.jsx` (~220 lines)
+  - REWRITE `components/DashboardLayout.jsx` (compact-IA navigation, 250 lines)
+  - PATCH `App.js` — added `<Route path="/dashboard/campaigns/active" ...>` before the dynamic `:id` route so /active doesn't get captured as an id.
+
+
 - 2026-05-29 (part 77) **🟣 P2 — Cortex Autopilot SKU (Stripe metered billing) + full LLM ledger audit**
 
   **A. Cortex Autopilot — Stripe metered billing on `agent_usage_ledger`**

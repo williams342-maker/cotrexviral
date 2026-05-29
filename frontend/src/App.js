@@ -30,6 +30,7 @@ import AgentWorkspace from './pages/dashboard/AgentWorkspace';
 import AITeam from './pages/dashboard/AITeam';
 import CommandCenter from './pages/dashboard/CommandCenter';
 import CampaignDetail from './pages/dashboard/CampaignDetail';
+import ActiveCampaigns from './pages/dashboard/ActiveCampaigns';
 import Memory from './pages/dashboard/Memory';
 import Approvals from './pages/dashboard/Approvals';
 import Trends from './pages/dashboard/Trends';
@@ -89,6 +90,7 @@ function AppRouter() {
       <Route path="/blog/:slug" element={<BlogPost />} />
       <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/dashboard/team-performance" replace /></ProtectedRoute>} />
       <Route path="/dashboard/command-center" element={<ProtectedRoute><CommandCenter /></ProtectedRoute>} />
+      <Route path="/dashboard/campaigns/active" element={<ProtectedRoute><ActiveCampaigns /></ProtectedRoute>} />
       <Route path="/dashboard/campaigns/:id" element={<ProtectedRoute><CampaignDetail /></ProtectedRoute>} />
       <Route path="/dashboard/overview" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
       <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
