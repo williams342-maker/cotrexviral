@@ -553,7 +553,14 @@ const ContentLayerCallout = ({ health }) => {
           <Database size={14} />
         </span>
         <div className="flex-1 min-w-0">
-          <div className="text-neutral-700 font-medium">Content layer healthy</div>
+          <div className="text-neutral-700 font-medium flex items-center gap-2">
+            Content layer healthy
+            {health.strict_mode && (
+              <span className="text-[9.5px] uppercase tracking-widest px-1.5 py-0.5 rounded border border-violet-300 bg-violet-50 text-violet-700 font-bold" data-testid="content-layer-strict-pill">
+                STRICT
+              </span>
+            )}
+          </div>
           <div className="text-neutral-500 tabular-nums">
             {health.mirror_coverage_pct?.toFixed?.(1) ?? '0.0'}% mirror coverage ·
             {' '}{health.mirrored_posts?.toLocaleString?.()} / {health.total_posts?.toLocaleString?.()} posts mirrored ·

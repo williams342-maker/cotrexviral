@@ -2,14 +2,28 @@
 
 from fastapi import Request
 
-from core import db, api
+from core import db, api, STRICT_NORMALIZED_READS
 from deps import get_current_user
 
 
 @api.get("/dashboard/stats")
 async def dashboard_stats(request: Request):
+    """Headline counters for the dashboard overview. Phase 4 reads `posts`
+    via the normalized `content_items` layer (one row per platform-agnostic
+    intent — the agent-readable source-of-truth). In lenient mode we top
+    up with any un-mirrored straggler posts so the number stays
+    semantically equivalent to the pre-Phase-4 count during the
+    migration window."""
     user = await get_current_user(request)
-    posts_count = await db.posts.count_documents({"user_id": user.user_id})
+
+    posts_count = await db.content_items.count_documents({"user_id": user.user_id})
+    if not STRICT_NORMALIZED_READS:
+        unmirrored = await db.posts.count_documents({
+            "user_id": user.user_id,
+            "$or": [{"content_item_id": {"$exists": False}}, {"content_item_id": None}],
+        })
+        posts_count += unmirrored
+
     reports_count = await db.reports.count_documents({"user_id": user.user_id})
     channels_count = await db.channels.count_documents({"user_id": user.user_id})
     leads_count = await db.leads.count_documents({"user_id": user.user_id})

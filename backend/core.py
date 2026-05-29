@@ -56,6 +56,14 @@ PINTEREST_REDIRECT_URI_OVERRIDE = os.environ.get("PINTEREST_REDIRECT_URI", "")
 # without affecting real boards. Defaults to production v5 API.
 PINTEREST_API_BASE = os.environ.get("PINTEREST_API_BASE", "https://api.pinterest.com")
 
+# Phase 4 — strict normalized reads.
+# When True, the content_layer read helpers DROP the lenient fallback to
+# `db.posts` for un-mirrored stragglers. Flip this to "true" after the
+# admin overview `/admin/content-layer/health` shows zero drift sustained
+# for a week. Default False so existing prod environments behave like
+# Phase 3 until the operator explicitly opts in.
+STRICT_NORMALIZED_READS = os.environ.get("STRICT_NORMALIZED_READS", "false").lower() == "true"
+
 # Stripe billing
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")

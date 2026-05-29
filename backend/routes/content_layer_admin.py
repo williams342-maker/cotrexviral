@@ -12,7 +12,7 @@ Surfaced on the admin overview next to the memory-perf callout.
 """
 from fastapi import Request
 
-from core import api, db
+from core import api, db, STRICT_NORMALIZED_READS
 from deps import require_admin
 
 
@@ -68,4 +68,5 @@ async def content_layer_health(request: Request):
         "unmirrored_by_status":  by_status,
         "drift_threshold":       DRIFT_THRESHOLD,
         "drift_triggered":       unmirrored >= DRIFT_THRESHOLD,
+        "strict_mode":           STRICT_NORMALIZED_READS,
     }

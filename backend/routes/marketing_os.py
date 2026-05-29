@@ -37,6 +37,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from core import api, db
+from routes.content_layer import resolve_post_ids_for_status
 from deps import get_current_user
 from routes.marketing_os_graph import (
     CANONICAL_ROLES, ROLE_TO_AGENT, AGENT_TO_ROLE, DEFAULT_CHAIN, run_os_graph,
@@ -81,9 +82,18 @@ async def os_dashboard(request: Request):
         {"_id": 0, "embedding": 0},
     ).sort("created_at", -1).limit(80).to_list(length=80)
 
-    approvals_task = db.posts.find(
-        {"user_id": uid, "status": "pending_approval"}, {"_id": 0, "embedding": 0},
-    ).sort("scheduled_at", 1).limit(5).to_list(length=5)
+    # Phase 4 — read pending approvals via the normalized index. The
+    # parallel gather pattern requires this to be a single awaitable, so
+    # wrap the resolve+fetch into one coroutine.
+    async def _approvals_via_normalized() -> list[dict]:
+        post_ids, _ = await resolve_post_ids_for_status(uid, status="pending_approval")
+        if not post_ids:
+            return []
+        cursor = db.posts.find(
+            {"id": {"$in": post_ids}}, {"_id": 0, "embedding": 0},
+        ).sort("scheduled_at", 1).limit(5)
+        return await cursor.to_list(length=5)
+    approvals_task = _approvals_via_normalized()
 
     runs_task = db.marketing_os_runs.find(
         {"user_id": uid}, {"_id": 0, "transcript": 0},

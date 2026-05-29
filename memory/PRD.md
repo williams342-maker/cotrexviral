@@ -35,6 +35,35 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 62) **🔒 Phase 4 — Strict-mode read cutover across remaining endpoints**
+  - **New env flag `STRICT_NORMALIZED_READS`** (default `false`) in `core.py`. When flipped to `true`, all content_layer reads drop the lenient fallback and return ONLY posts that exist in the normalized layer. Operators flip the switch once `/admin/content-layer/health` shows zero drift sustained for a week.
+  - **New helper `routes/content_layer.list_posts_via_normalized(user_id, limit, strict)`** for the "latest N posts" pattern (distinct from `resolve_post_ids_for_status` which is status-filtered). Reads `content_items` → joins to `posts` via the `content_item_id` cross-ref. Lenient mode merges un-mirrored stragglers into the candidate set and sorts by `created_at` desc before truncating — a strictly-newer un-mirrored post can still appear (no silent loss during the migration window).
+  - **`resolve_post_ids_for_status`** gained a `strict` kwarg. Strict mode still *counts* un-mirrored posts (visibility metric stays accurate) but excludes them from the returned id set. Logs a distinct WARN message in strict mode so admins know what's being hidden.
+  - **Four read paths cut over** (all default-lenient, will become strict on env flip):
+    - **`routes/activity.py::activity_feed`** + **`list_posts`** — uses `list_posts_via_normalized`.
+    - **`routes/admin.py::admin_user_detail`** `recent_posts` — `list_posts_via_normalized(limit=5)`.
+    - **`routes/marketing_os.py::dashboard`** approvals snapshot — wraps `resolve_post_ids_for_status(status="pending_approval")` in a coroutine + posts fetch so the existing `asyncio.gather` parallel pattern stays intact.
+    - **`routes/dashboard.py::dashboard_stats`** — `posts` counter now counts `content_items` (the agent-readable intent count). Lenient mode tops up with un-mirrored count so the number stays semantically equivalent to pre-Phase-4 during the migration window.
+  - **Admin observability**:
+    - `GET /api/admin/content-layer/health` now returns `strict_mode: bool` so operators can see the current env state.
+    - Admin Overview `ContentLayerCallout` shows a violet **STRICT** pill on the healthy card when `STRICT_NORMALIZED_READS=true`. `data-testid="content-layer-strict-pill"`.
+  - **Test-data cleanup**: removed 212 orphan `content_items` (rows from prior test runs that survived cleanup races). Production data is now perfectly aligned: 150 posts ↔ 150 content_items ↔ 150 content_variants ↔ 100% mirror coverage.
+  - **10 new pytest cases** (`tests/test_phase4_strict_cutover.py`):
+    - `/activity` includes a freshly-mirrored post.
+    - `/activity` lenient mode includes un-mirrored stragglers.
+    - `/posts` lenient mode merges un-mirrored stragglers into the candidate set (not just gap-fill).
+    - Admin `/admin/users/{id}` `recent_posts` resolves via the normalized layer.
+    - `/marketing-os/dashboard` `approvals` snapshot uses the normalized layer.
+    - `/dashboard/stats.posts` is an int ≥ 0.
+    - Resolver strict mode EXCLUDES un-mirrored ids (but still counts them).
+    - List helper strict mode EXCLUDES un-mirrored posts.
+    - List helper `limit=0` short-circuits to empty list.
+    - Resolver lenient mode INCLUDES un-mirrored ids.
+  - **141/141 regression** across phase4 + phase3 + phase2 + normalize + attribution + meta_publish_and_approvals + auto_draft + recurrence + pinterest_publish + analytics_and_carousel + series_ops + marketing_os. All passing.
+  - **Operator switch flow**: 1) Verify `drift_triggered=false` on `/admin/content-layer/health` for ≥7 days. 2) Set `STRICT_NORMALIZED_READS=true` in `/app/backend/.env`. 3) Restart backend. 4) Verify the violet **STRICT** pill appears on the admin overview. 5) Phase 5 (Phase 1: deprecate the legacy `posts.find` calls entirely; Phase 2: drop the `posts` collection) becomes unblocked.
+
+
+
 - 2026-05-29 (part 61) **📖 Phase 3 — Read-side cutover to normalized layer**
   - **`/api/posts/scheduled`** and **`/api/approvals`** now resolve matching posts via the normalized `content_variants` index (the agent-readable source-of-truth) instead of querying `db.posts` directly. Two-step read:
     1. Query `content_variants` for matching `(user_id, status, scheduled_at range)` — this is the normalized index Phase 4 will treat as authoritative.

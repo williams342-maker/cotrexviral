@@ -8,6 +8,7 @@ from fastapi import HTTPException, Request, Response
 from core import db, api, ADMIN_EMAILS
 from deps import require_admin, log_admin_action
 from models import AdminSetPlanRequest, User
+from routes.content_layer import list_posts_via_normalized
 from routes.plans import ENTITLEMENTS
 
 
@@ -170,7 +171,7 @@ async def admin_user_detail(user_id: str, request: Request):
             "channels": await db.channels.count_documents({"user_id": user_id}),
             "tickets": await db.tickets.count_documents({"user_id": user_id}),
         },
-        "recent_posts": await db.posts.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).limit(5).to_list(5),
+        "recent_posts": await list_posts_via_normalized(user_id, limit=5),
         "recent_leads": await db.leads.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).limit(5).to_list(5),
     }
 

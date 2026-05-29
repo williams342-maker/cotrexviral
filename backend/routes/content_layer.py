@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from typing import Iterable, Optional
 
 from core import db
+from core import STRICT_NORMALIZED_READS
 from routes.brands import ensure_default_brand_for_user
 
 logger = logging.getLogger(__name__)
@@ -338,13 +339,22 @@ async def resolve_post_ids_for_status(
     status: str,
     scheduled_after: Optional[datetime] = None,
     scheduled_before: Optional[datetime] = None,
+    strict: Optional[bool] = None,
 ) -> tuple[list[str], int]:
     """Return (post_ids, n_unmirrored) for all posts matching the filter.
 
     `n_unmirrored` is the count of posts found in the legacy `posts`
     collection that DON'T have a normalized mirror — useful for the
     /admin/content-layer/health endpoint that surfaces migration drift.
+
+    `strict`:
+      • None  — use env `STRICT_NORMALIZED_READS` (default behavior).
+      • True  — drop the lenient fallback. Only return posts that have
+                a normalized mirror. Un-mirrored stragglers are excluded.
+      • False — include un-mirrored posts (Phase 3 lenient default).
     """
+    strict_mode = strict if strict is not None else STRICT_NORMALIZED_READS
+
     # --- Step 1: normalized layer ---
     v_match: dict = {"user_id": user_id, "status": status}
     if scheduled_after or scheduled_before:
@@ -361,6 +371,9 @@ async def resolve_post_ids_for_status(
     normalized_ids: set[str] = {v["post_id"] for v in variants if v.get("post_id")}
 
     # --- Step 2: lenient fallback — catch any un-mirrored stragglers ---
+    # Always *count* the un-mirrored set so callers (and the drift health
+    # endpoint) have visibility. Only include them in the returned ids when
+    # strict mode is off.
     p_match: dict = {
         "user_id": user_id,
         "status": status,
@@ -374,11 +387,87 @@ async def resolve_post_ids_for_status(
     unmirrored = await db.posts.find(p_match, {"_id": 0, "id": 1}).to_list(length=2000)
     unmirrored_ids = {p["id"] for p in unmirrored}
 
-    if unmirrored_ids:
+    if unmirrored_ids and not strict_mode:
         logger.warning(
             "resolve_post_ids_for_status: %d un-mirrored posts for user=%s status=%s — "
-            "they'll still appear in reads but should be normalized",
+            "lenient mode surfacing them; flip STRICT_NORMALIZED_READS once drift sustains zero",
+            len(unmirrored_ids), user_id, status,
+        )
+    elif unmirrored_ids and strict_mode:
+        logger.warning(
+            "resolve_post_ids_for_status[STRICT]: HIDING %d un-mirrored posts for user=%s status=%s — "
+            "re-run normalize migration to fix",
             len(unmirrored_ids), user_id, status,
         )
 
-    return list(normalized_ids | unmirrored_ids), len(unmirrored_ids)
+    final_ids = list(normalized_ids if strict_mode else (normalized_ids | unmirrored_ids))
+    return final_ids, len(unmirrored_ids)
+
+
+async def list_posts_via_normalized(
+    user_id: str,
+    *,
+    limit: int = 10,
+    strict: Optional[bool] = None,
+) -> list[dict]:
+    """Return the latest N posts for the user, resolved via the normalized
+    `content_items` layer (the agent-readable source-of-truth for "what
+    content does this brand own?"). Returns full legacy post documents so
+    callers can keep their existing JSON shape.
+
+    This is the "all-statuses, latest first" pattern used by the activity
+    feed, admin recent_posts, and dashboard recent activity — distinct
+    from `resolve_post_ids_for_status` which is filtered by a specific
+    status + scheduled-at range.
+
+    Lenient fallback (default) tops up the result with un-mirrored
+    stragglers when fewer than `limit` mirrored posts exist. Strict mode
+    omits the un-mirrored set entirely.
+    """
+    strict_mode = strict if strict is not None else STRICT_NORMALIZED_READS
+    if limit <= 0:
+        return []
+
+    # Step 1: latest content_items for this user. Over-fetch slightly so
+    # we still hit the limit when some content_items have been pruned.
+    items = await db.content_items.find(
+        {"user_id": user_id},
+        {"_id": 0, "id": 1},
+    ).sort("created_at", -1).limit(limit * 3).to_list(length=limit * 3)
+    item_ids = [i["id"] for i in items]
+
+    # Step 2: posts whose content_item_id is in that set. Use the legacy
+    # row as the response shape (frontend depends on those fields).
+    posts: list[dict] = []
+    if item_ids:
+        posts = await db.posts.find(
+            {"user_id": user_id, "content_item_id": {"$in": item_ids}},
+            {"_id": 0},
+        ).sort("created_at", -1).limit(limit).to_list(length=limit)
+
+    # Step 3 (lenient only): merge in un-mirrored stragglers so they aren't
+    # silently dropped during the migration window. We re-sort the merged
+    # list and truncate to `limit` so a newer un-mirrored post can still
+    # bump an older mirrored one out of the result (a strictly-newer
+    # straggler shouldn't disappear just because mirrored posts fill the
+    # window).
+    if not strict_mode:
+        unmirrored = await db.posts.find(
+            {"user_id": user_id,
+             "$or": [{"content_item_id": {"$exists": False}}, {"content_item_id": None}]},
+            {"_id": 0},
+        ).sort("created_at", -1).limit(limit).to_list(length=limit)
+        if unmirrored:
+            logger.warning(
+                "list_posts_via_normalized: merging %d un-mirrored posts for user=%s — "
+                "flip STRICT_NORMALIZED_READS once drift sustains zero",
+                len(unmirrored), user_id,
+            )
+            posts.extend(unmirrored)
+            posts.sort(
+                key=lambda p: p.get("created_at") or datetime.min.replace(tzinfo=timezone.utc),
+                reverse=True,
+            )
+            posts = posts[:limit]
+
+    return posts
