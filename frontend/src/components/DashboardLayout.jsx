@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Sparkles, Search, Radar, Share2, Send, Inbox, FileText, LogOut, ChevronRight, Wand2, LifeBuoy, ShieldCheck, Users as UsersIcon, Ticket as TicketIcon, History, Megaphone, Activity, TrendingUp, Calendar, Webhook, Settings as SettingsIcon, User as UserIcon, Map as MapIcon, Bot, Brain, CheckSquare, Users2, Command } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Search, Radar, Share2, Send, Inbox, FileText, LogOut, ChevronRight, Wand2, LifeBuoy, ShieldCheck, Users as UsersIcon, Ticket as TicketIcon, History, Megaphone, Activity, TrendingUp, Calendar, Webhook, Settings as SettingsIcon, User as UserIcon, Map as MapIcon, Bot, Brain, CheckSquare, Users2, Command, KeyRound } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ImpersonateBanner from './ImpersonateBanner';
 import BroadcastBanner from './BroadcastBanner';
@@ -37,6 +37,7 @@ const adminItems = [
   { to: '/admin/audit-log', label: 'Audit Log', icon: History },
   { to: '/admin/webhook-events', label: 'Webhook Events', icon: Webhook },
   { to: '/admin/settings', label: 'System Settings', icon: SettingsIcon },
+  { to: '/admin/integrations', label: 'Integrations', icon: KeyRound },
   { to: '/admin/roadmap', label: 'Roadmap', icon: MapIcon },
 ];
 

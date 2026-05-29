@@ -36,7 +36,8 @@ from typing import Optional
 from fastapi import Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from core import api, db, PUBLIC_SITE_URL, META_APP_SECRET
+from core import api, db, PUBLIC_SITE_URL
+from routes.app_config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -119,12 +120,13 @@ async def meta_data_deletion_callback(
 
     Returns JSON `{url, confirmation_code}` per the Meta spec.
     """
-    if not META_APP_SECRET:
+    app_secret = await get_config("META_APP_SECRET")
+    if not app_secret:
         # App not configured yet — return a 503 but still spec-shaped so
         # Meta surfaces the error in the developer console.
         raise HTTPException(status_code=503, detail="Meta app secret not configured on server")
 
-    data = _parse_signed_request(signed_request, META_APP_SECRET)
+    data = _parse_signed_request(signed_request, app_secret)
     if not data:
         raise HTTPException(status_code=400, detail="Invalid signed_request")
 

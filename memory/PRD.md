@@ -35,6 +35,36 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 64) **🔐 DB-backed runtime config — rotate API keys without redeploys**
+  - **New `routes/app_config.py`** — central module for live-mutable third-party credentials. Resolution order on every read: **database → environment → caller default**. 60-second in-process cache keeps the hot path off Mongo while still giving admins ≤1-min latency for new keys to take effect. Whitelisted key registry (`ALLOWED_KEYS`) so a compromised admin session can't poke `MONGO_URL` or similar.
+  - **Admin endpoints** (all admin-only):
+    - `GET /api/admin/app-config` — lists every allowed key with `{label, description, group, secret, is_set, source, preview, updated_at, updated_by}`. Secrets are masked (`••••XXXX` — last 4 chars only). Source surfaces `database` / `environment` / `unset` so the admin knows where the active value came from.
+    - `PUT /api/admin/app-config` — upsert a key. Empty value clears the DB row (graceful fall-back to env / default).
+    - `DELETE /api/admin/app-config/{key}` — explicit delete with audit logging.
+    - Every write is logged to `audit_log` collection (action `app_config_set` / `app_config_cleared`).
+  - **`routes/oauth_meta.py` fully refactored** — every callsite of `META_APP_ID`, `META_APP_SECRET`, `META_GRAPH_VERSION`, `META_REDIRECT_URI` now goes through `await get_config(...)` instead of importing from `core`. All the helpers (`_dialog_url`, `_graph_url`, `_redirect_uri`, `_post_oauth_redirect`, `_check_configured`) became async. Module-level constants gone — credentials are pulled lazily per request, so a rotation propagates within one cache TTL with no backend restart.
+  - **`routes/meta_deletion.py`** — same refactor: callback resolves `META_APP_SECRET` via `get_config` instead of capturing it at import time.
+  - **New admin UI page `/admin/integrations`** (`pages/admin/AdminIntegrations.jsx`) — beautiful one-page editor grouped by integration. Each row shows: key (mono), badge for source (DATABASE / ENV FILE / UNSET, color-coded), SECRET pill (rose) if applicable, human description, current value preview (masked for secrets), "last set by" attribution, input box (password type for secrets), Save + Clear actions. Toast feedback on save mentions the 60s TTL.
+  - **Sidebar nav** — added "Integrations" link under Admin section (uses lucide `KeyRound` icon). Linked from `DashboardLayout.jsx::ADMIN_NAV`.
+  - **Live operator flip executed**: Migrated `META_APP_ID`, `META_APP_SECRET`, `META_REDIRECT_URI` from `.env` to the DB. `.env` was edited to remove the three META lines. The OAuth start URL still returns the correct authorize URL because the DB layer now serves them. Verified end-to-end via curl — `client_id=1293687082431683` + `redirect_uri=...preview.emergentagent.com/api/oauth/facebook/callback` both pulled from `app_config`, not from env.
+  - **11 new pytest cases** (`tests/test_app_config.py`):
+    - Admin auth required on GET / PUT (401 without).
+    - List returns every known META_* key with full metadata.
+    - Non-secret keys preview in cleartext; secret keys mask to `•••• + last 4`.
+    - Unknown key write rejected (400).
+    - Set → Clear round-trip works (empty value deletes the row).
+    - DELETE endpoint deletes the row + invalidates cache.
+    - DB row beats env var when both are set (resolution order verified).
+    - Env var fallback works when DB row is missing.
+    - `default` arg used when both DB + env are empty.
+    - In-process cache invalidates correctly on every write.
+    - `/oauth/facebook/start` picks up a freshly-set DB sentinel value (end-to-end across processes).
+  - **Backwards-compat verified**: existing `tests/test_meta_data_deletion.py` updated to pull the test secret via `get_config()` first, env second. All 7 HMAC tests still pass against the DB-stored secret. Previous 4 tests that skipped when `META_APP_SECRET` was unset in env now run unconditionally.
+  - **52/52 regression** across app_config + meta_data_deletion + phase5 + phase4 + phase3 + phase2. All passing.
+  - **Operator playbook**: when a key rotation is needed, admin navigates to `/admin/integrations`, types the new value, clicks Save. The change is durable in MongoDB and active within 60s with no engineering involvement. The legacy `.env` continues to work as the fallback layer.
+
+
+
 - 2026-05-29 (part 63) **🔐 Phase 5 — Operator flip + count-source migration**
   - **Operator flip** — set `STRICT_NORMALIZED_READS=true` in `/app/backend/.env` and restarted the backend. Strict mode is now LIVE on the preview environment. The violet **STRICT** pill renders next to "Content layer healthy" on the Admin Overview, confirming the cutover. Live verified: `GET /api/admin/content-layer/health` returns `{strict_mode: True, drift_triggered: False, mirror_coverage_pct: 100.0}` on production user data.
   - **Test-data hygiene** — cleaned up 212 orphan `content_items` from prior test runs that survived cleanup races. After cleanup: 150 posts ↔ 150 content_items ↔ 150 content_variants ↔ exact alignment. Hardened `_cleanup_post` in `test_meta_publish_and_approvals.py` to cascade-delete the variants + content_item alongside the legacy post.

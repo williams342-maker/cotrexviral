@@ -22,8 +22,20 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 load_dotenv("/app/backend/.env")
 
+import sys
+sys.path.insert(0, "/app/backend")
+# Pull the DB-stored secret since it may not be in env anymore (Phase 5 moved
+# meta credentials into app_config). Falls back to env for backward compat.
+def _load_meta_secret():
+    import asyncio
+    from routes.app_config import get_config
+    async def go():
+        return await get_config("META_APP_SECRET")
+    return asyncio.get_event_loop().run_until_complete(go())
+
+META_APP_SECRET = _load_meta_secret() or os.environ.get("META_APP_SECRET", "")
+
 API_URL = open("/app/frontend/.env").read().split("REACT_APP_BACKEND_URL=")[1].split("\n")[0].strip()
-META_APP_SECRET = os.environ.get("META_APP_SECRET", "")
 
 
 def _mongo():

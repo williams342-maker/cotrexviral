@@ -55,6 +55,7 @@ from routes import (  # noqa: F401
     perf_metrics,    # Performance metrics — time-series + rollup + attribution API
     content_layer_admin,  # Phase 3 — drift / mirror coverage health endpoint
     meta_deletion,   # Meta data-deletion-callback webhook + status page
+    app_config,      # DB-backed runtime config (rotate keys without redeploy)
 )
 
 

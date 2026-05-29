@@ -43,6 +43,7 @@ import AdminAudit from './pages/admin/AdminAudit';
 import AdminBroadcasts from './pages/admin/AdminBroadcasts';
 import AdminWebhookEvents from './pages/admin/AdminWebhookEvents';
 import AdminSettings from './pages/admin/AdminSettings';
+import AdminIntegrations from './pages/admin/AdminIntegrations';
 import AdminRoadmap from './pages/admin/AdminRoadmap';
 import Onboarding from './pages/Onboarding';
 import AuthClaim from './pages/AuthClaim';
@@ -109,6 +110,7 @@ function AppRouter() {
       <Route path="/admin/broadcasts" element={<ProtectedRoute admin><AdminBroadcasts /></ProtectedRoute>} />
       <Route path="/admin/webhook-events" element={<ProtectedRoute admin><AdminWebhookEvents /></ProtectedRoute>} />
       <Route path="/admin/settings" element={<ProtectedRoute admin><AdminSettings /></ProtectedRoute>} />
+      <Route path="/admin/integrations" element={<ProtectedRoute admin><AdminIntegrations /></ProtectedRoute>} />
       <Route path="/admin/roadmap" element={<ProtectedRoute admin><AdminRoadmap /></ProtectedRoute>} />
     </Routes>
     </>

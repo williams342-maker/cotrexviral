@@ -52,19 +52,37 @@ from fastapi.responses import RedirectResponse
 from core import (
     db, api, logger,
     PUBLIC_SITE_URL,
-    META_APP_ID, META_APP_SECRET, META_GRAPH_VERSION,
-    META_REDIRECT_URI_OVERRIDE,
 )
 from deps import get_current_user
+from routes.app_config import get_config
+
+
+# Module-level constants that the OAuth code reads lazily via accessor
+# helpers. Direct env imports are deprecated — use `get_config()` so admins
+# can rotate keys via /admin/app-config without a redeploy.
+async def _meta_app_id() -> str:
+    return (await get_config("META_APP_ID")) or ""
+
+
+async def _meta_app_secret() -> str:
+    return (await get_config("META_APP_SECRET")) or ""
+
+
+async def _meta_graph_version() -> str:
+    return (await get_config("META_GRAPH_VERSION", default="v22.0")) or "v22.0"
+
+
+async def _meta_redirect_override() -> str:
+    return (await get_config("META_REDIRECT_URI")) or ""
 
 
 # Authorize URL (versioned). Same endpoint for both FB and IG — only scope diff.
-def _dialog_url() -> str:
-    return f"https://www.facebook.com/{META_GRAPH_VERSION}/dialog/oauth"
+async def _dialog_url() -> str:
+    return f"https://www.facebook.com/{await _meta_graph_version()}/dialog/oauth"
 
 
-def _graph_url(path: str) -> str:
-    return f"https://graph.facebook.com/{META_GRAPH_VERSION}/{path.lstrip('/')}"
+async def _graph_url(path: str) -> str:
+    return f"https://graph.facebook.com/{await _meta_graph_version()}/{path.lstrip('/')}"
 
 
 # Scope sets — strictly the minimum needed for our publishing use cases.
@@ -85,36 +103,36 @@ INSTAGRAM_SCOPES = [
 ]
 
 
-def _redirect_uri(provider: str) -> str:
+async def _redirect_uri(provider: str) -> str:
     """Where Meta sends the browser after the user authorises.
 
     Priority:
-      1. META_REDIRECT_URI env override — treat the value as a BASE host
-         (or any URL whose host we should reuse) and inject the per-provider
-         path. Lets one env value cover both facebook + instagram.
+      1. META_REDIRECT_URI override (from DB or env) — treat the value as
+         a BASE host (or any URL whose host we should reuse) and inject
+         the per-provider path. Lets one value cover both facebook + instagram.
       2. Fall back to PUBLIC_SITE_URL + provider path (production default).
     """
-    if META_REDIRECT_URI_OVERRIDE:
-        # Extract the scheme + host from the override (strip any path).
+    override = await _meta_redirect_override()
+    if override:
         from urllib.parse import urlparse
-        parsed = urlparse(META_REDIRECT_URI_OVERRIDE)
+        parsed = urlparse(override)
         if parsed.scheme and parsed.netloc:
             return f"{parsed.scheme}://{parsed.netloc}/api/oauth/{provider}/callback"
     return f"{PUBLIC_SITE_URL}/api/oauth/{provider}/callback"
 
 
-def _post_oauth_redirect(provider: str, query: str) -> str:
-    base = _redirect_uri(provider).split(f"/api/oauth/{provider}/callback")[0]
+async def _post_oauth_redirect(provider: str, query: str) -> str:
+    base = (await _redirect_uri(provider)).split(f"/api/oauth/{provider}/callback")[0]
     return f"{base}/dashboard/channels?{query}"
 
 
-def _check_configured():
-    if not META_APP_ID or not META_APP_SECRET:
+async def _check_configured():
+    if not (await _meta_app_id()) or not (await _meta_app_secret()):
         raise HTTPException(
             status_code=503,
             detail=(
                 "Meta OAuth not configured. Set META_APP_ID and META_APP_SECRET "
-                "in /app/backend/.env."
+                "via /admin/integrations or in /app/backend/.env."
             ),
         )
 
@@ -123,7 +141,7 @@ def _check_configured():
 
 async def _start_oauth(request: Request, provider: str, scopes: List[str]) -> dict:
     user = await get_current_user(request)
-    _check_configured()
+    await _check_configured()
     state = secrets.token_urlsafe(24)
     await db.oauth_states.insert_one({
         "_id": state,
@@ -133,8 +151,8 @@ async def _start_oauth(request: Request, provider: str, scopes: List[str]) -> di
         "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
     })
     params = {
-        "client_id": META_APP_ID,
-        "redirect_uri": _redirect_uri(provider),
+        "client_id": await _meta_app_id(),
+        "redirect_uri": await _redirect_uri(provider),
         "state": state,
         "response_type": "code",
         "scope": ",".join(scopes),
@@ -142,7 +160,7 @@ async def _start_oauth(request: Request, provider: str, scopes: List[str]) -> di
         # permission without the consent dialog being silently skipped.
         "auth_type": "rerequest",
     }
-    return {"authorize_url": f"{_dialog_url()}?{urlencode(params)}"}
+    return {"authorize_url": f"{await _dialog_url()}?{urlencode(params)}"}
 
 
 @api.get("/oauth/facebook/start")
@@ -162,12 +180,14 @@ async def _exchange_code(code: str, provider: str) -> dict:
 
     Returns the long-lived token payload (access_token, expires_in).
     """
+    app_id = await _meta_app_id()
+    app_secret = await _meta_app_secret()
     async with httpx.AsyncClient(timeout=20) as cli:
         # 1. Short-lived user token
-        short = await cli.get(_graph_url("oauth/access_token"), params={
-            "client_id": META_APP_ID,
-            "client_secret": META_APP_SECRET,
-            "redirect_uri": _redirect_uri(provider),
+        short = await cli.get(await _graph_url("oauth/access_token"), params={
+            "client_id": app_id,
+            "client_secret": app_secret,
+            "redirect_uri": await _redirect_uri(provider),
             "code": code,
         })
         if short.status_code != 200:
@@ -179,10 +199,10 @@ async def _exchange_code(code: str, provider: str) -> dict:
             raise HTTPException(status_code=502, detail="No access_token in Meta response")
 
         # 2. Upgrade to long-lived (~60d expiry).
-        lng = await cli.get(_graph_url("oauth/access_token"), params={
+        lng = await cli.get(await _graph_url("oauth/access_token"), params={
             "grant_type": "fb_exchange_token",
-            "client_id": META_APP_ID,
-            "client_secret": META_APP_SECRET,
+            "client_id": app_id,
+            "client_secret": app_secret,
             "fb_exchange_token": short_tok,
         })
         if lng.status_code != 200:
@@ -196,7 +216,7 @@ async def _fetch_pages(user_token: str) -> list[dict]:
     """Returns the list of Pages the user manages, each with its Page access
     token (which typically never expires) and basic metadata."""
     async with httpx.AsyncClient(timeout=15) as cli:
-        r = await cli.get(_graph_url("me/accounts"), params={
+        r = await cli.get(await _graph_url("me/accounts"), params={
             "access_token": user_token,
             "fields": "id,name,access_token,category,tasks",
         })
@@ -211,7 +231,7 @@ async def _fetch_fb_user_id(user_token: str) -> str:
     sends in the data-deletion-callback signed_request, so we can map
     a deletion-request payload back to the right `*_connections` row."""
     async with httpx.AsyncClient(timeout=10) as cli:
-        r = await cli.get(_graph_url("me"), params={
+        r = await cli.get(await _graph_url("me"), params={
             "access_token": user_token,
             "fields": "id",
         })
@@ -232,7 +252,7 @@ async def _resolve_instagram_accounts(pages: list[dict]) -> list[dict]:
             page_token = page.get("access_token")
             if not page_id or not page_token:
                 continue
-            r = await cli.get(_graph_url(page_id), params={
+            r = await cli.get(await _graph_url(page_id), params={
                 "fields": "instagram_business_account{id,username}",
                 "access_token": page_token,
             })
@@ -256,7 +276,7 @@ async def facebook_callback(request: Request, code: str = "", state: str = "",
         return {"ok": True}
     if error:
         logger.info("Facebook callback denied: %s — %s", error, error_description)
-        return RedirectResponse(_post_oauth_redirect("facebook", "facebook=denied"), 302)
+        return RedirectResponse(await _post_oauth_redirect("facebook", "facebook=denied"), 302)
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing code/state")
 
@@ -266,7 +286,7 @@ async def facebook_callback(request: Request, code: str = "", state: str = "",
     user_id = state_doc["user_id"]
     await db.oauth_states.delete_one({"_id": state})
 
-    _check_configured()
+    await _check_configured()
     tok = await _exchange_code(code, "facebook")
     user_token = tok["access_token"]
     expires_in = int(tok.get("expires_in", 60 * 24 * 3600))
@@ -303,7 +323,7 @@ async def facebook_callback(request: Request, code: str = "", state: str = "",
         },
         upsert=True,
     )
-    return RedirectResponse(_post_oauth_redirect("facebook", "facebook=connected"), 302)
+    return RedirectResponse(await _post_oauth_redirect("facebook", "facebook=connected"), 302)
 
 
 @api.api_route("/oauth/instagram/callback", methods=["GET", "HEAD"])
@@ -313,7 +333,7 @@ async def instagram_callback(request: Request, code: str = "", state: str = "",
         return {"ok": True}
     if error:
         logger.info("Instagram callback denied: %s — %s", error, error_description)
-        return RedirectResponse(_post_oauth_redirect("instagram", "instagram=denied"), 302)
+        return RedirectResponse(await _post_oauth_redirect("instagram", "instagram=denied"), 302)
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing code/state")
 
@@ -323,7 +343,7 @@ async def instagram_callback(request: Request, code: str = "", state: str = "",
     user_id = state_doc["user_id"]
     await db.oauth_states.delete_one({"_id": state})
 
-    _check_configured()
+    await _check_configured()
     tok = await _exchange_code(code, "instagram")
     user_token = tok["access_token"]
     expires_in = int(tok.get("expires_in", 60 * 24 * 3600))
@@ -338,7 +358,7 @@ async def instagram_callback(request: Request, code: str = "", state: str = "",
         # knows what to fix on Meta's side instead of a silent "Connected".
         logger.info("Instagram OAuth: user %s has no IG Business account linked", user_id)
         return RedirectResponse(
-            _post_oauth_redirect("instagram", "instagram=no_business_account"), 302,
+            await _post_oauth_redirect("instagram", "instagram=no_business_account"), 302,
         )
 
     handle = f"@{ig_accounts[0]['ig_username']}" if ig_accounts[0].get("ig_username") else "Instagram"
@@ -371,7 +391,7 @@ async def instagram_callback(request: Request, code: str = "", state: str = "",
         },
         upsert=True,
     )
-    return RedirectResponse(_post_oauth_redirect("instagram", "instagram=connected"), 302)
+    return RedirectResponse(await _post_oauth_redirect("instagram", "instagram=connected"), 302)
 
 
 # --- /status -----------------------------------------------------------------
@@ -384,8 +404,9 @@ async def facebook_status(request: Request):
         {"_id": 0, "user_access_token": 0,
          "pages.access_token": 0},  # strip secrets from the response
     )
+    is_configured = bool(await _meta_app_id() and await _meta_app_secret())
     return {
-        "configured": bool(META_APP_ID and META_APP_SECRET),
+        "configured": is_configured,
         "connected": bool(conn),
         "pages": (conn or {}).get("pages", []),
         "expires_at": (conn or {}).get("user_token_expires_at"),
@@ -400,8 +421,9 @@ async def instagram_status(request: Request):
         {"_id": 0, "user_access_token": 0,
          "pages.access_token": 0},
     )
+    is_configured = bool(await _meta_app_id() and await _meta_app_secret())
     return {
-        "configured": bool(META_APP_ID and META_APP_SECRET),
+        "configured": is_configured,
         "connected": bool(conn),
         "ig_accounts": (conn or {}).get("ig_accounts", []),
         "expires_at": (conn or {}).get("user_token_expires_at"),
@@ -482,13 +504,13 @@ async def publish_to_facebook(user_id: str, text: str, *,
     body_text = _trim(text, FB_TEXT_LIMIT)
     async with httpx.AsyncClient(timeout=30) as cli:
         if image_url:
-            r = await cli.post(_graph_url(f"{pg_id}/photos"), data={
+            r = await cli.post(await _graph_url(f"{pg_id}/photos"), data={
                 "url": image_url,
                 "caption": body_text,
                 "access_token": page_token,
             })
         else:
-            r = await cli.post(_graph_url(f"{pg_id}/feed"), data={
+            r = await cli.post(await _graph_url(f"{pg_id}/feed"), data={
                 "message": body_text,
                 "access_token": page_token,
             })
@@ -549,7 +571,7 @@ async def publish_to_instagram(user_id: str, text: str, *,
     caption = _trim(text, IG_CAPTION_LIMIT)
     async with httpx.AsyncClient(timeout=60) as cli:
         # Step 1: create media container
-        c = await cli.post(_graph_url(f"{target_ig}/media"), data={
+        c = await cli.post(await _graph_url(f"{target_ig}/media"), data={
             "image_url": image_url,
             "caption": caption,
             "access_token": page_token,
@@ -564,7 +586,7 @@ async def publish_to_instagram(user_id: str, text: str, *,
             return {"ok": False, "reason": "no_creation_id"}
 
         # Step 2: publish the container
-        p = await cli.post(_graph_url(f"{target_ig}/media_publish"), data={
+        p = await cli.post(await _graph_url(f"{target_ig}/media_publish"), data={
             "creation_id": creation_id,
             "access_token": page_token,
         })
@@ -612,7 +634,7 @@ async def fetch_facebook_post_metrics(user_id: str, fb_post_id: str) -> dict | N
         "access_token": page_token,
     }
     async with httpx.AsyncClient(timeout=15) as cli:
-        r = await cli.get(_graph_url(f"{fb_post_id}/insights"), params=params)
+        r = await cli.get(await _graph_url(f"{fb_post_id}/insights"), params=params)
     if r.status_code != 200:
         logger.info("Facebook analytics %s for %s: %s", r.status_code, fb_post_id, r.text[:200])
         return None
@@ -653,7 +675,7 @@ async def fetch_instagram_post_metrics(user_id: str, ig_media_id: str) -> dict |
         "access_token": page_token,
     }
     async with httpx.AsyncClient(timeout=15) as cli:
-        r = await cli.get(_graph_url(f"{ig_media_id}/insights"), params=params)
+        r = await cli.get(await _graph_url(f"{ig_media_id}/insights"), params=params)
     if r.status_code != 200:
         logger.info("Instagram analytics %s for %s: %s", r.status_code, ig_media_id, r.text[:200])
         return None
