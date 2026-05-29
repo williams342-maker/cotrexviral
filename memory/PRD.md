@@ -35,6 +35,38 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 71) **💬 Phase 6 — Agent ↔ Agent Messaging (the final layer)**
+  - **New `routes/agent_messaging.py`** — generic LLM-mediated bus where any persona can query any other persona. Routes through the target's `system_prompt` so the answer comes back in the right voice (Lyra sounds like Lyra, Rae sounds like Rae). Persists every exchange in `agent_messages` for audit + the new chatter UI.
+  - **`query_agent(user_id, from_agent, to_agent, query, context_str, thread_id?)`** — public helper. Returns `{message_id, response, ok}`. Failures (unknown agent, LLM timeout, etc.) are caught + recorded as `errored` rows so the audit log is never empty. Falls back to a deterministic acknowledgement when `EMERGENT_LLM_KEY` is unset — keeps the system functional in test envs.
+  - **First concrete integration — Atlas ↔ Lyra brief consultation**: in `briefs._llm_propose_briefs`, BEFORE Atlas generates the brief list, he asks Lyra: *"Given these {n} listening signals, what's the strongest shared theme worth ONE brief instead of multiple? If they don't cohere, say so."* Lyra's answer is appended to Atlas's prompt under a `LYRA'S ANALYSIS OF THE SIGNALS` block. Result: Atlas collapses redundant signals into ONE sharper brief instead of N noisy ones. Fires only when ≥3 signals exist (no point consulting on a single signal).
+  - **Best-effort design**: a Lyra failure NEVER blocks brief proposal. Caught at the call site, falls back silently to the original flow. Same pattern as the realtime broadcast in `_persist_proposals` — autonomy must degrade gracefully or operators lose trust.
+  - **2 endpoints**:
+    - `GET /api/agent-messages?from_agent=…&to_agent=…&limit=…` — recent messages with summary stats `{total, answered, errored}`
+    - `GET /api/agent-messages/{id}` — single message + the full thread (sorted by `created_at`) so the UI can render back-and-forth dialogue
+  - **`/dashboard/chatter` page** (`Chatter.jsx`):
+    - Indigo hero card with manifesto ("Agents consult each other before routing to you") + 3 KPI pills (total / answered / errored)
+    - Compact row layout: `[from pill] → [to pill] · "query" · status badge · timestamp`. Click a row → expands to show the full thread with Q + context_summary mono block + A.
+    - Each agent gets its own brand color (matching the personas: violet/sky/pink/green/amber/blue/cyan/rose) so the row is scannable at a glance.
+  - **Sidebar nav** — `Agent Chatter` link added between `Autonomy` and `Growth Team` (lucide `MessagesSquare` icon).
+  - **7 new pytest cases** (`tests/test_agent_messaging.py`):
+    - Both endpoints require auth
+    - Unknown agent id → persisted as `errored` row with reason
+    - Happy path: `query_agent("atlas", "lyra")` returns ok=True + answer + `status=answered`
+    - List returns recent messages with correct shape + summary stats
+    - Filter by `to_agent` works
+    - Single GET returns the full thread (multi-row sort by created_at)
+    - 404 on unknown message id
+  - **82/82 regression** across agent_messaging + autonomy + briefs + experiments + growth_team + growth_goals + app_config + youtube_oauth. All green under live STRICT mode.
+  - **Phase 6 net effect — the Autonomous Growth Team is now COMPLETE**:
+    - Phase 1: 8 distinct personas with voice + standup contributions
+    - Phase 2: Durable OKRs (Goals) owned by Vera
+    - Phase 3: Atlas proposes campaigns from signals + goals (HITL inbox)
+    - Phase 4: Ori writes winning patterns to memory (Experiments)
+    - Phase 5: Jules enforces weekly budget caps + opt-in auto-approve
+    - Phase 6: Agents consult each other before bothering you ← *this PR*
+    - The team can now run a daily cycle WITHOUT you: Lyra surfaces signals → Atlas consults Lyra and drafts briefs → Jules's budget gates auto-approve → campaigns spawn → Ori experiments + writes learnings → Vera tracks progress against goals. Operator role shifts from "draft + decide everything" to "set caps + approve outliers".
+
+
 - 2026-05-29 (part 70) **🛡️ Phase 5 — Autonomy Budgets (per-agent weekly caps, owned by Jules)**
   - **New `routes/autonomy.py`** — Jules's domain. Each persona's `autonomy_budget` (already encoded in the `agent_personas` registry) is now an enforceable hard cap. Three dimensions, all weekly: **tokens**, **USD**, **irreversible_count**. A side effect is "irreversible" when it creates user-visible state we can't undo for free (auto-approving a brief, future: publishing a post, sending an email).
   - **`agent_usage_ledger` collection** — one row per `(agent_id, user_id, iso_week)`. `_iso_week_key()` partitions by `YYYY-Www` so each Monday rolls over automatically; no cron-based reset needed. `record_usage()` is an atomic `$inc` upsert + best-effort (logs but never raises on failure — a ledger hiccup must not block the calling agent).

@@ -122,13 +122,44 @@ async def _gather_atlas_facts(user_id: str) -> dict:
     }
 
 
-async def _llm_propose_briefs(facts: dict, max_briefs: int = MAX_BRIEFS_PER_SCAN) -> list[dict]:
+async def _llm_propose_briefs(facts: dict, max_briefs: int = MAX_BRIEFS_PER_SCAN,
+                              *, user_id: Optional[str] = None) -> list[dict]:
     """One LLM call → up to N brief proposals. Falls back to a deterministic
     single-brief stub when the LLM key is missing (so the system still works
-    in test envs without an API key)."""
+    in test envs without an API key).
+
+    Phase 6: before calling the LLM, Atlas asks Lyra to identify the strongest
+    THEME across the recent listening signals. Lyra's answer is appended to
+    the prompt so Atlas can collapse redundant signals into ONE sharper brief
+    instead of N noisy ones."""
     from core import EMERGENT_LLM_KEY
     if not EMERGENT_LLM_KEY:
         return _fallback_briefs(facts, max_briefs)
+
+    # Phase 6 hand-off — Atlas → Lyra. Best-effort; on failure we proceed
+    # with the original signal list. Only fires when there are ≥3 signals
+    # (otherwise there's nothing to merge).
+    lyra_answer: Optional[str] = None
+    signals = facts.get("signals") or []
+    if user_id and len(signals) >= 3:
+        try:
+            from routes.agent_messaging import query_agent
+            sigs_compact = "\n".join(
+                f"  • [{s.get('sentiment','?')}|{s.get('signal_type','mention')}] "
+                f"{(s.get('text') or '')[:140]}"
+                for s in signals[:8]
+            )
+            r = await query_agent(
+                user_id=user_id, from_agent="atlas", to_agent="lyra",
+                query=("Given these listening signals, what's the strongest "
+                       "shared theme worth ONE brief instead of multiple? "
+                       "If they don't cohere, say so."),
+                context_str=sigs_compact,
+            )
+            if r.get("ok"):
+                lyra_answer = r.get("response")
+        except Exception as exc:
+            logger.debug("Atlas→Lyra hand-off skipped: %s", exc)
 
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
@@ -152,12 +183,20 @@ async def _llm_propose_briefs(facts: dict, max_briefs: int = MAX_BRIEFS_PER_SCAN
             f"  • {r.get('text','')[:200]}" for r in (facts.get("reject_memories") or [])
         ) or "  (none)"
 
+        lyra_block = ""
+        if lyra_answer:
+            lyra_block = (
+                f"\nLYRA'S ANALYSIS OF THE SIGNALS (use this to merge redundant briefs):\n"
+                f"  {lyra_answer}\n"
+            )
+
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
             session_id=f"atlas_propose_{datetime.now(timezone.utc).strftime('%Y%m%d%H')}",
             system_message=(
                 "You are Atlas, the strategist on CortexViral's autonomous growth team. "
-                "You propose campaign briefs tied to OPEN goals + RECENT signals. "
+                "You propose campaign briefs tied to OPEN goals + RECENT signals, taking "
+                "Lyra's theme analysis into account when collapsing redundant signals. "
                 "Each brief is concise: a title, a 1-sentence hypothesis, a 3-sentence body, "
                 "a rationale citing the source goal/signal, and a suggested platform mix. "
                 "Output STRICT JSON only. Never propose more than the requested count. "
@@ -167,7 +206,8 @@ async def _llm_propose_briefs(facts: dict, max_briefs: int = MAX_BRIEFS_PER_SCAN
 
         prompt = (
             f"OPEN GOALS:\n{goals_str}\n\n"
-            f"RECENT LISTENING SIGNALS (last 7d):\n{sigs_str}\n\n"
+            f"RECENT LISTENING SIGNALS (last 7d):\n{sigs_str}\n"
+            f"{lyra_block}\n"
             f"RECENT REJECTIONS (avoid resembling these):\n{rejects_str}\n\n"
             f"Propose UP TO {max_briefs} campaign brief(s). Output a strict JSON array. "
             "Each object MUST have exactly these keys: "
@@ -364,7 +404,7 @@ async def propose_briefs(payload: ProposeRequest, request: Request):
     show 'last checked X mins ago'."""
     user = await get_current_user(request)
     facts = await _gather_atlas_facts(user.user_id)
-    briefs = await _llm_propose_briefs(facts, max_briefs=payload.max_briefs)
+    briefs = await _llm_propose_briefs(facts, max_briefs=payload.max_briefs, user_id=user.user_id)
     saved = await _persist_proposals(user.user_id, briefs, source="manual")
     await db.autopilot_settings.update_one(
         {"user_id": user.user_id},
@@ -571,7 +611,7 @@ async def run_autopilot_scan() -> dict:
                 continue
         try:
             facts = await _gather_atlas_facts(uid)
-            briefs = await _llm_propose_briefs(facts, max_briefs=MAX_BRIEFS_PER_SCAN)
+            briefs = await _llm_propose_briefs(facts, max_briefs=MAX_BRIEFS_PER_SCAN, user_id=uid)
             saved = await _persist_proposals(uid, briefs, source="autopilot")
             total_briefs += len(saved)
             users_processed += 1
