@@ -69,6 +69,24 @@ ALLOWED_KEYS: dict[str, dict] = {
         "secret":      True,
         "group":       "meta",
     },
+    "YOUTUBE_CLIENT_ID": {
+        "label":       "YouTube — OAuth Client ID",
+        "description": "Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID (Web application). Required for YouTube channel sign-in + uploads.",
+        "secret":      False,
+        "group":       "youtube",
+    },
+    "YOUTUBE_CLIENT_SECRET": {
+        "label":       "YouTube — OAuth Client Secret",
+        "description": "The Client Secret shown next to the Client ID in Google Cloud Console. Rotate via the same screen if compromised.",
+        "secret":      True,
+        "group":       "youtube",
+    },
+    "YOUTUBE_REDIRECT_URI": {
+        "label":       "YouTube — Redirect URI Override",
+        "description": "Optional. Use to point OAuth at the preview backend during testing. Falls back to PUBLIC_SITE_URL when blank.",
+        "secret":      False,
+        "group":       "youtube",
+    },
 }
 
 _CACHE_TTL_SECONDS = 60

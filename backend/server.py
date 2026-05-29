@@ -60,6 +60,7 @@ from routes import (  # noqa: F401
     standups,        # Weekly Standup generator (Monday-morning artifact)
     listening,       # Social Listening Engine (Lyra's signals)
     growth_goals,    # Durable OKRs owned by Vera
+    oauth_youtube,   # YouTube OAuth (Google) — channel upload + read scopes
 )
 
 

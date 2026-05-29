@@ -85,6 +85,7 @@ const Channels = () => {
   const [facebookOAuth, setFacebookOAuth] = useState({ configured: false, connected: false });
   const [instagramOAuth, setInstagramOAuth] = useState({ configured: false, connected: false });
   const [pinterestOAuth, setPinterestOAuth] = useState({ configured: false, connected: false });
+  const [youtubeOAuth, setYoutubeOAuth] = useState({ configured: false, connected: false });
   const [disabledPlatforms, setDisabledPlatforms] = useState([]);
   const { toast } = useToast();
   const paywall = usePaywallHandler();
@@ -92,7 +93,7 @@ const Channels = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const [cat, list, li, tt, fb, ig, pn, sys] = await Promise.all([
+      const [cat, list, li, tt, fb, ig, pn, yt, sys] = await Promise.all([
         axios.get(`${API}/channels/catalog`, { withCredentials: true }),
         axios.get(`${API}/channels`, { withCredentials: true }),
         axios.get(`${API}/oauth/linkedin/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
@@ -100,6 +101,7 @@ const Channels = () => {
         axios.get(`${API}/oauth/facebook/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
         axios.get(`${API}/oauth/instagram/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
         axios.get(`${API}/oauth/pinterest/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
+        axios.get(`${API}/oauth/youtube/status`, { withCredentials: true }).catch(() => ({ data: { configured: false, connected: false } })),
         axios.get(`${API}/system/settings`).catch(() => ({ data: { disabled_platforms: [] } })),
       ]);
       setCatalog(cat.data);
@@ -111,6 +113,7 @@ const Channels = () => {
       setFacebookOAuth(fb.data);
       setInstagramOAuth(ig.data);
       setPinterestOAuth(pn.data);
+      setYoutubeOAuth(yt.data);
       setDisabledPlatforms(sys.data.disabled_platforms || []);
     } catch (e) {}
     setLoading(false);
@@ -126,6 +129,7 @@ const Channels = () => {
     const fb = params.get('facebook');
     const ig = params.get('instagram');
     const pn = params.get('pinterest');
+    const yt = params.get('youtube');
     if (li === 'connected') toast({ title: 'LinkedIn connected!', description: 'Future posts to LinkedIn will publish live.' });
     if (li === 'denied') toast({ title: 'LinkedIn connection cancelled' });
     if (tt === 'connected') toast({ title: 'TikTok connected!', description: 'Add a video URL to your posts to publish live.' });
@@ -140,9 +144,15 @@ const Channels = () => {
     });
     if (pn === 'connected') toast({ title: 'Pinterest connected!', description: 'Pick a board on Compose to publish a Pin.' });
     if (pn === 'denied') toast({ title: 'Pinterest connection cancelled' });
-    if (li || tt || fb || ig || pn) {
+    if (yt === 'connected') toast({ title: 'YouTube connected!', description: 'Your channel is now linked — upload + analytics are unlocked.' });
+    if (yt === 'denied') toast({ title: 'YouTube connection cancelled' });
+    if (yt === 'no_channel') toast({
+      title: 'No YouTube channel found',
+      description: 'This Google account has no YouTube channel yet. Create one at youtube.com → "Your channel", then reconnect.',
+    });
+    if (li || tt || fb || ig || pn || yt) {
       const url = new URL(window.location.href);
-      ['linkedin', 'tiktok', 'facebook', 'instagram', 'pinterest'].forEach((k) => url.searchParams.delete(k));
+      ['linkedin', 'tiktok', 'facebook', 'instagram', 'pinterest', 'youtube'].forEach((k) => url.searchParams.delete(k));
       window.history.replaceState({}, '', url.toString());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,6 +214,16 @@ const Channels = () => {
           window.location.href = r.data.authorize_url;
           return;
         }
+      } else if (platform === 'youtube' && youtubeOAuth.configured) {
+        if (youtubeOAuth.connected) {
+          await axios.delete(`${API}/oauth/youtube`, { withCredentials: true });
+          toast({ title: 'Disconnected YouTube' });
+          await load();
+        } else {
+          const r = await axios.get(`${API}/oauth/youtube/start`, { withCredentials: true });
+          window.location.href = r.data.authorize_url;
+          return;
+        }
       } else if (ch?.connected) {
         await axios.post(`${API}/channels/disconnect`, { platform }, { withCredentials: true });
         toast({ title: `Disconnected from ${meta?.label || platform}` });
@@ -219,6 +239,8 @@ const Channels = () => {
             ? 'MOCKED — admin: set META_APP_ID + META_APP_SECRET in .env to enable real OAuth.'
             : platform === 'pinterest'
             ? 'MOCKED — admin: set PINTEREST_APP_ID + PINTEREST_APP_SECRET in .env to enable real OAuth.'
+            : platform === 'youtube'
+            ? 'MOCKED — admin: set YOUTUBE_CLIENT_ID + YOUTUBE_CLIENT_SECRET via /admin/integrations to enable real OAuth.'
             : 'MOCKED — no real OAuth in this demo.',
         });
       }
