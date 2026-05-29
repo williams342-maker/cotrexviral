@@ -366,6 +366,83 @@ class TestLangGraphOrchestrator:
         from routes.marketing_os import CANONICAL_ROLES as M_ROLES
         assert G_ROLES == M_ROLES
 
+    def test_retry_helper_retries_then_succeeds(self, monkeypatch):
+        """`_send_with_retry` should swallow a transient error and
+        return on the next attempt — proving the wrapper is actually
+        in the call path."""
+        import asyncio
+        from routes import marketing_os_graph as gmod
+        import routes.ai as _ai
+
+        # Make backoff instant so the test doesn't sleep ~1.5s.
+        async def _sleep(_):
+            return None
+        monkeypatch.setattr(gmod.asyncio, "sleep", _sleep)
+
+        calls = {"n": 0}
+
+        async def fake_send(_chat, _prompt):
+            calls["n"] += 1
+            if calls["n"] < 2:
+                raise RuntimeError("transient 503")
+            return ("ok", {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2})
+
+        monkeypatch.setattr(_ai, "send_with_usage", fake_send)
+
+        text, usage = asyncio.get_event_loop().run_until_complete(
+            gmod._send_with_retry(None, None),
+        )
+
+        assert text == "ok"
+        assert calls["n"] == 2, f"expected 2 attempts (1 fail + 1 success), got {calls['n']}"
+
+    def test_retry_helper_gives_up_fast_on_budget_cap(self, monkeypatch):
+        """Budget-cap errors should NOT eat the full 3 attempts —
+        we bail after the 2nd budget-cap so the SSE error fires fast
+        and the universal key isn't hammered."""
+        import asyncio
+        from routes import marketing_os_graph as gmod
+        import routes.ai as _ai
+
+        async def _sleep(_):
+            return None
+        monkeypatch.setattr(gmod.asyncio, "sleep", _sleep)
+
+        calls = {"n": 0}
+
+        async def fake_send(_chat, _prompt):
+            calls["n"] += 1
+            raise RuntimeError("Provider returned 429: budget exceeded")
+
+        monkeypatch.setattr(_ai, "send_with_usage", fake_send)
+
+        with pytest.raises(RuntimeError, match="budget"):
+            asyncio.get_event_loop().run_until_complete(
+                gmod._send_with_retry(None, None),
+            )
+
+        # Adaptive policy: budget-caps get at MOST 2 attempts, never 3.
+        assert calls["n"] == 2, f"budget-cap should bail by attempt 2, got {calls['n']}"
+
+    def test_retry_helper_does_not_retry_auth_errors(self, monkeypatch):
+        """Auth errors / 4xx-invalid must NOT trigger any retry."""
+        import asyncio
+        from routes import marketing_os_graph as gmod
+        import routes.ai as _ai
+
+        calls = {"n": 0}
+
+        async def fake_send(_chat, _prompt):
+            calls["n"] += 1
+            raise RuntimeError("401 Unauthorized: invalid api key")
+
+        monkeypatch.setattr(_ai, "send_with_usage", fake_send)
+        with pytest.raises(RuntimeError, match="Unauthorized"):
+            asyncio.get_event_loop().run_until_complete(
+                gmod._send_with_retry(None, None),
+            )
+        assert calls["n"] == 1, f"auth errors must not retry, got {calls['n']} attempts"
+
     def test_persisted_run_marked_langgraph(self):
         """Whether or not the live LLM call succeeds, the persisted
         row must carry `framework: "langgraph"` so future migrations

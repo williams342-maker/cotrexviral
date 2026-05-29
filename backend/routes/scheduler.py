@@ -198,6 +198,13 @@ async def start_scheduler():
     except Exception:
         logger.exception("scheduler: failed to register weekly_auto_drafts")
 
+    # HITL paused-run reminders — every 6h, surfaces stale runs to the reviewer's inbox.
+    try:
+        from routes.hitl_reminders import register_hitl_reminder_job
+        register_hitl_reminder_job(scheduler)
+    except Exception:
+        logger.exception("scheduler: failed to register hitl_paused_run_reminders")
+
     scheduler.start()
     logger.info("scheduler: started (worker=%s, every 60s)", WORKER_ID)
 

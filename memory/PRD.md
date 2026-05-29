@@ -35,6 +35,34 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-28 (part 55) **🔁 Per-role retry-with-backoff in LangGraph nodes**
+  - **New helper `_send_with_retry(chat, prompt)` in `routes/marketing_os_graph.py`** wraps every `send_with_usage` call site (both the role nodes and the summariser). Adaptive policy:
+    - Up to 3 attempts on transient errors (timeouts, 5xx); backoff 1.5s → 3s.
+    - Budget-cap / 429 errors get AT MOST 2 attempts — after the second, bail fast so the SSE error fires immediately and the universal key isn't hammered (`_is_budget_cap` checks for `"budget"`, `"rate limit"`, or `"429"` in the message).
+    - Auth / 4xx-invalid errors (`"401"`, `"unauthorized"`, `"invalid api key"`, `"400 bad request"`, `"invalid_request_error"`) are **never** retried.
+  - Initial attempt used Tenacity but the `stop_after_attempt(3)` policy collided with the "bail-fast on budget" early-exit — rewrote as a simple manual loop with explicit `_is_retriable_llm_error` + `_is_budget_cap` predicates. Same `asyncio.sleep`-based backoff, half the code, easier to test.
+  - **3 new pytest cases** (`TestLangGraphOrchestrator::test_retry_helper_*`):
+    - `retries_then_succeeds` — transient error on attempt 1, success on attempt 2, exactly 2 calls.
+    - `gives_up_fast_on_budget_cap` — budget error on every call, bails after exactly 2 attempts (not 3).
+    - `does_not_retry_auth_errors` — 401 returns after exactly 1 attempt.
+    - All three monkey-patch `asyncio.sleep` to instant so the suite doesn't add wall-clock time.
+  - **8/8 LangGraph orchestrator tests pass.** Backend regression green.
+
+- 2026-05-28 (part 56) **📧 Email reminder when HITL paused run sits > 24h**
+  - **New job `routes/hitl_reminders.py`** registered on the existing `AsyncIOScheduler` (every 6 hours, offset 4 min from boot to spread load). Queries `marketing_os_runs` for rows where `status="awaiting_approval"` AND `requires_approval=True` AND `created_at` older than `HITL_REMINDER_HOURS` (default **24h**, env-configurable) AND `reminder_sent_at` unset.
+  - For each match: looks up the user, formats a per-run email (dark-themed HTML + plain-text fallback) describing what's pending, links to `/dashboard/command-center`, and sends via the existing `routes.email.send_email()` (Mailtrap → Mailgun fallback). Stamps `reminder_sent_at` + `reminder_status` either way.
+  - **One reminder per paused run, ever** — anti-spam invariant baked in by stamping even on send-failure and on deleted-user skips. The activity feed already shows the amber awaiting_approval pill indefinitely; this email is the additional nudge, not a recurring drumbeat.
+  - Capped at **50 runs per tick** so a backlog (e.g. mass user onboarding gone wrong) can't blast hundreds of emails in one go.
+  - **5 new pytest cases** (`tests/test_hitl_reminders.py`):
+    - happy path (sent + stamped + correct subject/tags),
+    - idempotent (already-stamped row → no send),
+    - deleted-user skip (no send but row stamped to prevent retry storms),
+    - send-failure (row still stamped),
+    - under-threshold fresh run (no send, no stamp).
+  - All 5 pass against the live dev Mongo with auto-cleanup before+after each test.
+  - One bug caught and fixed during testing: Mongo round-trips can hand back naive datetimes — `_build_email` now normalises `created_at.tzinfo` to UTC before arithmetic.
+
+
 - 2026-05-28 (part 54) **🧱 "Built by Makers. Powered by Innovation." sibling-brand strip on the homepage**
   - **New component** `components/cv/CVBuiltByMakers.jsx` — three-card strip wired between `<CVCTAFooter />` and `<CVFooter />` on `pages/Marketing.jsx`.
   - **Brand-faithful typographic logos** (neither williamscnc.com nor craftersmarket.org exposes a clean standalone logo file — both use stylized wordmarks, so scraping favicons would have been low-quality). Each card mirrors the actual identity of the target site:

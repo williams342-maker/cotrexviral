@@ -50,6 +50,82 @@ from typing import Any, Optional, TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Per-LLM-call retry policy.
+# Wraps every `send_with_usage` invocation inside a LangGraph node so
+# transient LLM failures (5xx, network blip, single budget-cap-429 burst)
+# don't crash the entire 5-role chain. The retry is *adaptive*:
+#
+#   • 429 / "budget" errors get only 1 retry with longer backoff — the
+#     universal LLM key is genuinely capped, retrying 3 times wastes
+#     wall-clock and hits the cap harder.
+#   • Everything else (network 5xx, timeouts) gets 3 attempts with
+#     exponential backoff.
+# ---------------------------------------------------------------------------
+def _is_retriable_llm_error(exc: BaseException) -> bool:
+    """Decide whether this exception is worth a retry. Auth errors,
+    invalid-input errors, and explicit budget-caps are NOT retried
+    (except budget-caps which get one slow retry — see below)."""
+    msg = (str(exc) or "").lower()
+    # Hard fails — never retry.
+    if any(k in msg for k in ("invalid api key", "unauthorized", "401",
+                              "400 bad request", "invalid_request_error")):
+        return False
+    # Anything else (timeouts, 429s, 5xx, transient network) is retriable.
+    return True
+
+
+def _is_budget_cap(exc: BaseException) -> bool:
+    msg = (str(exc) or "").lower()
+    return "budget" in msg or "rate limit" in msg or "429" in msg
+
+
+async def _send_with_retry(chat, prompt):
+    """Calls `send_with_usage(chat, prompt)` with adaptive retries.
+
+    Policy:
+      • Up to 3 attempts on transient errors (timeouts, 5xx).
+      • Budget-cap / 429 errors get AT MOST 2 attempts — after the
+        second, we bail immediately so the SSE error fires fast and
+        the universal key isn't hammered.
+      • Auth / 4xx-invalid errors are not retried at all.
+      • Backoff: 1.5s, then 3s.
+
+    Returns the same (text, usage) tuple. Raises the last exception
+    if all attempts fail."""
+    import routes.ai as _ai  # late import so tests can monkey-patch
+
+    max_attempts = 3
+    last_exc: Optional[BaseException] = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return await _ai.send_with_usage(chat, prompt)
+        except Exception as e:
+            last_exc = e
+            if not _is_retriable_llm_error(e):
+                # Hard fail (auth / bad request) — don't retry.
+                raise
+            if _is_budget_cap(e) and attempt >= 2:
+                # Universal key is genuinely capped; don't burn more calls.
+                logger.warning(
+                    "Budget-cap on attempt %d/%d, bailing fast", attempt, max_attempts,
+                )
+                raise
+            if attempt < max_attempts:
+                # Exponential-ish backoff: 1.5s, then 3s.
+                delay = 1.5 * (2 ** (attempt - 1))
+                logger.warning(
+                    "Retrying LLM call in %.1fs (attempt %d/%d) after: %s",
+                    delay, attempt, max_attempts, e,
+                )
+                await asyncio.sleep(delay)
+    # Should never reach here — the final attempt either returns or raises.
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("send_with_retry exited without a result or exception")
 from emergentintegrations.llm.chat import UserMessage
 
 logger = logging.getLogger(__name__)
@@ -125,7 +201,7 @@ def _build_role_node(agent_id: str, step_total: int):
         # Import here to avoid a circular import at module load time
         # (agent_chat → marketing_os_graph → agent_chat).
         from routes.agent_chat import AGENTS, _FUPS_RE, _HANDOFF_RE
-        from routes.ai import _llm_for_user, send_with_usage
+        from routes.ai import _llm_for_user
         from routes.model_router import resolve_user_mode
         from routes.llm_spend import record_llm_call
 
@@ -173,7 +249,7 @@ def _build_role_node(agent_id: str, step_total: int):
         prompt = f"User brief:\n{brief}"
 
         try:
-            text, usage = await send_with_usage(chat, UserMessage(text=prompt))
+            text, usage = await _send_with_retry(chat, UserMessage(text=prompt))
         except Exception as e:
             # Surface the error in state so the conditional edge can
             # short-circuit to END without further LLM calls.
@@ -212,7 +288,7 @@ def _build_summarizer_node(agent_id: str):
     """Final analytics/synthesis node — same shape, different prompt."""
     async def node(state: OSState) -> dict:
         from routes.agent_chat import AGENTS, _FUPS_RE, _HANDOFF_RE
-        from routes.ai import _llm_for_user, send_with_usage
+        from routes.ai import _llm_for_user
         from routes.model_router import resolve_user_mode
         from routes.llm_spend import record_llm_call
         from routes.memory import remember
@@ -257,7 +333,7 @@ def _build_summarizer_node(agent_id: str):
         )
 
         try:
-            text, usage = await send_with_usage(sum_chat, UserMessage(text=sum_input))
+            text, usage = await _send_with_retry(sum_chat, UserMessage(text=sum_input))
         except Exception as e:
             err = str(e)[:300]
             await _emit(run_id, "error", {"message": err, "agent_id": agent["id"]})
