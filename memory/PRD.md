@@ -35,6 +35,45 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 65) **👥 Autonomous Growth Team — Phase 1 + Social Listening Engine**
+  - **8 agent personas seeded** (`routes/agent_personas.py`). Each persona has `{id, name, role, tagline, voice, color, icon, owns, collabs, autonomy_budget, system_prompt}` — the team is now a first-class concept:
+    - **Vera** (CMO) — OKR-obsessed, owns goals/budget/platform mix
+    - **Atlas** (Strategist) — pattern-finder, owns campaign briefs/calendar/themes
+    - **Nova** (Copywriter) — witty/on-voice, drafts every word
+    - **Rae** (Researcher) — skeptical/data-first, audience + competitor scans
+    - **Lyra** (Social Listening Lead) — always-on ears, brand+competitor mentions, sentiment, crisis detection
+    - **Echo** (Distributor) — concise/operational, scheduling + optimal times
+    - **Ori** (Analyst) — pattern-spotter, experiments + memory writes
+    - **Jules** (Ops Manager) — fast/transactional, budget caps + escalation
+  - **Weekly Standup generator** (`routes/standups.py`) — the Monday-morning artifact. Single combined LLM call to gpt-5-mini (replaces the 8-parallel-call design that overwhelmed the event loop) — produces all 8 persona contributions in one ~15s round-trip. Includes per-persona fallback templates so it never returns empty. Saved to `weekly_standups` with `{contributions, facts, generated_at}`.
+  - **Social Listening Engine** (`routes/listening.py`) — Lyra's domain. New `social_listening_signals` collection with normalized rows `{source, source_url, text, author, sentiment, signal_type, topic, urgency, engagement, detected_at}`. Endpoints:
+    - `POST /api/listening/signals` — manual / webhook ingestion of a single signal (validated + coerced)
+    - `GET /api/listening/signals` — filtered chronological feed (by sentiment, signal_type, day window)
+    - `GET /api/listening/stats` — hero stats: total + by_sentiment + by_signal_type + urgency-weighted **attention_score** (sum of urgency × 1 for negative + urgency × 0.5 for mixed, last 7d). Drift threshold 10.0 triggers an alert banner.
+    - `POST /api/listening/synthesize` — LLM-generated demo signals (realistic Reddit/Twitter/forum posts mixing sentiments) so the UI has data before real source connectors are wired. `source=synthetic` flag for later filtering.
+  - **Three new dashboard pages**:
+    - **`/dashboard/growth-team`** (`Team.jsx`) — roster of 8 personas with role/voice/owns capability tags, manifesto block at top, CTA to view this week's standup.
+    - **`/dashboard/standups`** (`Standups.jsx`) — Slack-style thread of the latest standup with a black-bg facts strip (published/drafts/failed/top platform/impressions/engagements) + 8 persona cards with color-coded icons. "Regenerate now" button. History rail of past 6 standups.
+    - **`/dashboard/listening`** (`Listening.jsx`) — Lyra's hero card with attention-score alert banner, 5-tile stat row (total + 4 sentiment counters), sentiment filter pills, signal feed with sentiment badges + urgency flags. "Capture signals" button calls the synthesize endpoint.
+  - **Sidebar nav** — added "Monday Standup", "Growth Team", "Listening" at the top of the dashboard section (uses lucide `Sparkles`, `Users2`, `Ear`).
+  - **Live verified end-to-end**:
+    - Persona roster: 8 personas returned via `/api/agents/personas` (system_prompts + autonomy_budgets correctly redacted from list response).
+    - Synthesis: produced 6 realistic-sounding signals on first call — including a Twitter complaint about scheduled posts missing (urgency 5/5) → attention_score crossed alert threshold automatically.
+    - Standup: real LLM voices coming through — Vera challenged the lack of measurable goals, Rae spotted a tracking discrepancy between drafts and published counts, Lyra surfaced the urgent downtime signal, Jules reported budget facts. Each persona stayed in voice.
+  - **10 new pytest cases** (`tests/test_growth_team.py`):
+    - 8 personas seeded with full metadata + self-consistent collabs graph
+    - List endpoint redacts system_prompt + autonomy_budget
+    - Standup generation produces 8 contributions, latest endpoint agrees
+    - Standup history list returns chronological array
+    - Manual signal ingest creates a row + lists in feed
+    - Sentiment filter works
+    - Stats endpoint shape verified including drift threshold math
+    - Garbage sentiment coerced to "neutral" (defensive)
+  - **68/68 regression** across growth_team + app_config + meta_data_deletion + phase5 + phase4 + phase3 + phase2 + normalize. All passing under live STRICT mode.
+  - **Phase 1 net effect**: CortexViral now has a first-class autonomous team. The UX shift is from "I run this tool" to "I manage this team — they propose, I approve". Phase 2 (Goals as durable OKRs) is unblocked. Phase 3 (Briefs as proposals) is unblocked. Each future phase plugs into the same persona registry.
+
+
+
 - 2026-05-29 (part 64) **🔐 DB-backed runtime config — rotate API keys without redeploys**
   - **New `routes/app_config.py`** — central module for live-mutable third-party credentials. Resolution order on every read: **database → environment → caller default**. 60-second in-process cache keeps the hot path off Mongo while still giving admins ≤1-min latency for new keys to take effect. Whitelisted key registry (`ALLOWED_KEYS`) so a compromised admin session can't poke `MONGO_URL` or similar.
   - **Admin endpoints** (all admin-only):

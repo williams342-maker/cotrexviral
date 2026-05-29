@@ -36,6 +36,9 @@ import Trends from './pages/dashboard/Trends';
 import Main from './pages/dashboard/Main';
 import Performance from './pages/dashboard/Performance';
 import MarketingCalendar from './pages/dashboard/MarketingCalendar';
+import Team from './pages/dashboard/Team';
+import Standups from './pages/dashboard/Standups';
+import Listening from './pages/dashboard/Listening';
 import AdminOverview from './pages/admin/AdminOverview';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminTickets from './pages/admin/AdminTickets';
@@ -87,6 +90,9 @@ function AppRouter() {
       <Route path="/dashboard/main" element={<ProtectedRoute><Main /></ProtectedRoute>} />
       <Route path="/dashboard/performance" element={<ProtectedRoute><Performance /></ProtectedRoute>} />
       <Route path="/dashboard/calendar" element={<ProtectedRoute><MarketingCalendar /></ProtectedRoute>} />
+      <Route path="/dashboard/growth-team" element={<ProtectedRoute><Team /></ProtectedRoute>} />
+      <Route path="/dashboard/standups" element={<ProtectedRoute><Standups /></ProtectedRoute>} />
+      <Route path="/dashboard/listening" element={<ProtectedRoute><Listening /></ProtectedRoute>} />
       <Route path="/dashboard/insights" element={<ProtectedRoute><Insights /></ProtectedRoute>} />
       <Route path="/dashboard/seo" element={<ProtectedRoute><SeoReview /></ProtectedRoute>} />
       <Route path="/dashboard/scan" element={<ProtectedRoute><SiteScan /></ProtectedRoute>} />
