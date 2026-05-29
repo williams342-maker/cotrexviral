@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Rocket, Bot, Wand2, BarChart3, Settings as SettingsIcon,
-  Calendar, CheckSquare, Users2, Brain, TrendingUp, FileText, Inbox,
+  LayoutDashboard, Rocket, Bot, BarChart3, Settings as SettingsIcon,
+  Calendar, CheckSquare, Brain, TrendingUp, Inbox,
   KeyRound, User as UserIcon, LogOut, ChevronRight, ChevronDown,
-  Command as CommandIcon,
+  Command as CommandIcon, Compass, Sparkles, Send,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ImpersonateBanner from './ImpersonateBanner';
@@ -12,19 +12,24 @@ import BroadcastBanner from './BroadcastBanner';
 import HitlInboxBell from './HitlInboxBell';
 import CommandPalette from './CommandPalette';
 
-/* The new compact sidebar — 5 top-level intents, each with ≤3 children.
-   Everything else is reachable from Ctrl+K (CommandPalette).
+/* The mission-driven sidebar — 10 top-level destinations matching the
+   Autonomous Marketing OS spec.
 
-     🏠 Dashboard
-     🚀 Campaigns    → Active / Calendar / Approvals
-     🤖 Agents       → Team / Memory / Trends
-     ✍️ Content      → Studio / Posts
-     📊 Analytics    → Performance / Leads
-     ⚙️ Settings     → Integrations / Account
+     🏠 Command Center      (the home / mission dashboard)
+     🚀 Campaigns           → Active / Calendar / Approvals
+     🧠 Cortex              (master orchestrator workspace)
+     🔭 Scout team
+     ✍️ Creator team
+     📡 Operator team
+     📊 Intelligence team
+     🗂️ Memory
+     📈 Analytics           → Performance / Leads
+     ⚙️ Settings            → Integrations / Account
+
+   Everything else lives in the Ctrl+K palette.
 */
 const SECTIONS = [
-  // Top-level link (no children) — special-cased in render.
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard/team-performance' },
+  { id: 'home',     label: 'Command Center', icon: LayoutDashboard, to: '/dashboard/missions' },
   {
     id: 'campaigns', label: 'Campaigns', icon: Rocket,
     children: [
@@ -33,21 +38,12 @@ const SECTIONS = [
       { to: '/dashboard/approvals',        label: 'Approvals', icon: CheckSquare },
     ],
   },
-  {
-    id: 'agents', label: 'Agents', icon: Bot,
-    children: [
-      { to: '/dashboard/team',   label: 'Team',   icon: Users2     },
-      { to: '/dashboard/memory', label: 'Memory', icon: Brain      },
-      { to: '/dashboard/trends', label: 'Trends', icon: TrendingUp },
-    ],
-  },
-  {
-    id: 'content', label: 'Content', icon: Wand2,
-    children: [
-      { to: '/dashboard/studio', label: 'Studio', icon: Wand2    },
-      { to: '/dashboard/posts',  label: 'Posts',  icon: FileText },
-    ],
-  },
+  { id: 'cortex',       label: 'Cortex',       icon: Brain,    to: '/dashboard/cortex' },
+  { id: 'scout',        label: 'Scout',        icon: Compass,  to: '/dashboard/teams/scout' },
+  { id: 'creator',      label: 'Creator',      icon: Sparkles, to: '/dashboard/teams/creator' },
+  { id: 'operator',     label: 'Operator',     icon: Send,     to: '/dashboard/teams/operator' },
+  { id: 'intelligence', label: 'Intelligence', icon: TrendingUp, to: '/dashboard/teams/intelligence' },
+  { id: 'memory',       label: 'Memory',       icon: Bot,      to: '/dashboard/memory' },
   {
     id: 'analytics', label: 'Analytics', icon: BarChart3,
     children: [

@@ -31,6 +31,10 @@ import AITeam from './pages/dashboard/AITeam';
 import CommandCenter from './pages/dashboard/CommandCenter';
 import CampaignDetail from './pages/dashboard/CampaignDetail';
 import ActiveCampaigns from './pages/dashboard/ActiveCampaigns';
+import Missions from './pages/dashboard/Missions';
+import CortexWorkspace from './pages/dashboard/CortexWorkspace';
+import TeamDetail from './pages/dashboard/TeamDetail';
+import AutonomyControl from './pages/dashboard/AutonomyControl';
 import Memory from './pages/dashboard/Memory';
 import Approvals from './pages/dashboard/Approvals';
 import Trends from './pages/dashboard/Trends';
@@ -90,6 +94,10 @@ function AppRouter() {
       <Route path="/blog/:slug" element={<BlogPost />} />
       <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/dashboard/team-performance" replace /></ProtectedRoute>} />
       <Route path="/dashboard/command-center" element={<ProtectedRoute><CommandCenter /></ProtectedRoute>} />
+      <Route path="/dashboard/missions" element={<ProtectedRoute><Missions /></ProtectedRoute>} />
+      <Route path="/dashboard/cortex" element={<ProtectedRoute><Missions /></ProtectedRoute>} />
+      <Route path="/dashboard/cortex/:id" element={<ProtectedRoute><CortexWorkspace /></ProtectedRoute>} />
+      <Route path="/dashboard/teams/:teamId" element={<ProtectedRoute><TeamDetail /></ProtectedRoute>} />
       <Route path="/dashboard/campaigns/active" element={<ProtectedRoute><ActiveCampaigns /></ProtectedRoute>} />
       <Route path="/dashboard/campaigns/:id" element={<ProtectedRoute><CampaignDetail /></ProtectedRoute>} />
       <Route path="/dashboard/overview" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
@@ -105,6 +113,7 @@ function AppRouter() {
       <Route path="/dashboard/experiments" element={<ProtectedRoute><Experiments /></ProtectedRoute>} />
       <Route path="/dashboard/briefs" element={<ProtectedRoute><Briefs /></ProtectedRoute>} />
       <Route path="/dashboard/autonomy" element={<ProtectedRoute><Autonomy /></ProtectedRoute>} />
+      <Route path="/dashboard/autonomy-control" element={<ProtectedRoute><AutonomyControl /></ProtectedRoute>} />
       <Route path="/dashboard/chatter" element={<ProtectedRoute><Chatter /></ProtectedRoute>} />
       <Route path="/dashboard/team-performance" element={<ProtectedRoute><TeamPerformance /></ProtectedRoute>} />
       <Route path="/dashboard/insights" element={<ProtectedRoute><Insights /></ProtectedRoute>} />

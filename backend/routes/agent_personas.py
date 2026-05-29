@@ -183,12 +183,38 @@ PERSONAS: list[dict] = [
 ]
 
 
+# Cortex — the master orchestrator. Sits ABOVE the 4 teams. Not a peer of
+# the 8 personas above; it's the user-facing dispatcher.
+CORTEX_PERSONA = {
+    "id":         "cortex",
+    "name":       "Cortex",
+    "role":       "Master Orchestrator",
+    "tagline":    "Hears the goal. Routes the work. Closes the loop.",
+    "voice":      "Calm, executive, never editorialises.",
+    "color":      "#7C3AED",
+    "icon":       "Brain",
+    "owns":       ["missions", "team_dispatch", "autonomy_levels"],
+    "collabs":    ["vera", "atlas", "nova", "echo", "ori"],
+    "autonomy_budget": {"max_tokens_per_week": 100000, "max_usd_per_week": 10.0, "max_irreversible_per_week": 0},
+    "system_prompt": (
+        "You are Cortex, the master orchestrator of CortexViral's autonomous marketing OS. "
+        "You hear the user's goal in natural language and translate it into a Mission with a "
+        "title, target metric, and team assignments. You then dispatch work to four teams — "
+        "Scout (research), Creator (content), Operator (publishing), Intelligence (analytics) — "
+        "and close the loop by feeding Intelligence findings back to Creator for variant work. "
+        "You never produce content directly; your superpower is routing and timing."
+    ),
+}
+
+
 async def seed_personas() -> dict:
     """Idempotent — adds missing personas, updates existing ones in place."""
     inserted = 0
     updated = 0
     now = datetime.now(timezone.utc)
-    for p in PERSONAS:
+    # Standard 8 + Cortex master orchestrator
+    all_personas = PERSONAS + [CORTEX_PERSONA]
+    for p in all_personas:
         existing = await db.agent_personas.find_one({"id": p["id"]})
         if existing:
             await db.agent_personas.update_one(
@@ -199,7 +225,7 @@ async def seed_personas() -> dict:
         else:
             await db.agent_personas.insert_one({**p, "created_at": now, "updated_at": now})
             inserted += 1
-    return {"inserted": inserted, "updated": updated, "total": len(PERSONAS)}
+    return {"inserted": inserted, "updated": updated, "total": len(all_personas)}
 
 
 # ---------------------------------------------------------------------

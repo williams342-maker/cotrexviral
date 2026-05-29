@@ -35,6 +35,45 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 79) **🟣 Autonomous Marketing OS — Phases 1+2+3 (Mission-driven refactor)**
+
+  Refactored CortexViral from a 9-agent dashboard into a mission-driven autonomous marketing OS. **All 9 existing personas preserved internally as services**; users now interact with Cortex + 4 teams + Missions.
+
+  **Phase 1 — Foundation + Mission Dashboard**
+  - `routes/missions.py` — Mission model (id, title, target, deadline, autonomy_level 0-5, teams_assigned, budget_usd_cap, growth_goal_id) + lifecycle (draft → running → paused → succeeded/abandoned) + `compute_progress()` (current / target / progress_pct / confidence / eta_days / top_channel / best_asset / campaigns_active) + CRUD endpoints.
+  - `routes/teams.py` — 4 team façades: Scout (rae/lyra/atlas), Creator (nova/atlas), Operator (echo/jules), Intelligence (ori/pico). `GET /teams`, `GET /teams/:id`, `POST /teams/:id/dispatch`.
+  - `routes/cortex.py` — **Master orchestrator**: `POST /api/cortex/missions` takes a natural-language goal ("Generate 50 maker signups for CraftersMarket"), LLM-parses it into structured Mission, persists, then fires initial dispatch to each of the 4 teams. Falls back to regex parser if LLM offline.
+  - Cortex registered as a persona (id=`cortex`, role=`Master Orchestrator`).
+  - `pages/dashboard/Missions.jsx` — new homepage. Mission cards: title / status / progress bar / confidence% / ETA / campaigns / top channel / best asset / autonomy level. Brief Cortex modal (goal textarea + autonomy selector + deadline + budget cap).
+  - `pages/dashboard/CortexWorkspace.jsx` — per-mission detail with hero, autonomy ladder, 4 team columns, event-relay timeline.
+  - `pages/dashboard/TeamDetail.jsx` — adaptive page for /teams/scout|creator|operator|intelligence with KPIs / personas / responsibilities / outputs / activity feed.
+  - **New 10-item sidebar IA**: Command Center / Campaigns / Cortex / Scout / Creator / Operator / Intelligence / Memory / Analytics / Settings. Every previous route still reachable via Ctrl+K palette.
+  - Tests: `tests/test_missions_phase1.py` — 16/16 pass (teams façade, missions CRUD + lifecycle, compute_progress math, Cortex orchestrator end-to-end).
+
+  **Phase 2 — Event-driven relay + Autonomy Control Center**
+  - `routes/mission_loop.py` — apscheduler job drains queued `team_dispatches` every 60s and advances the relay graph: scout→creator→operator→intelligence→(if confidence<60) creator variant. Each dispatch processed deterministically (no LLM cost in the loop itself — real LLM work happens at user-facing layer).
+  - **Autonomy gate**: dispatches are auto-processed only when mission.autonomy_level ≥ team_min. Otherwise dispatch flips to `awaiting_approval`. Thresholds: Scout L1, Creator L1, Operator L2, Intelligence L3.
+  - **Daily cap**: 25 dispatches/mission/day prevents runaway loops.
+  - `POST /api/missions/loop/run-once` for testing + UI "Run loop now" CTA.
+  - `GET /api/missions/:id/dispatches` returns full chronological relay timeline.
+  - `pages/dashboard/AutonomyControl.jsx` — global view of all missions' autonomy levels with inline segmented control + per-team auto/manual indicators + autonomy-ladder legend + auto-process threshold reference.
+  - Tests: `tests/test_mission_loop_phase2.py` — 6/6 pass (full relay at L3, paused mission skipped, autonomy gate blocks Operator/Intelligence at L1, daily cap, dispatch listing endpoint).
+
+  **Phase 3 — Goal-seeking (L4+) + Live mission progress**
+  - When Intelligence processes a dispatch on an L4+ mission with confidence < 60% and ≥50% of the timeline elapsed, the loop **auto-extends the deadline by 7 days** (capped at 2 extensions/mission). Audit trail written to `goal_seeking.extension_{N}_at|reason`.
+  - When confidence ≥ 60% AND current ≥ target on Intelligence pass → mission auto-flips to `status=succeeded` with `completed_at` timestamp. No human action required.
+  - **Live polling** on CortexWorkspace: dispatches refresh every 5s while mission status is `running`. UI shows a pulsing "live" indicator.
+  - Mongo tz-strip bug fixed: `compute_progress()` and the goal-seeking math now coerce naive datetimes to UTC-aware.
+  - Tests: `tests/test_goal_seeking_phase3.py` — 5/5 pass (L4 past-halftime extends, L3 doesn't, under-halftime doesn't, extension cap holds at 2, terminate-on-target works).
+
+  **Files touched**
+  - NEW backend: `routes/missions.py`, `routes/teams.py`, `routes/cortex.py`, `routes/mission_loop.py` (~1100 LOC total)
+  - NEW frontend: `pages/dashboard/Missions.jsx`, `CortexWorkspace.jsx`, `TeamDetail.jsx`, `AutonomyControl.jsx` (~800 LOC total)
+  - EDITED: `routes/agent_personas.py` (added `cortex` persona), `routes/scheduler.py` (registered loop cron), `server.py` (registered routes), `components/DashboardLayout.jsx` (new IA), `components/CommandPalette.jsx` (Cortex/Teams group), `App.js` (4 new routes).
+
+  **Regression sweep**: 117 passed, 2 skipped, 0 failed across P0+P1+P2+Mission OS suite in 134s.
+
+
 - 2026-05-29 (part 78) **🟣 Sidebar redesign — 5-intent IA + Ctrl+K command palette + new Active Campaigns page**
 
   **A. Dashboard IA cut from 29 → 11 items** (sidebar)

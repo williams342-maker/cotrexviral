@@ -269,6 +269,21 @@ async def start_scheduler():
     except Exception:
         logger.exception("scheduler: failed to register weekly_digest_sunday")
 
+    # Mission event loop — every 60s, drains queued team_dispatches and
+    # advances missions through scout → creator → operator → intelligence.
+    try:
+        from routes.mission_loop import drain_mission_loop
+        scheduler.add_job(
+            drain_mission_loop,
+            trigger=IntervalTrigger(seconds=60),
+            id="mission_event_loop",
+            max_instances=1,
+            coalesce=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(seconds=15),
+        )
+    except Exception:
+        logger.exception("scheduler: failed to register mission_event_loop")
+
     scheduler.start()
     logger.info("scheduler: started (worker=%s, every 60s)", WORKER_ID)
 

@@ -68,6 +68,10 @@ from routes import (  # noqa: F401
     uploads,         # Compose video uploads (YouTube)
     digests,         # Sunday Week-in-Review digest
     metered_billing, # Cortex Autopilot SKU — metered Stripe billing on agent_usage_ledger
+    missions,        # Mission-driven autonomous marketing OS
+    teams,           # 4 agent-team façade endpoints (Scout/Creator/Operator/Intelligence)
+    cortex,          # Master orchestrator — single entry-point for user goals
+    mission_loop,    # Event-driven relay: scout→creator→operator→intelligence
 )
 
 

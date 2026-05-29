@@ -43,10 +43,19 @@ const CommandPalette = () => {
 
   const groups = useMemo(() => {
     const dashboard = [
-      { to: '/dashboard/team-performance', label: 'Dashboard',           icon: LayoutDashboard, hint: 'Home' },
-      { to: '/dashboard/command-center',   label: 'Command Center',      icon: CommandIcon },
+      { to: '/dashboard/missions',         label: 'Mission Dashboard',    icon: LayoutDashboard, hint: 'Home' },
+      { to: '/dashboard/command-center',   label: 'Command Center',       icon: CommandIcon },
+      { to: '/dashboard/team-performance', label: 'Team Performance',     icon: TrendingUp },
       { to: '/dashboard/overview',         label: 'Overview',             icon: LayoutDashboard },
       { to: '/dashboard/main',             label: 'Activity feed',        icon: Activity },
+    ];
+    const cortexGroup = [
+      { to: '/dashboard/cortex',           label: 'Cortex workspace',     icon: Brain,    hint: 'Master orchestrator' },
+      { to: '/dashboard/autonomy-control', label: 'Autonomy Control Center', icon: ShieldAlert, hint: 'L0–L5 per team' },
+      { to: '/dashboard/teams/scout',        label: 'Scout team',         icon: Compass },
+      { to: '/dashboard/teams/creator',      label: 'Creator team',       icon: Sparkles },
+      { to: '/dashboard/teams/operator',     label: 'Operator team',      icon: Send },
+      { to: '/dashboard/teams/intelligence', label: 'Intelligence team',  icon: TrendingUp },
     ];
     const campaigns = [
       { to: '/dashboard/campaigns/active', label: 'Active Campaigns',     icon: Rocket },
@@ -97,7 +106,7 @@ const CommandPalette = () => {
       { to: '/admin/roadmap',              label: 'Roadmap',              icon: MapIcon },
     ] : [];
 
-    return { dashboard, campaigns, agents, content, analytics, settings, admin };
+    return { dashboard, cortexGroup, campaigns, agents, content, analytics, settings, admin };
   }, [user?.is_admin]);
 
   return (
@@ -108,6 +117,13 @@ const CommandPalette = () => {
 
         <CommandGroup heading="Dashboard">
           {groups.dashboard.map((it) => (
+            <PaletteItem key={it.to} item={it} go={go} />
+          ))}
+        </CommandGroup>
+        <CommandSeparator />
+
+        <CommandGroup heading="Cortex & Teams">
+          {groups.cortexGroup.map((it) => (
             <PaletteItem key={it.to} item={it} go={go} />
           ))}
         </CommandGroup>
