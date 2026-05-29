@@ -154,9 +154,10 @@ const SellerConversationsLive = () => {
                     {active.seller_score != null && <><span>·</span><span>score <strong className="text-white">{active.seller_score}</strong></span></>}
                   </div>
                 </div>
-                <button onClick={generateOffer}
+                <button onClick={generateOffer} disabled={active.stage !== 'qualified'}
                         data-testid="conv-send-offer"
-                        className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md bg-violet-500/15 hover:bg-violet-500/25 text-violet-300 transition flex items-center gap-1">
+                        title={active.stage !== 'qualified' ? `Outreach disabled — lead is ${active.stage}` : 'Generate a fresh offer'}
+                        className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md bg-violet-500/15 hover:bg-violet-500/25 text-violet-300 transition flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed">
                   <Send size={11} /> Send another offer
                 </button>
               </div>

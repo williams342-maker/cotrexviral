@@ -35,6 +35,20 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 82) **🟣 Seller Acquisition OS — Phase 2/3 frontend LIVE**
+
+  Replaced the 4 placeholder pages with fully wired live components in `/app/frontend/src/pages/dashboard/seller/SellerLifecycle.jsx`:
+    - **`SellerConversationsLive`** — split-pane inbox: left rail = per-mission threads (`GET /api/seller-outreach/threads/{mission_id}`), right pane = full event timeline (`GET /api/seller-outreach/events/{lead_id}`). "Send another offer" CTA POSTs `/seller-outreach/generate` and is disabled with a tooltip when the lead has already advanced past `qualified` (prevents 400s).
+    - **`SellerOnboardingLive`** — lists interested/onboarding/active leads in one card stack; "Onboard now" CTA POSTs `/seller-onboarding/start` and renders an `Onboarded ✓` pill once the lead flips to `active`.
+    - **`SellerRetentionLive`** — alerts list with severity-tinted pills (inactive=amber, churn=rose); header CTA `Run retention scan` POSTs `/seller-retention/scan` and refreshes.
+    - **`SellerAnalyticsLive`** — 4 KPI tiles + funnel-conversion bars (5 stages) + per-mission velocity rollup + 8-cell stage waterfall. Cross-mission aggregation from `/missions/{id}/seller-funnel`.
+
+  **Side-fix** — `SellerMissionControl.jsx` had broken relative import paths (`'../../'` instead of `'../../../'`) for AuthContext/DashboardLayout/use-toast. Webpack was failing-soft on the route. Now fixed.
+
+  **Deleted**: `SellerPlaceholders.jsx` (had a JSX apostrophe parse error in any case; superseded by Live components).
+
+  **Tests**: `test_seller_os_phase23.py` (10/10) + `test_seller_os_phase1.py` (12/12) — **22/22 backend pass**. Testing agent confirmed **100% frontend pass** with seeded mission (64 leads → onboarded 1 to `active`) — every CTA wires through, sidebar shows all 7 Seller-OS sub-routes correctly, zero JS console errors.
+
 - 2026-05-29 (part 80) **🟢 Fixed 2 pre-existing flakes — full test suite now deterministic**
 
   **Flake #1 — `test_billing_me_returns_plan_for_authed_user`**
