@@ -35,6 +35,44 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 69) **🧭 Phase 3 — Briefs as Proposals (Atlas auto-proposes, operator approves)**
+  - **New `routes/briefs.py`** — first-class proposal layer. The UX shift from "user asks, agent drafts" → "agent proposes, user approves" is realized here. Atlas reads open Growth Goals + recent Listening Signals (last 7d) + past rejection memories, then drafts up to 3 campaign briefs per scan. Each lands in `proposed_briefs` as `pending` and waits for the operator's Approve/Edit/Reject decision.
+  - **Per-user runtime toggle** (`autopilot_settings` collection): `briefs_mode = manual | autopilot`. Manual (default) means only the "Propose now" button fires Atlas. Autopilot means a daily 09:00 UTC cron runs the same scan for that user — anti-spam baked in via a 20h cooldown on `last_brief_scan_at` (handles double-firing during deploys/restarts). Switch modes from the Briefs hero card; no redeploy required.
+  - **LLM prompt** (gpt-5-mini, ~30s timeout): Atlas gets the persona description, the goals list, the signal list (top 8), and the last 5 rejection memories so it actively AVOIDS proposing patterns the operator already shot down. Strict-JSON-only output. Shape-coerced server-side: title (≤80), hypothesis (≤200), body (≤800), rationale (≤300), suggested_platforms (subset of our 7 supported), target_metric.
+  - **Fallback path** when `EMERGENT_LLM_KEY` is unset or the LLM errors: deterministic stub that proposes ONE generic brief tied to the most-recent goal/signal — keeps the system functional in test envs without an API key, never returns garbage.
+  - **8 endpoints**:
+    - `GET /api/briefs/settings` — `{briefs_mode, cadence_label, last_scan_at, max_per_scan}`
+    - `PUT /api/briefs/settings` — flip mode (`manual` ↔ `autopilot`); validates the enum
+    - `POST /api/briefs/propose` — manual trigger; runs Atlas immediately + stamps `last_brief_scan_at`
+    - `GET /api/briefs?status=…` — list + summary stats (pending/approved/rejected count + `avg_decision_minutes` derived from `decided_at - created_at` across decided rows)
+    - `GET /api/briefs/{id}` — detail
+    - `POST /api/briefs/{id}/approve` — creates a real `campaigns` row from the brief (uses `edited_body` if present, otherwise `body`), platforms + target_metric carry over, cross-ref stamped both ways (`brief.resolved_into_campaign_id` + `campaign.proposed_brief_id`). Brief flips to `approved` with `decided_by` audit field. Returns `{brief, campaign}`.
+    - `POST /api/briefs/{id}/reject` — flip to `rejected` + write `cortex_memory` row with `kind="brief_rejected"`, dedupe_key=`brief_rejected:{id}`. The memory feeds back into the NEXT scan's prompt so Atlas avoids similar pitches.
+    - `PATCH /api/briefs/{id}/edit` — operator-edited body (≥10 chars, ≤1500), stored as `edited_body` (original preserved for audit). Approve uses the edited version when set.
+    - `DELETE /api/briefs/{id}` — hard delete
+  - **Realtime broadcast**: every successful `_persist_proposals` fans out a `briefs_proposed` event over the existing HITL inbox WebSocket so the bell badge updates instantly. Best-effort — failure to broadcast never blocks the propose call.
+  - **Scheduler integration**: `register_brief_autopilot_job(scheduler)` registers `brief_autopilot_daily` on the existing `AsyncIOScheduler` with a `CronTrigger(hour=9, minute=0)`. Idempotent (no-op if the job already exists). `run_autopilot_scan` iterates only users with `briefs_mode=autopilot`, respects the 20h cooldown, and per-user errors are logged but never propagate.
+  - **`/dashboard/briefs` page** (`Briefs.jsx`):
+    - Sky-blue Atlas hero card with manifesto + "Propose now" CTA + autopilot toggle (Power icon → Zap icon with emerald background when ON). Last-scan timestamp under the card.
+    - 4 KPI tiles (Pending / Approved / Rejected / Avg decision minutes)
+    - 4-pill filter row (pending / approved / rejected / all) — defaults to pending
+    - 2-column card grid. Each card has: proposer/source eyebrow, title, blue-highlighted hypothesis block ("💡 ..."), 4-line body preview with `EDITED` amber pill when applicable, rationale + platform pills + target metric, and 3 action buttons (Approve emerald / Edit neutral / Reject rose). Editor swaps the body for a textarea with Cancel/Save. Approved + rejected briefs show a static decided-by note instead of buttons.
+  - **Sidebar nav** — `Briefs Inbox` link added between `Monday Standup` and `Goals` (lucide `Compass` icon — same icon as Atlas's persona).
+  - **15 new pytest cases** (`tests/test_briefs.py`):
+    - All 9 endpoints require auth (401 without token)
+    - Default settings = manual; toggle to autopilot persists; unknown mode → 400
+    - Propose succeeds even with no goals/signals (returns count=0 or fallback stub), `last_scan_at` always stamped
+    - List returns hydrated stats; status filter works
+    - Approve creates campaign with cross-ref + correct platforms; 404 on non-pending
+    - Reject writes `brief_rejected` memory row with right kind + dedupe_key
+    - Edit stamps `edited_body`; rejects short bodies (422); approve includes edited content in campaign notes
+    - Delete removes the row
+    - Autopilot scanner skips empty user list (0 processed)
+    - Autopilot scanner respects the 20h cooldown (user opted in but scanned 1h ago → skipped)
+  - **65/65 regression** across briefs + experiments + growth_team + growth_goals + app_config + youtube_oauth + hitl_reminders. All green under live STRICT mode.
+  - **Phase 3 net effect**: the team is now ACTIVELY autonomous. With autopilot ON, briefs materialize in your inbox every morning — you spend 60 seconds approving the strong ones and rejecting the weak ones. Each rejection teaches Atlas, so the proposals get sharper each week. Phase 5 (Autonomy budgets) is unblocked — we can now safely let Atlas auto-spawn campaigns within a daily token/cost cap by skipping the HITL gate for low-risk briefs (e.g. < $X spend + variants in a previously-approved pillar).
+
+
 - 2026-05-29 (part 68) **🧪 Phase 4 — Experiments (head-to-head variant testing, owned by Ori)**
   - **New `routes/experiments.py`** — first-class A/B testing layer. An experiment pits 2 `content_variants` against each other on ONE metric. The hot read merges the stored row with live `performance_rollups` data so the UI shows real-time leader + margin.
   - **5 supported metrics**: `engagements` (default), `impressions`, `clicks`, `reach`, `ctr`. All map to `performance_rollups.windows.all_time.*` — i.e. cumulative since the variant was first measured.

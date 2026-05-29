@@ -62,6 +62,7 @@ from routes import (  # noqa: F401
     growth_goals,    # Durable OKRs owned by Vera
     oauth_youtube,   # YouTube OAuth (Google) — channel upload + read scopes
     experiments,     # Head-to-head variant testing (Ori) — Phase 4 of Growth Team
+    briefs,          # Atlas brief proposals + autopilot scanner — Phase 3 of Growth Team
 )
 
 

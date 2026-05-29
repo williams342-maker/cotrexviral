@@ -222,6 +222,13 @@ async def start_scheduler():
     except Exception:
         logger.exception("scheduler: failed to register hitl_paused_run_reminders")
 
+    # Atlas brief autopilot — daily 09:00 UTC. Per-user opt-in via /briefs/settings.
+    try:
+        from routes.briefs import register_brief_autopilot_job
+        register_brief_autopilot_job(scheduler)
+    except Exception:
+        logger.exception("scheduler: failed to register brief_autopilot_daily")
+
     scheduler.start()
     logger.info("scheduler: started (worker=%s, every 60s)", WORKER_ID)
 
