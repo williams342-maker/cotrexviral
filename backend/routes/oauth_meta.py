@@ -88,12 +88,18 @@ INSTAGRAM_SCOPES = [
 def _redirect_uri(provider: str) -> str:
     """Where Meta sends the browser after the user authorises.
 
-    Priority: META_REDIRECT_URI env override → PUBLIC_SITE_URL + provider path.
-    The override is per-provider via suffix matching — keep one Meta app per
-    deployment to avoid confusion.
+    Priority:
+      1. META_REDIRECT_URI env override — treat the value as a BASE host
+         (or any URL whose host we should reuse) and inject the per-provider
+         path. Lets one env value cover both facebook + instagram.
+      2. Fall back to PUBLIC_SITE_URL + provider path (production default).
     """
-    if META_REDIRECT_URI_OVERRIDE and provider in META_REDIRECT_URI_OVERRIDE:
-        return META_REDIRECT_URI_OVERRIDE
+    if META_REDIRECT_URI_OVERRIDE:
+        # Extract the scheme + host from the override (strip any path).
+        from urllib.parse import urlparse
+        parsed = urlparse(META_REDIRECT_URI_OVERRIDE)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}/api/oauth/{provider}/callback"
     return f"{PUBLIC_SITE_URL}/api/oauth/{provider}/callback"
 
 
