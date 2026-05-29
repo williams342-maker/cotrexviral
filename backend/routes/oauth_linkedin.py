@@ -35,6 +35,7 @@ from core import (
     LINKEDIN_CLIENT_SECRET,
 )
 from deps import get_current_user
+from routes.app_config import get_config
 
 
 LINKEDIN_AUTH_URL = "https://www.linkedin.com/oauth/v2/authorization"
@@ -49,26 +50,35 @@ LINKEDIN_API_VERSION = "202405"  # increment as LinkedIn publishes new versions
 LINKEDIN_SCOPES = ["openid", "profile", "email", "w_member_social"]
 
 
+async def _creds() -> tuple[str, str]:
+    """Resolve LinkedIn OAuth credentials. DB (admin-rotatable) → env → ''."""
+    cid = await get_config("LINKEDIN_CLIENT_ID", default=LINKEDIN_CLIENT_ID) or ""
+    cs  = await get_config("LINKEDIN_CLIENT_SECRET", default=LINKEDIN_CLIENT_SECRET) or ""
+    return cid, cs
+
+
 def _redirect_uri() -> str:
     return f"{PUBLIC_SITE_URL}/api/oauth/linkedin/callback"
 
 
-def _check_configured():
-    if not LINKEDIN_CLIENT_ID or not LINKEDIN_CLIENT_SECRET:
+async def _check_configured() -> tuple[str, str]:
+    cid, cs = await _creds()
+    if not cid or not cs:
         raise HTTPException(
             status_code=503,
             detail=(
                 "LinkedIn OAuth not configured. Set LINKEDIN_CLIENT_ID and "
-                "LINKEDIN_CLIENT_SECRET in /app/backend/.env."
+                "LINKEDIN_CLIENT_SECRET via Admin → Integrations (or /app/backend/.env)."
             ),
         )
+    return cid, cs
 
 
 @api.get("/oauth/linkedin/start")
 async def linkedin_oauth_start(request: Request):
     """Returns the LinkedIn authorize URL the frontend should redirect to."""
     user = await get_current_user(request)
-    _check_configured()
+    cid, _cs = await _check_configured()
 
     # Random state, stored briefly so we can verify on callback.
     state = secrets.token_urlsafe(24)
@@ -82,7 +92,7 @@ async def linkedin_oauth_start(request: Request):
 
     params = {
         "response_type": "code",
-        "client_id": LINKEDIN_CLIENT_ID,
+        "client_id": cid,
         "redirect_uri": _redirect_uri(),
         "state": state,
         "scope": " ".join(LINKEDIN_SCOPES),
@@ -106,7 +116,8 @@ async def linkedin_oauth_callback(request: Request, code: str = "", state: str =
     # Consume the state (single-use)
     await db.oauth_states.delete_one({"_id": state})
 
-    _check_configured()
+    _check_configured_result = await _check_configured()
+    cid, cs = _check_configured_result
     # Exchange code → access_token
     async with httpx.AsyncClient(timeout=20) as cli:
         token_resp = await cli.post(
@@ -115,8 +126,8 @@ async def linkedin_oauth_callback(request: Request, code: str = "", state: str =
                 "grant_type": "authorization_code",
                 "code": code,
                 "redirect_uri": _redirect_uri(),
-                "client_id": LINKEDIN_CLIENT_ID,
-                "client_secret": LINKEDIN_CLIENT_SECRET,
+                "client_id": cid,
+                "client_secret": cs,
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
@@ -190,8 +201,9 @@ async def linkedin_disconnect(request: Request):
 async def linkedin_status(request: Request):
     user = await get_current_user(request)
     conn = await db.linkedin_connections.find_one({"user_id": user.user_id}, {"_id": 0, "access_token": 0})
+    cid, cs = await _creds()
     return {
-        "configured": bool(LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET),
+        "configured": bool(cid and cs),
         "connected": bool(conn),
         "connection": conn,
     }

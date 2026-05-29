@@ -43,6 +43,7 @@ from core import (
     TIKTOK_REDIRECT_URI_OVERRIDE,
 )
 from deps import get_current_user
+from routes.app_config import get_config
 
 
 TIKTOK_AUTH_URL = "https://www.tiktok.com/v2/auth/authorize/"
@@ -57,12 +58,30 @@ TIKTOK_STATUS_URL = "https://open.tiktokapis.com/v2/post/publish/status/fetch/"
 TIKTOK_SCOPES = ["user.info.basic", "video.publish"]
 
 
+async def _creds() -> tuple[str, str]:
+    """Resolve TikTok OAuth credentials. DB (admin-rotatable) → env → ''."""
+    ck = await get_config("TIKTOK_CLIENT_KEY",    default=TIKTOK_CLIENT_KEY) or ""
+    cs = await get_config("TIKTOK_CLIENT_SECRET", default=TIKTOK_CLIENT_SECRET) or ""
+    return ck, cs
+
+
+async def _redirect_uri_async() -> str:
+    """Same as _redirect_uri but resolves the DB override too."""
+    override = await get_config("TIKTOK_REDIRECT_URI", default=TIKTOK_REDIRECT_URI_OVERRIDE)
+    if override:
+        return override
+    return f"{PUBLIC_SITE_URL}/api/oauth/tiktok/callback"
+
+
 def _redirect_uri() -> str:
     """Returns the redirect URI registered with TikTok.
 
     Priority:
       1. TIKTOK_REDIRECT_URI env var (override — useful for preview-pod testing).
       2. PUBLIC_SITE_URL + /api/oauth/tiktok/callback (production default).
+
+    Kept synchronous for legacy callers; new code should prefer
+    _redirect_uri_async() so the DB override is honoured.
     """
     if TIKTOK_REDIRECT_URI_OVERRIDE:
         return TIKTOK_REDIRECT_URI_OVERRIDE
@@ -79,22 +98,24 @@ def _post_oauth_redirect(query: str) -> str:
     return f"{base}/dashboard/channels?{query}"
 
 
-def _check_configured():
-    if not TIKTOK_CLIENT_KEY or not TIKTOK_CLIENT_SECRET:
+async def _check_configured() -> tuple[str, str]:
+    ck, cs = await _creds()
+    if not ck or not cs:
         raise HTTPException(
             status_code=503,
             detail=(
                 "TikTok OAuth not configured. Set TIKTOK_CLIENT_KEY and "
-                "TIKTOK_CLIENT_SECRET in /app/backend/.env."
+                "TIKTOK_CLIENT_SECRET via Admin → Integrations (or /app/backend/.env)."
             ),
         )
+    return ck, cs
 
 
 @api.get("/oauth/tiktok/start")
 async def tiktok_oauth_start(request: Request):
     """Returns the TikTok authorize URL the frontend should redirect to."""
     user = await get_current_user(request)
-    _check_configured()
+    ck, _cs = await _check_configured()
 
     state = secrets.token_urlsafe(24)
     await db.oauth_states.insert_one({
@@ -106,7 +127,7 @@ async def tiktok_oauth_start(request: Request):
     })
 
     params = {
-        "client_key": TIKTOK_CLIENT_KEY,
+        "client_key": ck,
         "response_type": "code",
         "scope": ",".join(TIKTOK_SCOPES),
         "redirect_uri": _redirect_uri(),
@@ -143,13 +164,13 @@ async def tiktok_oauth_callback(
     user_id = state_doc["user_id"]
     await db.oauth_states.delete_one({"_id": state})
 
-    _check_configured()
+    _ck, _cs = await _check_configured()
     async with httpx.AsyncClient(timeout=20) as cli:
         token_resp = await cli.post(
             TIKTOK_TOKEN_URL,
             data={
-                "client_key": TIKTOK_CLIENT_KEY,
-                "client_secret": TIKTOK_CLIENT_SECRET,
+                "client_key": _ck,
+                "client_secret": _cs,
                 "code": code,
                 "grant_type": "authorization_code",
                 "redirect_uri": _redirect_uri(),
@@ -221,15 +242,16 @@ async def tiktok_disconnect(request: Request):
     """Disconnect — revokes the token with TikTok and clears local state."""
     user = await get_current_user(request)
     conn = await db.tiktok_connections.find_one({"user_id": user.user_id})
-    if conn and conn.get("access_token") and TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET:
+    ck, cs = await _creds()
+    if conn and conn.get("access_token") and ck and cs:
         # Best-effort revoke; never fail disconnect if TikTok is down.
         try:
             async with httpx.AsyncClient(timeout=10) as cli:
                 await cli.post(
                     TIKTOK_REVOKE_URL,
                     data={
-                        "client_key": TIKTOK_CLIENT_KEY,
-                        "client_secret": TIKTOK_CLIENT_SECRET,
+                        "client_key": ck,
+                        "client_secret": cs,
                         "token": conn["access_token"],
                     },
                     headers={"Content-Type": "application/x-www-form-urlencoded"},
@@ -255,8 +277,9 @@ async def tiktok_status(request: Request):
         {"user_id": user.user_id},
         {"_id": 0, "access_token": 0, "refresh_token": 0},
     )
+    ck, cs = await _creds()
     return {
-        "configured": bool(TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET),
+        "configured": bool(ck and cs),
         "connected": bool(conn),
         "connection": conn,
     }
@@ -269,12 +292,15 @@ async def _refresh_tiktok_token(conn: dict) -> dict | None:
     refresh_token = conn.get("refresh_token")
     if not refresh_token:
         return None
+    ck, cs = await _creds()
+    if not ck or not cs:
+        return None
     async with httpx.AsyncClient(timeout=15) as cli:
         r = await cli.post(
             TIKTOK_TOKEN_URL,
             data={
-                "client_key": TIKTOK_CLIENT_KEY,
-                "client_secret": TIKTOK_CLIENT_SECRET,
+                "client_key": ck,
+                "client_secret": cs,
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token,
             },

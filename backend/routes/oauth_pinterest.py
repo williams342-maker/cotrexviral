@@ -41,6 +41,7 @@ from core import (
     PINTEREST_REDIRECT_URI_OVERRIDE, PINTEREST_API_BASE,
 )
 from deps import get_current_user
+from routes.app_config import get_config
 
 
 AUTHORIZE_URL = "https://www.pinterest.com/oauth/"
@@ -51,6 +52,13 @@ AUTHORIZE_URL = "https://www.pinterest.com/oauth/"
 SCOPES = ["boards:read", "pins:write", "pins:read"]
 
 
+async def _creds() -> tuple[str, str]:
+    """Resolve Pinterest OAuth credentials. DB (admin-rotatable) → env → ''."""
+    cid = await get_config("PINTEREST_APP_ID",     default=PINTEREST_APP_ID) or ""
+    cs  = await get_config("PINTEREST_APP_SECRET", default=PINTEREST_APP_SECRET) or ""
+    return cid, cs
+
+
 def _token_url() -> str:
     return f"{PINTEREST_API_BASE}/v5/oauth/token"
 
@@ -59,25 +67,35 @@ def _redirect_uri() -> str:
     return PINTEREST_REDIRECT_URI_OVERRIDE or f"{PUBLIC_SITE_URL}/api/oauth/pinterest/callback"
 
 
+async def _redirect_uri_async() -> str:
+    """Same as _redirect_uri but honours the DB-side override too."""
+    override = await get_config("PINTEREST_REDIRECT_URI",
+                                default=PINTEREST_REDIRECT_URI_OVERRIDE)
+    return override or f"{PUBLIC_SITE_URL}/api/oauth/pinterest/callback"
+
+
 def _post_oauth_redirect(query: str) -> str:
     base = _redirect_uri().split("/api/oauth/pinterest/callback")[0]
     return f"{base}/dashboard/channels?{query}"
 
 
-def _basic_auth_header() -> str:
-    raw = f"{PINTEREST_APP_ID}:{PINTEREST_APP_SECRET}".encode()
+async def _basic_auth_header() -> str:
+    cid, cs = await _creds()
+    raw = f"{cid}:{cs}".encode()
     return f"Basic {base64.b64encode(raw).decode()}"
 
 
-def _check_configured():
-    if not PINTEREST_APP_ID or not PINTEREST_APP_SECRET:
+async def _check_configured() -> tuple[str, str]:
+    cid, cs = await _creds()
+    if not cid or not cs:
         raise HTTPException(
             status_code=503,
             detail=(
                 "Pinterest OAuth not configured. Set PINTEREST_APP_ID and "
-                "PINTEREST_APP_SECRET in /app/backend/.env."
+                "PINTEREST_APP_SECRET via Admin → Integrations (or /app/backend/.env)."
             ),
         )
+    return cid, cs
 
 
 # --- /start ------------------------------------------------------------------
@@ -85,7 +103,7 @@ def _check_configured():
 @api.get("/oauth/pinterest/start")
 async def pinterest_start(request: Request):
     user = await get_current_user(request)
-    _check_configured()
+    cid, _cs = await _check_configured()
     state = secrets.token_urlsafe(24)
     await db.oauth_states.insert_one({
         "_id": state,
@@ -95,7 +113,7 @@ async def pinterest_start(request: Request):
         "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
     })
     params = {
-        "client_id": PINTEREST_APP_ID,
+        "client_id": cid,
         "redirect_uri": _redirect_uri(),
         "response_type": "code",
         "scope": ",".join(SCOPES),  # Pinterest accepts comma OR space separated
@@ -124,7 +142,8 @@ async def pinterest_callback(request: Request, code: str = "", state: str = "",
     user_id = state_doc["user_id"]
     await db.oauth_states.delete_one({"_id": state})
 
-    _check_configured()
+    _cid, _cs = await _check_configured()
+    auth_header = await _basic_auth_header()
 
     # Exchange code → access + refresh token. Pinterest requires Basic auth +
     # form-encoded body (NOT JSON). This is the #1 thing devs get wrong.
@@ -132,7 +151,7 @@ async def pinterest_callback(request: Request, code: str = "", state: str = "",
         tok = await cli.post(
             _token_url(),
             headers={
-                "Authorization": _basic_auth_header(),
+                "Authorization": auth_header,
                 "Content-Type": "application/x-www-form-urlencoded",
             },
             data={
@@ -203,8 +222,9 @@ async def pinterest_status(request: Request):
         {"user_id": user.user_id},
         {"_id": 0, "access_token": 0, "refresh_token": 0},
     )
+    cid, cs = await _creds()
     return {
-        "configured": bool(PINTEREST_APP_ID and PINTEREST_APP_SECRET),
+        "configured": bool(cid and cs),
         "connected": bool(conn),
         "username": (conn or {}).get("username"),
         "expires_at": (conn or {}).get("expires_at"),
@@ -249,7 +269,7 @@ async def get_fresh_pinterest_token(user_id: str) -> str | None:
         r = await cli.post(
             _token_url(),
             headers={
-                "Authorization": _basic_auth_header(),
+                "Authorization": await _basic_auth_header(),
                 "Content-Type": "application/x-www-form-urlencoded",
             },
             data={"grant_type": "refresh_token", "refresh_token": refresh_token},

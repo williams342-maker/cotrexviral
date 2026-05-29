@@ -35,6 +35,36 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 76) **🟣 P1 — Execution-layer key rotation (LinkedIn / TikTok / Pinterest) + brief-propose flake fix**
+
+  **A. Briefs propose flake fix (P0 wrap-up)**
+  - `_llm_propose_briefs()` now short-circuits **before** the LLM call when both `goals` and `signals` are empty. Empty facts = no possible brief, so no reason to spend an LLM round-trip. Eliminates the intermittent `litellm` timeout that occasionally caused `test_propose_with_no_signals_or_goals_returns_empty` to fail at the tail of a long pytest run.
+  - Result: `test_briefs.py` runs 47s instead of 60–120s and the empty-facts path is deterministic.
+
+  **B. LinkedIn / TikTok / Pinterest credentials are admin-rotatable**
+  - Added 8 new keys to `routes/app_config.py::ALLOWED_KEYS` under three new groups:
+    - `linkedin`  → `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`
+    - `tiktok`    → `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REDIRECT_URI`
+    - `pinterest` → `PINTEREST_APP_ID`, `PINTEREST_APP_SECRET`, `PINTEREST_REDIRECT_URI`
+  - The `AdminIntegrations.jsx` page is already group-driven (`groups = items.reduce(...)`) so the three new sections render automatically — no frontend change needed.
+  - Each OAuth route file now resolves its credentials via `get_config()` (DB → env → default) at call time, with a per-platform `_creds()` async helper and an async `_check_configured()` that raises 503 with a friendlier "Set via Admin → Integrations" message. Module-level env fallbacks preserved so existing `.env`-only setups keep working.
+  - Pinterest's `_basic_auth_header()` is now async (it reads DB creds at call time). All callers updated.
+  - TikTok's `_redirect_uri_async()` honours the DB override too; the sync `_redirect_uri()` is kept for legacy call sites.
+
+  **C. Regression coverage**
+  - New `tests/test_execution_layer_keys.py` (8 tests, 6 active + 2 env-skipped):
+    - All 8 keys present in `/admin/app-config` with correct groups.
+    - Secret-flag matrix (only `*_SECRET` keys mask their preview).
+    - Round-trip: set fake value via admin endpoint → `/oauth/<platform>/status.configured = true` → clear → false.
+    - `/oauth/<platform>/start` 503s when neither DB nor env has creds (skipped when env-provided).
+  - All 67 OAuth + briefs tests pass after the refactor.
+  - Full P0+P1 sweep: **135 passed, 2 skipped** (env-dependent) in 168s.
+
+  **Outstanding (still credentials-blocked, code-complete)**
+  - LinkedIn live posting requires LinkedIn app review for `w_member_social` scope.
+  - TikTok / Pinterest live posting awaiting user-pasted client keys (admin can now paste at /admin/integrations — no redeploy required).
+
+
 - 2026-05-29 (part 75) **🟣 P0 trio — Week-in-Review digest + 80% headroom alerts + Ori auto-conclude experiments**
 
   **A. Week-in-Review digest (Sunday 18:00 UTC)**

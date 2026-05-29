@@ -87,6 +87,54 @@ ALLOWED_KEYS: dict[str, dict] = {
         "secret":      False,
         "group":       "youtube",
     },
+    "LINKEDIN_CLIENT_ID": {
+        "label":       "LinkedIn — OAuth Client ID",
+        "description": "LinkedIn developer app's Client ID (from linkedin.com/developers → My apps → Auth tab). Required for member sign-in + posting.",
+        "secret":      False,
+        "group":       "linkedin",
+    },
+    "LINKEDIN_CLIENT_SECRET": {
+        "label":       "LinkedIn — OAuth Client Secret",
+        "description": "The Primary client secret shown next to the Client ID. Rotate via the same screen if compromised.",
+        "secret":      True,
+        "group":       "linkedin",
+    },
+    "TIKTOK_CLIENT_KEY": {
+        "label":       "TikTok — Client Key",
+        "description": "TikTok developer app's Client Key (from developers.tiktok.com → My apps → app details). Required for Login + Content Posting.",
+        "secret":      False,
+        "group":       "tiktok",
+    },
+    "TIKTOK_CLIENT_SECRET": {
+        "label":       "TikTok — Client Secret",
+        "description": "The Client Secret shown next to the Client Key. Rotate via the same screen if compromised.",
+        "secret":      True,
+        "group":       "tiktok",
+    },
+    "TIKTOK_REDIRECT_URI": {
+        "label":       "TikTok — Redirect URI Override",
+        "description": "Optional. Use to point OAuth at the preview backend during testing. Falls back to PUBLIC_SITE_URL when blank.",
+        "secret":      False,
+        "group":       "tiktok",
+    },
+    "PINTEREST_APP_ID": {
+        "label":       "Pinterest — App ID",
+        "description": "Pinterest developer app's App ID (from developers.pinterest.com → My apps). Required for board sign-in + publishing pins.",
+        "secret":      False,
+        "group":       "pinterest",
+    },
+    "PINTEREST_APP_SECRET": {
+        "label":       "Pinterest — App Secret",
+        "description": "The App Secret shown next to the App ID. Rotate via the same screen if compromised.",
+        "secret":      True,
+        "group":       "pinterest",
+    },
+    "PINTEREST_REDIRECT_URI": {
+        "label":       "Pinterest — Redirect URI Override",
+        "description": "Optional. Use to point OAuth at the preview backend during testing. Falls back to PUBLIC_SITE_URL when blank.",
+        "secret":      False,
+        "group":       "pinterest",
+    },
 }
 
 _CACHE_TTL_SECONDS = 60

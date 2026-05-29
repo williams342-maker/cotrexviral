@@ -136,6 +136,13 @@ async def _llm_propose_briefs(facts: dict, max_briefs: int = MAX_BRIEFS_PER_SCAN
     if not EMERGENT_LLM_KEY:
         return _fallback_briefs(facts, max_briefs)
 
+    # Short-circuit: with NO goals AND NO signals there is nothing for
+    # Atlas to propose. Skipping the LLM round-trip here keeps the empty-
+    # facts test path deterministic + fast, and prevents flaky timeouts
+    # when the live LLM service has elevated latency.
+    if not (facts.get("goals") or facts.get("signals")):
+        return []
+
     # Phase 6 hand-offs — Atlas consults the team before drafting briefs.
     # All three queries fan out in parallel via asyncio.gather so we add
     # at most one LLM round-trip of latency instead of three. Best-effort:
