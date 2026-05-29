@@ -192,6 +192,14 @@ async def admin_create_user(payload: AdminCreateUserRequest, request: Request):
             "created_by": admin.user_id,
         })
         was_new = True
+        # Auto-create default brand (decision 1c, signup hook).
+        try:
+            from routes.brands import ensure_default_brand_for_user
+            await ensure_default_brand_for_user(
+                user_id, name_hint=payload.brand_name or payload.name,
+            )
+        except Exception:
+            logger.exception("ensure_default_brand_for_user failed for %s", user_id)
 
     # Issue a magic-link token + (optionally) email it.
     link = await issue_magic_link(user_id, email_norm, purpose="claim")

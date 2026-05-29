@@ -35,6 +35,29 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-28 (part 58) **🧱 Phase 1 — Data model normalization (decisions 1c + 2a + 3c + 4a)**
+  - **New module `models_normalized.py`** — Pydantic shapes for `Brand`, `ContentItem`, `ContentVariant`, `PerformanceMetric`, `PerformanceRollup`, plus a `NORMALIZED_INDEXES` registry the migration auto-creates. Schema designed for many-brands-per-user (FK propagated everywhere) even though Phase 1 only mints one default brand per user (decision 1c).
+  - **New module `routes/brands.py`** — `ensure_default_brand_for_user(user_id, name_hint)` returns the user's default brand_id, creating one named "{name_hint}'s Brand" on first call. Idempotent.
+  - **New `migrations/normalize_001.py`** — in-place backfill (decision 2a):
+    - **Step 1** — auto-create default brand for every active user (8/8 created).
+    - **Step 2** — stamp `brand_id` on every campaign (98/98 backfilled).
+    - **Step 3** — for every legacy `posts` row, materialise one `content_item` (platform-agnostic intent) + one `content_variant` per entry in `platforms[]` (150 items + 150 variants created). Stamps `brand_id`, `content_item_id`, `variant_ids[]`, `migrated: true` back on the legacy post row so reads continue working.
+    - **Step 4** — for every `cortex_memory.kind="post"` row, stamp `meta.brand_id`, `meta.content_item_id`, `meta.variant_id` (decision 4a — keep memory rows as-is for embedding retrieval, just cross-reference the normalized layer in the meta block so the agent has zero-latency access).
+    - **Idempotent**: every step skips rows that already carry `brand_id`. Re-running produces zero work — verified.
+    - **Watermark**: `_migration_state.normalize_001` doc records completion so the startup hook can short-circuit.
+  - **Time-series + rollup metrics shape (decision 3c)**: `performance_metrics` keyed by `(variant_id, platform, date)` with unique compound index so re-imports don't double-count engagement; `performance_rollups` denormalized per-variant with `{last_7d, last_30d, all_time}` window blocks for hot dashboard reads. Phase 1 ships the schema + indexes; Phase 2 will wire the cron that populates them from the existing engagement data sources.
+  - **Signup hook wired into 3 paths**: `routes/auth.py` (OAuth signup), `routes/magic_link.py` (admin-create), `routes/leads.py` (lead form). Each calls `ensure_default_brand_for_user` immediately after `db.users.insert_one`, with the user's display name as the hint. Brand-create failure is caught + logged but never blocks login — the startup migration is the safety net.
+  - **Startup auto-migration** (`server.py` `@app.on_event("startup")`) — runs `migrate_now()` if `needs_migration()` returns True. Logged but never blocks app boot.
+  - **Two admin endpoints** for manual control:
+    - `GET /api/admin/migrations/normalize/status` — current counts (users / brands / no-brand campaigns / no-brand posts / content_items / content_variants) + last run watermark + `needs_migration: bool`.
+    - `POST /api/admin/migrations/normalize/run` — one-shot trigger, idempotent. Logs to `audit_log`.
+  - **8 new pytest cases** (`tests/test_normalize_migration.py`) covering: idempotent re-runs, every user has a default brand, every campaign + post has `brand_id`, variant count == platforms count, cortex_memory rows carry the cross-ref triple, helper idempotency, all NORMALIZED_INDEXES present. 8/8 pass in 0.26s.
+  - **33/33 regression** across normalize migration + LangGraph orchestrator + HITL endpoints + memory-perf + HITL reminders + realtime inbox. Backend stable.
+  - **Live verification on prod data**: 8 users → 8 brands; 98 campaigns + 150 posts backfilled; 150 content_items + 150 content_variants created on first migration tick; second run does zero work (counters all zero).
+  - **One issue caught + fixed during testing**: Motor blocks attribute-style access for collection names starting with `_` (collision with private attrs). Switched `db._migration_state.update_one(...)` → `db["_migration_state"].update_one(...)`. Also fixed a `log_admin_action` call site that used the wrong kwarg names.
+  - **Phase 1 ships the agent-readable normalized layer alongside the existing writers**. Phase 2 (NOT in this PR) will rewrite the compose / scheduler / OS-chain writers to use the new collections as source-of-truth and populate `performance_metrics` from the engagement refresh cron.
+
+
 - 2026-05-28 (part 57) **📡 Real-time HITL approval inbox via WebSocket**
   - **New backend module `routes/realtime.py`** (≈210 lines) — process-local connection registry + auth + fanout:
     - **`/api/ws/hitl-inbox`** WebSocket endpoint mounted directly on the global `app` (FastAPI APIRouter doesn't yet expose `.websocket()`). Authenticates via three fallback paths: `?token=` query param, `session_token` cookie (browser default), or `Authorization: Bearer …` header.

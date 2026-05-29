@@ -363,3 +363,37 @@ async def admin_audit_log(request: Request, limit: int = 200):
     await require_admin(request)
     cursor = db.audit_log.find({}, {"_id": 0}).sort("created_at", -1).limit(limit)
     return await cursor.to_list(limit)
+
+
+
+@api.post("/admin/migrations/normalize/run")
+async def admin_run_normalize_migration(request: Request):
+    """One-shot trigger for the data-model normalization migration.
+    Idempotent — safe to call from a deploy hook or the admin UI when
+    a startup hook didnt complete (e.g. mid-deploy timeout)."""
+    admin = await require_admin(request)
+    from migrations.normalize_001 import migrate_now
+    result = await migrate_now()
+    await log_admin_action(admin, "migration.normalize_001", details=result)
+    return {"ok": True, "result": result}
+
+
+@api.get("/admin/migrations/normalize/status")
+async def admin_normalize_status(request: Request):
+    await require_admin(request)
+    from migrations.normalize_001 import MIGRATION_ID, needs_migration
+    state = await db["_migration_state"].find_one({"_id": MIGRATION_ID}, {"_id": 0})
+    return {
+        "id":              MIGRATION_ID,
+        "needs_migration": await needs_migration(),
+        "last_run":        state,
+        "counts": {
+            "users":             await db.users.count_documents({"status": {"$ne": "deleted"}}),
+            "brands":            await db.brands.count_documents({}),
+            "campaigns_no_brand": await db.campaigns.count_documents({"brand_id": {"$exists": False}}),
+            "posts_no_brand":     await db.posts.count_documents({"brand_id": {"$exists": False}}),
+            "content_items":     await db.content_items.count_documents({}),
+            "content_variants":  await db.content_variants.count_documents({}),
+        },
+    }
+

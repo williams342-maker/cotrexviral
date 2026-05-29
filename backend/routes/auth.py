@@ -71,6 +71,20 @@ async def create_session(request: Request, response: Response):
             }
         )
 
+    # Auto-create a default brand for every signup. Idempotent so
+    # re-runs (e.g. after a reactivation) are safe. This is the
+    # `brand_id` every downstream collection FKs on (decision 1c).
+    try:
+        from routes.brands import ensure_default_brand_for_user
+        await ensure_default_brand_for_user(user_id, name_hint=name)
+    except Exception:
+        # Brand auto-create failure must NEVER block login — the
+        # migration cron will pick the user up on the next run.
+        import logging
+        logging.getLogger(__name__).exception(
+            "ensure_default_brand_for_user failed for %s", user_id,
+        )
+
     # Fire welcome email for new users (background — never blocks login).
     if is_new_user:
         from routes.email import send_welcome_email, fire

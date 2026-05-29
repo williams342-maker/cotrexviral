@@ -67,6 +67,23 @@ async def _provision_stripe():
     except Exception:
         logger.exception("Stripe product provisioning failed (continuing)")
 
+
+# Run the data-model normalization migration on startup. Idempotent —
+# `needs_migration()` is a cheap check; the heavy backfill only fires
+# the first time a deploy lands on an un-migrated cluster.
+@app.on_event("startup")
+async def _run_normalize_migration():
+    try:
+        from migrations.normalize_001 import needs_migration, migrate_now
+        if await needs_migration():
+            logger.info("normalize_001: starting backfill on startup")
+            result = await migrate_now()
+            logger.info("normalize_001: backfill done — %s", result)
+        else:
+            logger.debug("normalize_001: no backfill needed")
+    except Exception:
+        logger.exception("normalize_001 migration failed (app still booting)")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,

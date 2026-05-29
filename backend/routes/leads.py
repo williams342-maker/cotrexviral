@@ -47,6 +47,12 @@ async def create_lead(payload: LeadCreate, request: Request):
                     "created_via": "lead_form",
                     "lead_agent": lead.agent_id,
                 })
+                # Auto-create default brand (decision 1c).
+                try:
+                    from routes.brands import ensure_default_brand_for_user
+                    await ensure_default_brand_for_user(new_user_id, name_hint=lead.name)
+                except Exception:
+                    logger.exception("ensure_default_brand_for_user failed for %s", new_user_id)
             # Generate a temp password — emailed separately (see send_temp_password_email
             # below). The user can sign in with email + temp pw and will be
             # forced to set their own password on first login.
