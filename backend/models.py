@@ -188,6 +188,12 @@ class PublishRequest(BaseModel):
     # Optional carousel — Pinterest accepts up to 5 image URLs. If set,
     # supersedes `media_url` for the Pinterest dispatcher.
     pinterest_images: Optional[List[str]] = Field(default=None, max_length=5)
+    # YouTube-specific (only used when "youtube" is in platforms). The
+    # scheduler dispatcher reads these straight off the posts row.
+    video_url:        Optional[str] = None
+    youtube_title:    Optional[str] = Field(default=None, max_length=100)
+    youtube_tags:     Optional[List[str]] = None
+    youtube_privacy:  Optional[str] = Field(default=None)  # public|unlisted|private
 
 
 class ScheduledUpdate(BaseModel):

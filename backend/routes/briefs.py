@@ -279,7 +279,10 @@ async def _llm_propose_briefs(facts: dict, max_briefs: int = MAX_BRIEFS_PER_SCAN
         )
 
         text, _ = await _asyncio.wait_for(
-            send_with_usage(chat, UserMessage(text=prompt)),
+            send_with_usage(chat, UserMessage(text=prompt),
+                            agent_id="atlas",
+                            user_id=user_id,
+                            model="gpt-5-mini"),
             timeout=30,
         )
         cleaned = re.sub(r"^```(?:json)?\s*", "", (text or "").strip())

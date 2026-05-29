@@ -88,10 +88,19 @@ def _llm(session_id: str, system: str,
     return chat
 
 
-async def send_with_usage(chat, user_message) -> tuple[str, dict]:
+async def send_with_usage(chat, user_message, *,
+                          agent_id: Optional[str] = None,
+                          user_id: Optional[str] = None,
+                          model: str = "gpt-5-mini") -> tuple[str, dict]:
     """Drop-in replacement for `chat.send_message(user_message)` that ALSO
     returns the raw LLM token usage. Returns `(text, {prompt_tokens,
     completion_tokens, total_tokens})`.
+
+    Phase 5 hookup: when `agent_id` AND `user_id` are passed, the function
+    also ticks `routes.autonomy.record_usage()` with the token count + an
+    estimated USD spend. This is what makes the Team Performance + Autonomy
+    headroom bars reflect real burn. Callers that don't supply these args
+    (e.g. anonymous code paths or tests) get the legacy behavior.
 
     We bypass `LlmChat.send_message` so we can read `response.usage` off
     the underlying `litellm.ModelResponse` (the public `send_message`
@@ -120,7 +129,42 @@ async def send_with_usage(chat, user_message) -> tuple[str, dict]:
         usage["prompt_tokens"]     = int(getattr(u, "prompt_tokens", 0) or 0)
         usage["completion_tokens"] = int(getattr(u, "completion_tokens", 0) or 0)
         usage["total_tokens"]      = int(getattr(u, "total_tokens", 0) or 0)
+
+    # Phase 5: tick the agent budget ledger. Best-effort — never block on it.
+    if agent_id and user_id and usage["total_tokens"] > 0:
+        try:
+            from routes.autonomy import record_usage
+            usd = _estimate_usd(model, usage["prompt_tokens"], usage["completion_tokens"])
+            await record_usage(
+                agent_id, user_id,
+                tokens=usage["total_tokens"], usd=usd,
+            )
+        except Exception:
+            logger.debug("send_with_usage ledger tick skipped", exc_info=True)
     return text, usage
+
+
+# Rough USD cost per 1M tokens for the models we use. Keep this conservative
+# (round UP) so the Autonomy page tends to overestimate spend rather than
+# under-report. Source: OpenAI pricing page (April 2026 snapshot).
+_MODEL_USD_PER_1M = {
+    "gpt-5":           {"input": 5.00, "output": 15.00},
+    "gpt-5-mini":      {"input": 0.30, "output": 1.20},
+    "gpt-5.2":         {"input": 5.00, "output": 15.00},
+    "gpt-4o":          {"input": 2.50, "output": 10.00},
+    "gpt-4o-mini":     {"input": 0.15, "output": 0.60},
+    "claude-sonnet-4-5": {"input": 3.00, "output": 15.00},
+    "gemini-2.5-pro":  {"input": 1.25, "output": 5.00},
+}
+
+
+def _estimate_usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
+    """Token counts → estimated USD. Falls back to the gpt-5-mini price
+    when the model isn't in the table (better than recording $0)."""
+    pricing = _MODEL_USD_PER_1M.get(model) or _MODEL_USD_PER_1M["gpt-5-mini"]
+    cost = (prompt_tokens / 1_000_000) * pricing["input"]
+    cost += (completion_tokens / 1_000_000) * pricing["output"]
+    return round(cost, 6)
 
 
 async def _fetch_url_snippet(url: str) -> str:

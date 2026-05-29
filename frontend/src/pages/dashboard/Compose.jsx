@@ -65,8 +65,13 @@ const Compose = () => {
   const [pinExtraImages, setPinExtraImages] = useState([]);
   const [pinLink, setPinLink] = useState('');
   const [pinTitle, setPinTitle] = useState('');
+  // YouTube-specific publishing state. Surfaces only when YouTube is selected.
+  const [ytVideoUrl, setYtVideoUrl] = useState('');
+  const [ytTitle, setYtTitle] = useState('');
+  const [ytPrivacy, setYtPrivacy] = useState('private');
 
   const pinterestSelected = !!selected.pinterest;
+  const youtubeSelected = !!selected.youtube;
 
   // Fetch the user's boards the first time Pinterest is selected, then cache.
   useEffect(() => {
@@ -261,6 +266,19 @@ const Compose = () => {
       if (!payload.media_url && pinImageUrl.trim()) {
         payload.media_url = pinImageUrl.trim();
       }
+      // YouTube needs a downloadable video URL. The scheduler dispatcher
+      // reads {video_url, youtube_title, youtube_tags, youtube_privacy}.
+      if (platforms.includes('youtube')) {
+        if (!ytVideoUrl.trim()) {
+          toast({ title: 'YouTube needs a video URL', description: 'Paste a direct .mp4/.mov URL — YouTube requires a video file.' });
+          setPublishing(false);
+          return;
+        }
+        payload.video_url = ytVideoUrl.trim();
+        if (ytTitle.trim()) payload.youtube_title = ytTitle.trim().slice(0, 100);
+        if (hashtags.length) payload.youtube_tags = hashtags;
+        payload.youtube_privacy = ytPrivacy;
+      }
       const r = await axios.post(`${API}/channels/publish`, payload, { withCredentials: true });
       const isScheduled = r.data.status === 'scheduled';
       const wasSeries = Array.isArray(r.data.ids) && r.data.ids.length > 1;
@@ -279,6 +297,9 @@ const Compose = () => {
       setAiTimeMeta(null);
       setRepeatWeekly(false);
       setPinExtraImages([]);
+      setYtVideoUrl('');
+      setYtTitle('');
+      setYtPrivacy('private');
     } catch (e) {
       toast({ title: 'Publishing failed' });
     } finally {
@@ -509,6 +530,48 @@ const Compose = () => {
                   data-testid="compose-pin-title"
                   className="h-9 rounded-lg border-neutral-300 text-[12.5px]"
                 />
+              </div>
+            </div>
+          )}
+
+          {youtubeSelected && (
+            <div className="mt-4 rounded-2xl border border-red-100 bg-red-50/40 p-3.5 space-y-2.5" data-testid="compose-youtube-block">
+              <div className="text-[11px] uppercase tracking-wider text-red-700 font-bold">▶ YouTube details</div>
+              <div>
+                <label className="text-[11px] font-medium text-neutral-600 mb-1 block">Video URL *</label>
+                <Input
+                  type="url"
+                  value={ytVideoUrl}
+                  onChange={(e) => setYtVideoUrl(e.target.value)}
+                  placeholder="https://…/video.mp4"
+                  data-testid="compose-yt-video-url"
+                  className="h-9 rounded-lg border-neutral-300 text-[12.5px]"
+                />
+                <div className="text-[10.5px] text-neutral-500 mt-1">Direct URL to an .mp4 / .mov / .webm. We download → resumable upload to YouTube. Max 256 MiB.</div>
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-neutral-600 mb-1 block">Title <span className="text-neutral-400">(optional, ≤ 100 chars — defaults to first caption line)</span></label>
+                <Input
+                  value={ytTitle}
+                  onChange={(e) => setYtTitle(e.target.value.slice(0, 100))}
+                  placeholder="Catchy title or leave blank"
+                  data-testid="compose-yt-title"
+                  className="h-9 rounded-lg border-neutral-300 text-[12.5px]"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-neutral-600 mb-1 block">Privacy</label>
+                <select
+                  value={ytPrivacy}
+                  onChange={(e) => setYtPrivacy(e.target.value)}
+                  data-testid="compose-yt-privacy"
+                  className="w-full h-9 rounded-lg border border-neutral-300 bg-white px-2 text-[12.5px]"
+                >
+                  <option value="private">Private (only you — recommended for first publish)</option>
+                  <option value="unlisted">Unlisted (anyone with the link)</option>
+                  <option value="public">Public</option>
+                </select>
+                <div className="text-[10.5px] text-neutral-500 mt-1">Tags below come from your hashtags. Description is your caption.</div>
               </div>
             </div>
           )}

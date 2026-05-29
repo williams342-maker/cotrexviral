@@ -35,6 +35,37 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 73) **🔌 Compose-YouTube wiring + LLM ledger ticks + Echo→Ori handoff**
+
+  **A. Compose page now publishes to YouTube**
+  - `Compose.jsx` — 3 new state vars (`ytVideoUrl`, `ytTitle`, `ytPrivacy`), a red-themed `compose-youtube-block` panel that surfaces when YouTube is selected, and form-validation logic that blocks publish when `video_url` is empty. Hashtags from the existing input flow straight through as YouTube `tags`.
+  - `PublishRequest` model — 4 new optional fields: `video_url`, `youtube_title (≤100)`, `youtube_tags (list)`, `youtube_privacy`. Persisted on the `posts` row alongside the existing per-platform fields, so the scheduler dispatcher (already wired in part 72) reads them and uploads.
+  - `/channels/publish` route — sets the YouTube fields onto every created post (single + recurring schedule paths).
+  - **Operator flow**: select YouTube → paste video URL + optional title + privacy → publish (immediate or scheduled). Scheduler dispatches at the right time via `publish_to_youtube`, which downloads the file and resumable-uploads to YT.
+  - Pytest: `POST /channels/publish` with YouTube fields persists them on the `posts` row exactly as expected (`video_url`, `youtube_title`, `youtube_privacy`, `youtube_tags`).
+
+  **B. Phase 5 — LLM call sites now tick the ledger**
+  - `routes.ai.send_with_usage()` signature extended with optional `agent_id`, `user_id`, `model` kwargs (legacy callers unaffected — both default to `None`).
+  - When both `agent_id` AND `user_id` are passed, after the call completes the function calls `routes.autonomy.record_usage(agent_id, user_id, tokens=total, usd=estimated)` — best-effort, never blocks the LLM result on a ledger hiccup.
+  - **`_estimate_usd(model, prompt, completion)`** — model→price table (gpt-5, gpt-5-mini, gpt-5.2, gpt-4o, gpt-4o-mini, claude-sonnet-4-5, gemini-2.5-pro). Unknown models fall back to gpt-5-mini pricing. Round-trip pytest: 1000 input + 500 output on gpt-5-mini → $0.0009.
+  - **Wired call sites**:
+    - `briefs._llm_propose_briefs` → `agent_id="atlas"` (every Atlas proposal burn ticks Atlas)
+    - `agent_messaging.query_agent` → `agent_id=to_agent` (every bus reply ticks the RESPONDING agent — Lyra burns her own budget when she answers Atlas)
+  - **Net effect**: the Team Performance + Autonomy headroom bars now reflect real burn after a few propose / chatter cycles. Pytest verifies: ledger snapshot for Lyra = 0 tokens before, > 0 tokens after a real `query_agent` call.
+
+  **C. Echo → Ori hand-off (Phase 6 expansion)**
+  - `/ai/optimal-times` now does an Echo → Ori consultation: *"For these platforms, which winning content patterns from your experiment memory should we lean on when picking a time? Cite specifics if you have them, else say 'no priors'."* Fires only when niche OR audience is present (the rationale path was already gated this way).
+  - Ori's reply (`ori_insight`) is appended to Kai's system prompt before generating the rationale paragraph, so the timing recommendations now cite past learnings when Ori has them.
+  - Response shape adds `ori_insight` field — frontend can show it as a separate "what we've learned" tooltip.
+  - Pytest: with niche+audience → ≥1 `agent_messages` row from echo→ori within 5 min; without → zero new rows (no spurious bus traffic).
+
+  **Tests + regression**
+  - 6 new pytest cases (`tests/test_compose_ledger_echo_ori.py`): USD math, USD fallback for unknown models, ledger tick on real LLM call, Compose persists YouTube fields, Echo→Ori writes message, no bus traffic without niche/audience.
+  - **71/71 across the bundle** (test_compose_ledger_echo_ori + test_team_perf_youtube_handoffs + test_agent_messaging + test_autonomy + test_briefs + test_experiments + test_growth_team). All green.
+
+  **Why this matters**: the operator now has a single Compose form that drives every channel including YouTube, the budget bars stop lying (real burn shows up), and Echo's time suggestions are anchored to past winners instead of pure heuristics. The autonomous team is now feeding itself data — each handoff teaches the next decision.
+
+
 - 2026-05-29 (part 72) **📊 Team Performance + Atlas multi-handoff + YouTube publish/analytics (operator UX polish + Phase 6 expansion + execution layer)**
 
   **A. `/dashboard/team-performance` — bird's-eye view of the week**

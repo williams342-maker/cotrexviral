@@ -165,6 +165,11 @@ async def publish(payload: PublishRequest, request: Request):
                 post["pinterest_board_id"] = payload.pinterest_board_id
                 post["pinterest_link"] = payload.pinterest_link
                 post["pinterest_title"] = payload.pinterest_title
+            if "youtube" in (payload.platforms or []):
+                post["video_url"]       = payload.video_url
+                post["youtube_title"]   = payload.youtube_title
+                post["youtube_tags"]    = payload.youtube_tags
+                post["youtube_privacy"] = payload.youtube_privacy
             await db.posts.insert_one(post)
             await mirror_post_to_normalized(post)
             created_posts.append(post["id"])
@@ -194,6 +199,11 @@ async def publish(payload: PublishRequest, request: Request):
         post["pinterest_title"] = payload.pinterest_title
         if payload.pinterest_images:
             post["pinterest_images"] = payload.pinterest_images
+    if "youtube" in (payload.platforms or []):
+        post["video_url"]       = payload.video_url
+        post["youtube_title"]   = payload.youtube_title
+        post["youtube_tags"]    = payload.youtube_tags
+        post["youtube_privacy"] = payload.youtube_privacy
     await db.posts.insert_one(post)
     await mirror_post_to_normalized(post)
 
@@ -445,12 +455,34 @@ async def ai_optimal_times(payload: OptimalTimesRequest, request: Request):
 
     # Optional AI rationale (kept short to avoid heavy LLM cost on every call)
     rationale = None
+    ori_insight = None  # Echo → Ori hand-off (Phase 6)
     if payload.niche or payload.audience:
+        # Echo → Ori: "given the user's niche + platforms, what winning
+        # patterns from your memory should I cite?" Best-effort, single
+        # call, logged to agent_messages so it shows up in /chatter.
+        try:
+            from routes.agent_messaging import query_agent
+            r = await query_agent(
+                user_id=user.user_id, from_agent="echo", to_agent="ori",
+                query=("For these platforms, which winning content patterns from "
+                       "your experiment memory should we lean on when picking a "
+                       "time? Cite specifics if you have them, else say 'no priors'."),
+                context_str=(f"Niche: {payload.niche or '—'}\n"
+                             f"Audience: {payload.audience or '—'}\n"
+                             f"Platforms: {', '.join(payload.platforms)}"),
+            )
+            if r.get("ok"):
+                ori_insight = (r.get("response") or "").strip()
+        except Exception:
+            logger.debug("Echo→Ori hand-off skipped", exc_info=True)
+
         try:
             system = (
                 "You are Kai, social timing strategist. In ONE short paragraph (<60 words) "
                 "explain why these timing recommendations fit the user's niche & audience. "
                 "Be specific and confident."
+                + (f"\n\nLean on this learning from Ori's memory if relevant:\n{ori_insight}"
+                   if ori_insight else "")
             )
             chat = _llm(f"times-{user.user_id}", system)
             ask = f"Niche: {payload.niche}\nAudience: {payload.audience}\nPlatforms: {', '.join(payload.platforms)}"
@@ -458,4 +490,4 @@ async def ai_optimal_times(payload: OptimalTimesRequest, request: Request):
         except Exception:
             rationale = None
 
-    return {"slots": results, "rationale": rationale}
+    return {"slots": results, "rationale": rationale, "ori_insight": ori_insight}

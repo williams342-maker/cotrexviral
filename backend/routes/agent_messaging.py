@@ -136,7 +136,10 @@ async def query_agent(
             f"Context they shared:\n{context_str or '(no extra context)'}"
         )
         text, _usage = await _asyncio.wait_for(
-            send_with_usage(chat, UserMessage(text=prompt)),
+            send_with_usage(chat, UserMessage(text=prompt),
+                            agent_id=to_agent,
+                            user_id=user_id,
+                            model="gpt-5-mini"),
             timeout=20,
         )
         response = (text or "").strip() or "(no reply)"
