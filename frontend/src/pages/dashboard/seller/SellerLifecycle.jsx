@@ -81,13 +81,6 @@ const SellerConversationsLive = () => {
     }
   };
 
-  const openArtifact = (artifactId) => {
-    if (!artifactId) return;
-    // Use Bearer header via a temporary fetch to download the HTML and open it.
-    // Easier UX: navigate to the download URL — cookie auth carries through.
-    window.open(`${API}/seller-offers/${artifactId}/download.html`, '_blank', 'noopener');
-  };
-
   return (
     <DashboardLayout
       title="Seller OS · Conversations"
@@ -164,18 +157,25 @@ const SellerConversationsLive = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <button onClick={() => generateOffer(false)} disabled={active.stage !== 'qualified'}
-                          data-testid="conv-send-offer"
-                          title={active.stage !== 'qualified' ? `Outreach disabled — lead is ${active.stage}` : 'Generate a fresh offer'}
-                          className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md bg-white/5 hover:bg-white/10 text-zinc-200 transition flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed">
-                    <Send size={11} /> Send offer
-                  </button>
-                  <button onClick={() => generateOffer(true)} disabled={active.stage !== 'qualified'}
-                          data-testid="conv-send-offer-artifact"
-                          title={active.stage !== 'qualified' ? `Outreach disabled — lead is ${active.stage}` : 'Generate a personalized audit and attach it to the message'}
-                          className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md bg-violet-500/15 hover:bg-violet-500/25 text-violet-300 transition flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed">
-                    <FileText size={11} /> Send + audit
-                  </button>
+                  {(() => {
+                    const canOutreach = ['qualified', 'discovered', 'outreached', 'interested'].includes(active.stage);
+                    return (
+                      <>
+                        <button onClick={() => generateOffer(false)} disabled={!canOutreach}
+                                data-testid="conv-send-offer"
+                                title={!canOutreach ? `Outreach paused — lead is ${active.stage}` : 'Generate a fresh outreach message'}
+                                className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md bg-white/5 hover:bg-white/10 text-zinc-200 transition flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed">
+                          <Send size={11} /> Send offer
+                        </button>
+                        <button onClick={() => generateOffer(true)} disabled={!canOutreach}
+                                data-testid="conv-send-offer-artifact"
+                                title={!canOutreach ? `Outreach paused — lead is ${active.stage}` : 'Generate a personalized audit and attach it to the message'}
+                                className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md bg-violet-500/15 hover:bg-violet-500/25 text-violet-300 transition flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed">
+                          <FileText size={11} /> Send + audit
+                        </button>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
               {thread?.events?.length ? (
@@ -193,11 +193,12 @@ const SellerConversationsLive = () => {
                         </div>
                         {e.body && <div className="text-[12.5px] text-zinc-300 whitespace-pre-line">{e.body}</div>}
                         {e.artifact_id && (
-                          <button onClick={() => openArtifact(e.artifact_id)}
-                                  data-testid={`conv-artifact-${e.id}`}
-                                  className="mt-2 text-[11.5px] font-semibold text-violet-300 hover:text-violet-200 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-violet-500/10 hover:bg-violet-500/20 transition">
+                          <a href={`${API}/seller-offers/${e.artifact_id}/download.html`}
+                             target="_blank" rel="noopener noreferrer"
+                             data-testid={`conv-artifact-${e.id}`}
+                             className="mt-2 text-[11.5px] font-semibold text-violet-300 hover:text-violet-200 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-violet-500/10 hover:bg-violet-500/20 transition">
                             <FileText size={11} /> View attached audit <ExternalLink size={10} />
-                          </button>
+                          </a>
                         )}
                       </div>
                     );

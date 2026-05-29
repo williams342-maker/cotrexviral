@@ -35,6 +35,24 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 83) **🟣 Seller Acquisition OS — Phase 4 (Offer Artifacts) + Phase 8 (Churn Intel)**
+
+  **Phase 4 — AI personalized offer artifacts with downloadable audits**
+  - `routes/seller_offers.py` — LLM (Nova, gpt-5) generates a STRICT-JSON audit (5 recipes: SEO / Marketplace Growth / Product Optimization / Free Onboarding / Featured Invite). Each audit has `title`, `summary`, `score` (0-100), `sections[{heading, body, recommendations[]}]`, persisted in `seller_offer_artifacts`.
+  - 4 endpoints: `POST /seller-offers/generate`, `GET /seller-offers/lead/{lead_id}`, `GET /seller-offers/{id}`, `GET /seller-offers/{id}/download.html` (serves a styled dark-themed HTML page with title + score bar + sections; cookie-authed so users can right-click → open in new tab).
+  - Wired into outreach: `POST /seller-outreach/generate {attach_artifact: true}` now also generates + persists the audit and stamps `artifact_id` on the `sent` event. The Conversations UI renders a "View attached audit" anchor link (`<a href=...>`) per event with `artifact_id`.
+  - **Side-fix**: relaxed outreach stage gate from `{qualified, discovered}` → `{qualified, discovered, outreached, interested}` so follow-up audit messages work (previously buttons were dead UI because threads list only shows outreached/interested leads). `rejected/active/churned` still blocked.
+
+  **Phase 8 — Advanced Retention Intelligence (multi-signal churn risk)**
+  - `routes/seller_retention_intel.py` — replaces the simple 30d/60d heuristic with a weighted 4-signal model: `inactivity` (55%), `activity_drop` (20%), `social_silence` (15%), `score_trajectory` (10%). Returns `score` 0-100 + top 3 reasons.
+  - `seller_churn_scores` upserts ONE row per (user_id, lead_id) — re-scoring overwrites, never duplicates.
+  - **Auto-launched workflows**: `score ≥ 60` spawns a 3-step `seller_retention_workflows` row (send_offer → nudge_message → operator_alert). Step 1 (`send_offer`) auto-executes a `marketplace_growth` audit artifact and stamps `artifact_id` on the step. Subsequent steps advance manually via `POST /seller-retention/intel/workflows/{id}/advance` (with a placeholder for the cron). `40 ≤ score < 60` → emits a `severity=at_risk` retention alert (no workflow).
+  - 4 endpoints: `POST /seller-retention/intel/score` (one lead OR bulk-scan all active), `GET /seller-retention/intel/scores`, `GET /seller-retention/intel/workflows`, `POST /seller-retention/intel/workflows/{id}/advance`.
+  - **Retention UI redesigned**: 2 header CTAs (`Heuristic scan` keeps the legacy 30d/60d cron; `Score churn risk` runs the new intel scan). Page now shows: (1) Active retention workflows card with 3-segment progress bars + advance button, (2) Churn-risk scores sorted desc with severity-tinted bars, (3) Legacy heuristic alerts list. Empty-state CTA prompts a first scan.
+
+  **Tests**: `test_seller_os_phase4_8.py` (10/10 pass: artifact gen + HTML render + outreach attach + churn signals + healthy/high-risk thresholds + workflow advance + score idempotency + bulk scan). Prior `test_seller_os_phase1.py` (12/12) + `test_seller_os_phase23.py` (10/10) still pass. **Backend total: 32/32 across all 4 Seller-OS phases.**
+
+
 - 2026-05-29 (part 82) **🟣 Seller Acquisition OS — Phase 2/3 frontend LIVE**
 
   Replaced the 4 placeholder pages with fully wired live components in `/app/frontend/src/pages/dashboard/seller/SellerLifecycle.jsx`:

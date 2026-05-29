@@ -255,7 +255,7 @@ async def generate_outreach(payload: OutreachGenerate, request: Request):
     lead = await db.seller_leads.find_one({"id": payload.lead_id, "user_id": user.user_id})
     if not lead:
         raise HTTPException(404, "Lead not found")
-    if lead["stage"] not in ("qualified", "discovered"):
+    if lead["stage"] not in ("qualified", "discovered", "outreached", "interested"):
         raise HTTPException(400,
             f"Cannot outreach to lead in stage '{lead['stage']}'. "
             f"Qualify it first."
@@ -267,7 +267,6 @@ async def generate_outreach(payload: OutreachGenerate, request: Request):
     channel = payload.channel or _pick_channel(lead)
     if channel not in CHANNELS:
         raise HTTPException(400, f"Unknown channel: {channel}")
-
     mission_title = None
     if lead.get("mission_id"):
         m = await db.missions.find_one({"id": lead["mission_id"]})
