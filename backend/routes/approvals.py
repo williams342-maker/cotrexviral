@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from core import db, api, logger
 from deps import get_current_user
-from routes.content_layer import propagate_status_to_variants
+from routes.content_layer import propagate_status_to_variants, resolve_post_ids_for_status
 
 
 class _SettingsPayload(BaseModel):
@@ -63,11 +63,17 @@ async def set_settings(payload: _SettingsPayload, request: Request):
 
 @api.get("/approvals")
 async def list_pending(request: Request):
-    """Pending posts for the caller, newest first."""
+    """Pending posts for the caller, newest first. Phase 3 reads via the
+    normalized `content_variants` index with a lenient fallback to the
+    legacy `posts` query for un-mirrored stragglers."""
     user = await get_current_user(request)
+    post_ids, _ = await resolve_post_ids_for_status(
+        user.user_id, status="pending_approval",
+    )
+    if not post_ids:
+        return {"pending": [], "count": 0}
     cursor = db.posts.find(
-        {"user_id": user.user_id, "status": "pending_approval"},
-        {"_id": 0},
+        {"id": {"$in": post_ids}}, {"_id": 0},
     ).sort("scheduled_at", 1).limit(200)
     items = await cursor.to_list(length=200)
     return {"pending": items, "count": len(items)}

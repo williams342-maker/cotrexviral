@@ -307,3 +307,78 @@ async def cascade_delete_for_posts(post_ids: Iterable[str]) -> None:
             )
     except Exception as exc:  # pragma: no cover
         logger.exception("cascade_delete_for_posts failed: %s", exc)
+
+
+
+# ---------------------------------------------------------------------
+# Phase 3 — read-side cutover helpers.
+#
+# These let route handlers resolve "all posts matching {status, user, time
+# range}" via the normalized layer (the agent-readable source-of-truth)
+# instead of querying `db.posts` directly.
+#
+# The pattern is two-step: (1) get matching post_ids from
+# `content_variants` (which is now the index for status + scheduling
+# state), (2) fetch full post documents from `db.posts` via those ids.
+#
+# Step (2) keeps backwards compat — the legacy posts row still carries
+# fields like `dispatch`, `recurrence_group_id`, `pinterest_*` that
+# haven't been mirrored. Phase 4 will lift those fields into the
+# normalized layer and eliminate the second hop entirely.
+#
+# **Lenient fallback** — if a post somehow lacks a normalized mirror
+# (mirror failure, pre-Phase-1 row that escaped backfill), it's still
+# included in the result by falling back to a direct `db.posts` query.
+# A warning is logged so we can observe the un-mirrored set shrinking
+# toward zero before cutting over to a strict read in a future phase.
+# ---------------------------------------------------------------------
+async def resolve_post_ids_for_status(
+    user_id: str,
+    *,
+    status: str,
+    scheduled_after: Optional[datetime] = None,
+    scheduled_before: Optional[datetime] = None,
+) -> tuple[list[str], int]:
+    """Return (post_ids, n_unmirrored) for all posts matching the filter.
+
+    `n_unmirrored` is the count of posts found in the legacy `posts`
+    collection that DON'T have a normalized mirror — useful for the
+    /admin/content-layer/health endpoint that surfaces migration drift.
+    """
+    # --- Step 1: normalized layer ---
+    v_match: dict = {"user_id": user_id, "status": status}
+    if scheduled_after or scheduled_before:
+        sched: dict = {}
+        if scheduled_after:
+            sched["$gte"] = scheduled_after
+        if scheduled_before:
+            sched["$lte"] = scheduled_before
+        v_match["scheduled_at"] = sched
+
+    variants = await db.content_variants.find(
+        v_match, {"_id": 0, "post_id": 1},
+    ).to_list(length=2000)
+    normalized_ids: set[str] = {v["post_id"] for v in variants if v.get("post_id")}
+
+    # --- Step 2: lenient fallback — catch any un-mirrored stragglers ---
+    p_match: dict = {
+        "user_id": user_id,
+        "status": status,
+        "$or": [
+            {"content_item_id": {"$exists": False}},
+            {"content_item_id": None},
+        ],
+    }
+    if "scheduled_at" in v_match:
+        p_match["scheduled_at"] = v_match["scheduled_at"]
+    unmirrored = await db.posts.find(p_match, {"_id": 0, "id": 1}).to_list(length=2000)
+    unmirrored_ids = {p["id"] for p in unmirrored}
+
+    if unmirrored_ids:
+        logger.warning(
+            "resolve_post_ids_for_status: %d un-mirrored posts for user=%s status=%s — "
+            "they'll still appear in reads but should be normalized",
+            len(unmirrored_ids), user_id, status,
+        )
+
+    return list(normalized_ids | unmirrored_ids), len(unmirrored_ids)

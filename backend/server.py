@@ -53,6 +53,7 @@ from routes import (  # noqa: F401
     marketing_os,    # Marketing OS — 5-role chain + Command Center dashboard
     realtime,        # WebSocket fanout: real-time HITL inbox
     perf_metrics,    # Performance metrics — time-series + rollup + attribution API
+    content_layer_admin,  # Phase 3 — drift / mirror coverage health endpoint
 )
 
 

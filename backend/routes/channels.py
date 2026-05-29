@@ -13,6 +13,7 @@ from routes.content_layer import (
     mirror_post_to_normalized,
     propagate_status_to_variants,
     cascade_delete_for_posts,
+    resolve_post_ids_for_status,
 )
 
 
@@ -267,16 +268,20 @@ async def publish(payload: PublishRequest, request: Request):
 
 @api.get("/posts/scheduled")
 async def list_scheduled(request: Request, start: Optional[str] = None, end: Optional[str] = None):
+    """List scheduled posts for the user. Phase 3 reads the normalized
+    `content_variants` index to resolve which posts match, then fetches
+    full post documents via the cross-ref. Falls back leniently to the
+    legacy `posts` query for any un-mirrored stragglers."""
     user = await get_current_user(request)
-    query = {"user_id": user.user_id, "status": "scheduled"}
-    if start or end:
-        sched = {}
-        if start:
-            sched["$gte"] = datetime.fromisoformat(start.replace("Z", "+00:00"))
-        if end:
-            sched["$lte"] = datetime.fromisoformat(end.replace("Z", "+00:00"))
-        query["scheduled_at"] = sched
-    cursor = db.posts.find(query, {"_id": 0}).sort("scheduled_at", 1)
+    sched_after = datetime.fromisoformat(start.replace("Z", "+00:00")) if start else None
+    sched_before = datetime.fromisoformat(end.replace("Z", "+00:00")) if end else None
+    post_ids, _ = await resolve_post_ids_for_status(
+        user.user_id, status="scheduled",
+        scheduled_after=sched_after, scheduled_before=sched_before,
+    )
+    if not post_ids:
+        return []
+    cursor = db.posts.find({"id": {"$in": post_ids}}, {"_id": 0}).sort("scheduled_at", 1)
     return await cursor.to_list(500)
 
 

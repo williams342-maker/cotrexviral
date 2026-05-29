@@ -14,6 +14,7 @@ const AdminOverview = () => {
   const [llmSpend, setLlmSpend] = useState(null);
   const [spendDays, setSpendDays] = useState(30);
   const [memoryPerf, setMemoryPerf] = useState(null);
+  const [contentLayer, setContentLayer] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,6 +25,7 @@ const AdminOverview = () => {
       axios.get(`${API}/admin/email/health?hours=24`, { withCredentials: true }).then((r) => setEmailHealth(r.data)).catch(() => {}),
       axios.get(`${API}/admin/llm-spend?days=30`, { withCredentials: true }).then((r) => setLlmSpend(r.data)).catch(() => {}),
       axios.get(`${API}/admin/memory-perf`, { withCredentials: true }).then((r) => setMemoryPerf(r.data)).catch(() => {}),
+      axios.get(`${API}/admin/content-layer/health`, { withCredentials: true }).then((r) => setContentLayer(r.data)).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, []);
 
@@ -141,6 +143,8 @@ const AdminOverview = () => {
       </Section>
 
       <MemoryPerfCallout perf={memoryPerf} />
+
+      <ContentLayerCallout health={contentLayer} />
 
       <Section title="LLM model spend (estimated)">
         <LlmSpendCard
@@ -529,6 +533,88 @@ const MemoryPerfCallout = ({ perf }) => {
     </div>
   );
 };
+
+
+/* -------------- Content-layer drift / mirror-coverage callout ----------------- */
+/* Phase 3 read cutover relies on every legacy `posts` row carrying a
+   `content_item_id` cross-ref. This callout surfaces the un-mirrored
+   count + percentage so admins can see drift trend toward zero
+   before we cut over to strict-normalized reads (Phase 4). */
+const ContentLayerCallout = ({ health }) => {
+  if (!health) return null;
+  const triggered = health.drift_triggered;
+  if (!triggered) {
+    return (
+      <div
+        className="bg-white rounded-2xl p-4 border border-neutral-200/70 flex items-center gap-3 text-[12.5px] text-neutral-500"
+        data-testid="content-layer-card-healthy"
+      >
+        <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+          <Database size={14} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="text-neutral-700 font-medium">Content layer healthy</div>
+          <div className="text-neutral-500 tabular-nums">
+            {health.mirror_coverage_pct?.toFixed?.(1) ?? '0.0'}% mirror coverage ·
+            {' '}{health.mirrored_posts?.toLocaleString?.()} / {health.total_posts?.toLocaleString?.()} posts mirrored ·
+            {' '}{health.total_content_items?.toLocaleString?.()} items ·
+            {' '}{health.total_content_variants?.toLocaleString?.()} variants
+          </div>
+        </div>
+        <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold">OK</span>
+      </div>
+    );
+  }
+  return (
+    <div
+      className="rounded-2xl border border-amber-300/60 bg-gradient-to-br from-amber-50 via-white to-amber-50 p-5"
+      data-testid="content-layer-drift-callout"
+    >
+      <div className="flex items-start gap-4">
+        <span className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+          <Database size={18} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] uppercase tracking-widest text-amber-600 font-bold">Content layer drift</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded border border-amber-400/60 bg-amber-100 text-amber-700 font-semibold">
+              {health.unmirrored_posts} UN-MIRRORED
+            </span>
+          </div>
+          <div className="text-[13.5px] text-neutral-800 leading-relaxed">
+            <span className="font-semibold text-amber-700">{health.unmirrored_posts}</span> posts lack a normalized mirror
+            (threshold {health.drift_threshold}). Reads still surface them via the lenient fallback, but Phase 4
+            (strict-normalized reads) is blocked until this hits zero.
+          </div>
+          <div className="mt-2 text-[12px] text-neutral-600 tabular-nums">
+            Coverage <span className="font-semibold text-amber-700">{health.mirror_coverage_pct?.toFixed?.(2)}%</span> ·
+            {' '}{health.mirrored_posts?.toLocaleString?.()} / {health.total_posts?.toLocaleString?.()} mirrored ·
+            {' '}{health.total_content_items?.toLocaleString?.()} items ·
+            {' '}{health.total_content_variants?.toLocaleString?.()} variants
+          </div>
+          {Object.keys(health.unmirrored_by_status || {}).length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5" data-testid="content-layer-unmirrored-status">
+              {Object.entries(health.unmirrored_by_status).map(([status, n]) => (
+                <span
+                  key={status}
+                  className="text-[11px] px-2 py-0.5 rounded-full border border-amber-300/60 bg-amber-50 text-amber-700 font-medium tabular-nums"
+                >
+                  {status}: {n}
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="mt-3 text-[11px] text-neutral-500 italic">
+            Fix: re-run <code className="text-amber-700 bg-amber-100 px-1 rounded">POST /api/admin/migrations/normalize/run</code>
+            {' '}to backfill any stragglers.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 
 
 

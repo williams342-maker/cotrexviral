@@ -35,6 +35,30 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 61) **📖 Phase 3 — Read-side cutover to normalized layer**
+  - **`/api/posts/scheduled`** and **`/api/approvals`** now resolve matching posts via the normalized `content_variants` index (the agent-readable source-of-truth) instead of querying `db.posts` directly. Two-step read:
+    1. Query `content_variants` for matching `(user_id, status, scheduled_at range)` — this is the normalized index Phase 4 will treat as authoritative.
+    2. Hydrate full post documents from `db.posts` via the cross-ref ids — keeps backwards compat with the frontend (no schema change in the API response).
+  - **Lenient fallback** in `routes/content_layer.resolve_post_ids_for_status` — also fetches any legacy posts WITHOUT a `content_item_id` so a mirror failure or pre-migration straggler still surfaces. Logs a `WARN` line every time a fallback fires so we can watch drift trend toward zero before Phase 4 (drops the fallback for strict-normalized reads).
+  - **New observability endpoint `GET /api/admin/content-layer/health`** (`routes/content_layer_admin.py`) — admin-only, returns `{total_posts, mirrored_posts, unmirrored_posts, mirror_coverage_pct, total_content_items, total_content_variants, unmirrored_by_status, drift_threshold, drift_triggered}`. Drift trigger fires at ≥5 un-mirrored posts so Phase 4 isn't blocked silently.
+  - **New `ContentLayerCallout` on Admin Overview** (`pages/admin/AdminOverview.jsx`) — sits next to the existing memory-perf callout. Renders one of two states:
+    - **Healthy** (current state — 100% coverage): compact slate card with emerald "OK" badge. `data-testid="content-layer-card-healthy"`.
+    - **Drift** (when `unmirrored_posts ≥ 5`): amber gradient callout with per-status pills (`pending_approval: 2`, `scheduled: 1`, …) and a hint to re-run the normalize migration. `data-testid="content-layer-drift-callout"`.
+  - **Pre-existing bug fixed during smoke test**: `HitlInboxBell` was used in `DashboardLayout.jsx` but the import statement was missing — every dashboard route was crashing with `ReferenceError: HitlInboxBell is not defined`. Added the missing import.
+  - **8 new pytest cases** (`tests/test_phase3_read_cutover.py`):
+    - `/posts/scheduled` resolves via normalized layer (mirrored post shows up).
+    - `/posts/scheduled` lenient fallback (un-mirrored post still surfaces).
+    - `/posts/scheduled` `start/end` time-range filter still works after the cutover.
+    - `/approvals` resolves via normalized layer.
+    - `/approvals` lenient fallback.
+    - `/admin/content-layer/health` requires admin (401 without).
+    - `/admin/content-layer/health` returns the expected shape with all counters + drift flag math invariant (`mirrored + unmirrored == total`, `drift_triggered == (unmirrored >= threshold)`).
+    - `resolve_post_ids_for_status` returns the UNION of normalized + un-mirrored posts and reports the un-mirrored count.
+  - **96/96 regression** across phase3 + phase2 writer + normalize + attribution + meta_publish_and_approvals + auto_draft + recurrence + pinterest_publish + analytics_and_carousel + series_ops. All passing.
+  - **Live verified**: `GET /api/admin/content-layer/health` returns `{"total_posts": 150, "mirrored_posts": 150, "unmirrored_posts": 0, "mirror_coverage_pct": 100.0, "total_content_items": 284, "total_content_variants": 274, "drift_triggered": false}` — full coverage on the production user data. Admin overview screenshot confirmed the healthy emerald card rendered correctly.
+
+
+
 - 2026-05-29 (part 60) **🧬 Phase 2 — Writer migration to normalized content layer**
   - **New module `routes/content_layer.py`** — the single source of truth for mirroring writes to legacy `posts` → normalized `content_items` + `content_variants`. Three public helpers:
     - `mirror_post_to_normalized(post)` — creates 1 content_item + N variants (one per platform) for a freshly-inserted post, stamps `brand_id/content_item_id/variant_ids` cross-ref triple back on the legacy row. Idempotent (short-circuits if already mirrored). Best-effort (errors logged, never raised — the legacy row is still the read source-of-truth during the migration window).

@@ -4,6 +4,7 @@ import { LayoutDashboard, Sparkles, Search, Radar, Share2, Send, Inbox, FileText
 import { useAuth } from '../context/AuthContext';
 import ImpersonateBanner from './ImpersonateBanner';
 import BroadcastBanner from './BroadcastBanner';
+import HitlInboxBell from './HitlInboxBell';
 
 const items = [
   { to: '/dashboard/command-center', label: 'Command Center', icon: Command },
