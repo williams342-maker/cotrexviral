@@ -35,6 +35,12 @@ import Missions from './pages/dashboard/Missions';
 import CortexWorkspace from './pages/dashboard/CortexWorkspace';
 import TeamDetail from './pages/dashboard/TeamDetail';
 import AutonomyControl from './pages/dashboard/AutonomyControl';
+import SellerMissionControl from './pages/dashboard/seller/SellerMissionControl';
+import SellerDiscovery from './pages/dashboard/seller/SellerDiscovery';
+import QualifiedSellers from './pages/dashboard/seller/QualifiedSellers';
+import {
+  SellerConversations, SellerOnboarding, SellerRetention, SellerAnalytics,
+} from './pages/dashboard/seller/SellerPlaceholders';
 import Memory from './pages/dashboard/Memory';
 import Approvals from './pages/dashboard/Approvals';
 import Trends from './pages/dashboard/Trends';
@@ -114,6 +120,13 @@ function AppRouter() {
       <Route path="/dashboard/briefs" element={<ProtectedRoute><Briefs /></ProtectedRoute>} />
       <Route path="/dashboard/autonomy" element={<ProtectedRoute><Autonomy /></ProtectedRoute>} />
       <Route path="/dashboard/autonomy-control" element={<ProtectedRoute><AutonomyControl /></ProtectedRoute>} />
+      <Route path="/dashboard/seller-os" element={<ProtectedRoute><SellerMissionControl /></ProtectedRoute>} />
+      <Route path="/dashboard/seller-os/discovery" element={<ProtectedRoute><SellerDiscovery /></ProtectedRoute>} />
+      <Route path="/dashboard/seller-os/qualified" element={<ProtectedRoute><QualifiedSellers /></ProtectedRoute>} />
+      <Route path="/dashboard/seller-os/conversations" element={<ProtectedRoute><SellerConversations /></ProtectedRoute>} />
+      <Route path="/dashboard/seller-os/onboarding" element={<ProtectedRoute><SellerOnboarding /></ProtectedRoute>} />
+      <Route path="/dashboard/seller-os/retention" element={<ProtectedRoute><SellerRetention /></ProtectedRoute>} />
+      <Route path="/dashboard/seller-os/analytics" element={<ProtectedRoute><SellerAnalytics /></ProtectedRoute>} />
       <Route path="/dashboard/chatter" element={<ProtectedRoute><Chatter /></ProtectedRoute>} />
       <Route path="/dashboard/team-performance" element={<ProtectedRoute><TeamPerformance /></ProtectedRoute>} />
       <Route path="/dashboard/insights" element={<ProtectedRoute><Insights /></ProtectedRoute>} />

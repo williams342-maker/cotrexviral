@@ -284,6 +284,21 @@ async def start_scheduler():
     except Exception:
         logger.exception("scheduler: failed to register mission_event_loop")
 
+    # Seller OS — retention scan every 6h. Flags inactive sellers,
+    # auto-flips churned ones, surfaces alerts into retention_alerts.
+    try:
+        from routes.seller_lifecycle import scan_retention_signals
+        scheduler.add_job(
+            scan_retention_signals,
+            trigger=IntervalTrigger(hours=6),
+            id="seller_retention_scan",
+            max_instances=1,
+            coalesce=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2),
+        )
+    except Exception:
+        logger.exception("scheduler: failed to register seller_retention_scan")
+
     scheduler.start()
     logger.info("scheduler: started (worker=%s, every 60s)", WORKER_ID)
 

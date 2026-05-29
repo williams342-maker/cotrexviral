@@ -61,6 +61,11 @@ class MissionCreate(BaseModel):
     teams_assigned: List[str] = Field(default_factory=lambda: list(TEAMS))
     budget_usd_cap: Optional[float] = None
     growth_goal_id: Optional[str] = None  # link to an existing Growth Goal
+    # --- Seller Acquisition mission type (Phase 1 of Seller OS) ---
+    mission_type: Optional[str] = None   # "seller_acquisition" | None (= generic)
+    seller_target_niche: Optional[str] = None  # "woodworking", "laser engraving"
+    seller_target_location: Optional[str] = None
+    qualification_threshold: Optional[float] = None  # default 60.0
 
 
 class MissionUpdate(BaseModel):
@@ -71,6 +76,9 @@ class MissionUpdate(BaseModel):
     team_autonomy: Optional[dict] = None
     deadline: Optional[datetime] = None
     budget_usd_cap: Optional[float] = None
+    seller_target_niche: Optional[str] = None
+    seller_target_location: Optional[str] = None
+    qualification_threshold: Optional[float] = None
 
 
 # -----------------------------------------------------------------
@@ -234,6 +242,10 @@ async def create_mission(payload: MissionCreate, request: Request):
         "teams_assigned":  payload.teams_assigned,
         "budget_usd_cap":  payload.budget_usd_cap,
         "growth_goal_id":  payload.growth_goal_id,
+        "mission_type":    payload.mission_type or "generic",
+        "seller_target_niche":    payload.seller_target_niche,
+        "seller_target_location": payload.seller_target_location,
+        "qualification_threshold": payload.qualification_threshold,
         "status":          "draft",
         "created_at":      now,
         "updated_at":      now,
@@ -303,11 +315,73 @@ async def update_mission(mission_id: str, payload: MissionUpdate, request: Reque
         updates["deadline"] = payload.deadline
     if payload.budget_usd_cap is not None:
         updates["budget_usd_cap"] = payload.budget_usd_cap
+    if payload.seller_target_niche is not None:
+        updates["seller_target_niche"] = payload.seller_target_niche
+    if payload.seller_target_location is not None:
+        updates["seller_target_location"] = payload.seller_target_location
+    if payload.qualification_threshold is not None:
+        updates["qualification_threshold"] = float(payload.qualification_threshold)
 
     await db.missions.update_one({"id": mission_id}, {"$set": updates})
     fresh = await db.missions.find_one({"id": mission_id})
     progress = await compute_progress(fresh)
     return {**_serialize(fresh), "progress": progress}
+
+
+@api.get("/missions/{mission_id}/seller-funnel")
+async def get_seller_funnel(mission_id: str, request: Request):
+    """Mission Dashboard's 8 KPI cards for a Seller-Acquisition mission.
+
+    Returns:
+      discovered, qualified, outreached, interested, onboarding, active,
+      projected_completion (current/target/eta_days/confidence),
+      score_summary
+    """
+    user = await get_current_user(request)
+    mission = await db.missions.find_one({"id": mission_id, "user_id": user.user_id})
+    if not mission:
+        raise HTTPException(404, "Mission not found")
+
+    # Per-stage counts
+    from routes.seller_leads import funnel_for_mission
+    funnel = await funnel_for_mission(user.user_id, mission_id)
+
+    # Average seller score across qualified+ leads
+    avg_score = None
+    pipeline = [
+        {"$match": {"user_id": user.user_id, "mission_id": mission_id,
+                    "seller_score": {"$ne": None}}},
+        {"$group": {"_id": None, "avg": {"$avg": "$seller_score"},
+                    "min": {"$min": "$seller_score"},
+                    "max": {"$max": "$seller_score"},
+                    "n": {"$sum": 1}}},
+    ]
+    async for r in db.seller_leads.aggregate(pipeline):
+        avg_score = {
+            "average": round(r["avg"] or 0, 1),
+            "min":     round(r["min"] or 0, 1),
+            "max":     round(r["max"] or 0, 1),
+            "n":       r["n"],
+        }
+        break
+
+    # Projected completion
+    target = int(mission.get("target") or 0)
+    onboarded = funnel.get("active", 0) + funnel.get("onboarding", 0)
+    progress_pct = 0 if target <= 0 else min(100, int(round(100 * onboarded / target)))
+
+    return {
+        "mission_id":      mission_id,
+        "mission_type":    mission.get("mission_type"),
+        "target":          target,
+        "funnel":          funnel,
+        "score_summary":   avg_score,
+        "projected_completion": {
+            "current":      onboarded,
+            "target":       target,
+            "progress_pct": progress_pct,
+        },
+    }
 
 
 @api.delete("/missions/{mission_id}")

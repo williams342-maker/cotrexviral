@@ -5,6 +5,7 @@ import {
   Calendar, CheckSquare, Brain, TrendingUp, Inbox,
   KeyRound, User as UserIcon, LogOut, ChevronRight, ChevronDown,
   Command as CommandIcon, Compass, Sparkles, Send,
+  ShoppingBag, Search, MessageSquare, ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ImpersonateBanner from './ImpersonateBanner';
@@ -43,6 +44,18 @@ const SECTIONS = [
   { id: 'creator',      label: 'Creator',      icon: Sparkles, to: '/dashboard/teams/creator' },
   { id: 'operator',     label: 'Operator',     icon: Send,     to: '/dashboard/teams/operator' },
   { id: 'intelligence', label: 'Intelligence', icon: TrendingUp, to: '/dashboard/teams/intelligence' },
+  {
+    id: 'seller_os', label: 'Seller OS', icon: ShoppingBag,
+    children: [
+      { to: '/dashboard/seller-os',                label: 'Mission Control',   icon: LayoutDashboard },
+      { to: '/dashboard/seller-os/discovery',      label: 'Discovery',         icon: Search          },
+      { to: '/dashboard/seller-os/qualified',      label: 'Qualified',         icon: Sparkles        },
+      { to: '/dashboard/seller-os/conversations',  label: 'Conversations',     icon: MessageSquare   },
+      { to: '/dashboard/seller-os/onboarding',     label: 'Onboarding',        icon: TrendingUp      },
+      { to: '/dashboard/seller-os/retention',      label: 'Retention',         icon: ShieldCheck     },
+      { to: '/dashboard/seller-os/analytics',      label: 'Analytics',         icon: BarChart3       },
+    ],
+  },
   { id: 'memory',       label: 'Memory',       icon: Bot,      to: '/dashboard/memory' },
   {
     id: 'analytics', label: 'Analytics', icon: BarChart3,

@@ -7,6 +7,7 @@ import {
   Ticket as TicketIcon, History, Megaphone, Webhook, Settings as SettingsIcon,
   KeyRound, Map as MapIcon, Bot, Calendar, FileText, Inbox,
   Rocket, Brain, TrendingUp, CheckSquare, User as UserIcon, BarChart3,
+  ShoppingBag, MessageSquare,
 } from 'lucide-react';
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty,
@@ -57,6 +58,15 @@ const CommandPalette = () => {
       { to: '/dashboard/teams/operator',     label: 'Operator team',      icon: Send },
       { to: '/dashboard/teams/intelligence', label: 'Intelligence team',  icon: TrendingUp },
     ];
+    const sellerOS = [
+      { to: '/dashboard/seller-os',               label: 'Seller OS · Mission Control', icon: LayoutDashboard },
+      { to: '/dashboard/seller-os/discovery',     label: 'Seller OS · Discovery',       icon: Search },
+      { to: '/dashboard/seller-os/qualified',     label: 'Seller OS · Qualified',       icon: Sparkles },
+      { to: '/dashboard/seller-os/conversations', label: 'Seller OS · Conversations',   icon: MessageSquare, hint: 'Phase 2' },
+      { to: '/dashboard/seller-os/onboarding',    label: 'Seller OS · Onboarding',      icon: TrendingUp,    hint: 'Phase 3' },
+      { to: '/dashboard/seller-os/retention',     label: 'Seller OS · Retention',       icon: ShieldCheck,   hint: 'Phase 3' },
+      { to: '/dashboard/seller-os/analytics',     label: 'Seller OS · Analytics',       icon: BarChart3,     hint: 'Phase 3' },
+    ];
     const campaigns = [
       { to: '/dashboard/campaigns/active', label: 'Active Campaigns',     icon: Rocket },
       { to: '/dashboard/calendar',         label: 'Marketing Calendar',   icon: Calendar },
@@ -106,7 +116,7 @@ const CommandPalette = () => {
       { to: '/admin/roadmap',              label: 'Roadmap',              icon: MapIcon },
     ] : [];
 
-    return { dashboard, cortexGroup, campaigns, agents, content, analytics, settings, admin };
+    return { dashboard, cortexGroup, sellerOS, campaigns, agents, content, analytics, settings, admin };
   }, [user?.is_admin]);
 
   return (
@@ -124,6 +134,13 @@ const CommandPalette = () => {
 
         <CommandGroup heading="Cortex & Teams">
           {groups.cortexGroup.map((it) => (
+            <PaletteItem key={it.to} item={it} go={go} />
+          ))}
+        </CommandGroup>
+        <CommandSeparator />
+
+        <CommandGroup heading="Seller OS">
+          {groups.sellerOS.map((it) => (
             <PaletteItem key={it.to} item={it} go={go} />
           ))}
         </CommandGroup>
