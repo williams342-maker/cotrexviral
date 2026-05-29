@@ -374,3 +374,122 @@ async def gather_experiment_facts(user_id: str, limit: int = 5) -> dict:
         "running_experiments": running,
         "recent_results":      recent,
     }
+
+
+# ---------------------------------------------------------------------
+# Auto-conclude cron — Ori's daily sweep
+# ---------------------------------------------------------------------
+async def auto_conclude_due_experiments() -> dict:
+    """Iterates every running experiment, computes the live margin, and
+    auto-concludes any that clear the MIN_MARGIN_PCT threshold (10%).
+
+    Replays the same conclude logic as the manual endpoint so winners
+    land in memory + cross-refs are set identically. Errors per-row are
+    logged but never propagate — one bad experiment must not poison
+    the whole cron."""
+    concluded = 0
+    inspected = 0
+    skipped = 0
+    errors = 0
+    now = datetime.now(timezone.utc)
+
+    cursor = db.experiments.find({"status": "running"}, {"_id": 0})
+    async for exp in cursor:
+        inspected += 1
+        try:
+            metric = exp["metric"]
+            a_live = await _variant_live(exp["variant_a_id"], metric)
+            b_live = await _variant_live(exp["variant_b_id"], metric)
+            if a_live["value"] == b_live["value"]:
+                skipped += 1
+                continue
+            winner_key = "a" if a_live["value"] > b_live["value"] else "b"
+            winner_id = exp["variant_a_id"] if winner_key == "a" else exp["variant_b_id"]
+            loser_id  = exp["variant_b_id"] if winner_key == "a" else exp["variant_a_id"]
+            w_live    = a_live if winner_key == "a" else b_live
+            l_live    = b_live if winner_key == "a" else a_live
+            margin    = _margin_pct(w_live["value"], l_live["value"])
+
+            if margin < MIN_MARGIN_PCT:
+                # Not decisive enough yet — leave it running for tomorrow.
+                skipped += 1
+                continue
+
+            # Decisive — flip to completed + write memory (same shape as
+            # the manual conclude path so downstream is uniform).
+            w_label = await _variant_label(winner_id)
+            l_label = await _variant_label(loser_id)
+            memory_text = (
+                f"Experiment '{exp['name']}' (auto-concluded): "
+                f"{w_label['platform']} variant "
+                f"\"{(w_label['body_preview'] or '').strip()}\" beat "
+                f"\"{(l_label['body_preview'] or '').strip()}\" on {metric} "
+                f"by {margin:.1f}% ({w_live['value']:.0f} vs {l_live['value']:.0f})."
+            )
+            if exp.get("hypothesis"):
+                memory_text += f" Hypothesis: {exp['hypothesis']}"
+
+            mem_id = await remember(
+                exp["user_id"],
+                kind="experiment_winner",
+                text=memory_text,
+                meta={
+                    "experiment_id":     exp["id"],
+                    "winner_variant_id": winner_id,
+                    "loser_variant_id":  loser_id,
+                    "metric":            metric,
+                    "margin_pct":        margin,
+                    "winner_value":      w_live["value"],
+                    "loser_value":       l_live["value"],
+                    "auto_concluded":    True,
+                },
+                dedupe_key=f"experiment:{exp['id']}",
+            )
+            await db.experiments.update_one(
+                {"id": exp["id"]},
+                {"$set": {
+                    "status":            "completed",
+                    "ended_at":          now,
+                    "updated_at":        now,
+                    "winner_variant_id": winner_id,
+                    "winner_margin_pct": margin,
+                    "conclusion_text":   memory_text,
+                    "memory_id":         mem_id,
+                    "auto_concluded":    True,
+                }},
+            )
+            # Realtime ping so the operator sees Ori called a winner.
+            try:
+                from routes.realtime import broadcast_to_user
+                await broadcast_to_user(exp["user_id"], "experiment_concluded", {
+                    "experiment_id": exp["id"],
+                    "name":          exp["name"],
+                    "margin_pct":    margin,
+                    "auto":          True,
+                })
+            except Exception:
+                pass
+            concluded += 1
+        except Exception:
+            errors += 1
+            logger.exception("auto_conclude failed for experiment=%s", exp.get("id"))
+
+    summary = {"inspected": inspected, "concluded": concluded,
+               "skipped": skipped, "errors": errors, "ran_at": now}
+    logger.info("Ori auto-conclude cron: %s", summary)
+    return summary
+
+
+def register_auto_conclude_job(scheduler) -> None:
+    """Daily 09:30 UTC — runs 30 min after Atlas's autopilot scan so
+    fresh experiment data has settled. Idempotent."""
+    from apscheduler.triggers.cron import CronTrigger
+    if scheduler.get_job("ori_auto_conclude_daily"):
+        return
+    scheduler.add_job(
+        auto_conclude_due_experiments,
+        trigger=CronTrigger(hour=9, minute=30),
+        id="ori_auto_conclude_daily",
+        max_instances=1,
+        coalesce=True,
+    )

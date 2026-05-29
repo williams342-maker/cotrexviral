@@ -66,6 +66,7 @@ from routes import (  # noqa: F401
     autonomy,        # Per-agent weekly budget caps — Phase 5 of Growth Team
     agent_messaging, # Agent ↔ Agent pub-sub bus — Phase 6 of Growth Team
     uploads,         # Compose video uploads (YouTube)
+    digests,         # Sunday Week-in-Review digest
 )
 
 

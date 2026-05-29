@@ -80,9 +80,100 @@ async def record_usage(
             },
             upsert=True,
         )
+        # Phase 5: alert when usage crosses the 80% / 100% headroom lines.
+        # Best-effort — never blocks the ledger tick on alert dispatch.
+        try:
+            await _maybe_emit_headroom_alert(agent_id, user_id)
+        except Exception:
+            logger.debug("headroom alert dispatch failed", exc_info=True)
     except Exception:
         logger.exception("record_usage failed for agent=%s user=%s", agent_id, user_id)
     return {}
+
+
+async def _maybe_emit_headroom_alert(agent_id: str, user_id: str) -> None:
+    """Writes to `agent_alerts` the first time `headroom_pct` crosses 80%
+    in a given ISO week. Dedupes per (user, agent, week, threshold)
+    so re-ticks within the same week don't re-fire. Also broadcasts a
+    realtime `headroom_alert` event so the bell badge updates instantly."""
+    snap = await check_budget(agent_id, user_id)
+    pct = snap.get("headroom_pct") or 0
+    # Two threshold tiers. 100% fires when can_act flips false too.
+    threshold = 100 if pct >= 100 else (80 if pct >= 80 else 0)
+    if threshold == 0:
+        return
+
+    iso_week = _iso_week_key()
+    dedupe = {
+        "user_id":   user_id,
+        "agent_id":  agent_id,
+        "iso_week":  iso_week,
+        "threshold": threshold,
+    }
+    existing = await db.agent_alerts.find_one(dedupe, {"_id": 0})
+    if existing:
+        return
+
+    now = datetime.now(timezone.utc)
+    alert = {
+        **dedupe,
+        "id":            uuid.uuid4().hex,
+        "agent_name":    snap["agent_name"],
+        "agent_role":    snap["agent_role"],
+        "headroom_pct":  pct,
+        "can_act":       snap.get("can_act", True),
+        "created_at":    now,
+        "read":          False,
+    }
+    await db.agent_alerts.insert_one(alert)
+
+    try:
+        from routes.realtime import broadcast_to_user
+        await broadcast_to_user(user_id, "headroom_alert", {
+            "agent_id":     agent_id,
+            "agent_name":   snap["agent_name"],
+            "threshold":    threshold,
+            "headroom_pct": pct,
+        })
+    except Exception:
+        logger.debug("headroom_alert broadcast skipped", exc_info=True)
+
+
+@api.get("/agents/alerts")
+async def list_agent_alerts(request: Request, unread_only: bool = False):
+    """Returns the user's headroom alerts. `unread_only=true` filters to
+    the badge-count view. Default 50 most recent."""
+    user = await get_current_user(request)
+    query: dict = {"user_id": user.user_id}
+    if unread_only:
+        query["read"] = False
+    docs = await db.agent_alerts.find(query, {"_id": 0})\
+        .sort("created_at", -1).to_list(length=50)
+    unread = await db.agent_alerts.count_documents(
+        {"user_id": user.user_id, "read": False})
+    return {"items": docs, "count": len(docs), "unread_count": unread}
+
+
+@api.post("/agents/alerts/{alert_id}/read")
+async def mark_alert_read(alert_id: str, request: Request):
+    user = await get_current_user(request)
+    res = await db.agent_alerts.update_one(
+        {"id": alert_id, "user_id": user.user_id},
+        {"$set": {"read": True, "read_at": datetime.now(timezone.utc)}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return {"ok": True}
+
+
+@api.post("/agents/alerts/read-all")
+async def mark_all_alerts_read(request: Request):
+    user = await get_current_user(request)
+    res = await db.agent_alerts.update_many(
+        {"user_id": user.user_id, "read": False},
+        {"$set": {"read": True, "read_at": datetime.now(timezone.utc)}},
+    )
+    return {"ok": True, "marked": res.modified_count}
 
 
 async def check_budget(agent_id: str, user_id: str) -> dict:
@@ -260,8 +351,10 @@ async def team_performance(request: Request):
         for b in decided:
             ca, da = b.get("created_at"), b.get("decided_at")
             if isinstance(ca, datetime) and isinstance(da, datetime):
-                if ca.tzinfo is None: ca = ca.replace(tzinfo=timezone.utc)
-                if da.tzinfo is None: da = da.replace(tzinfo=timezone.utc)
+                if ca.tzinfo is None:
+                    ca = ca.replace(tzinfo=timezone.utc)
+                if da.tzinfo is None:
+                    da = da.replace(tzinfo=timezone.utc)
                 diffs.append((da - ca).total_seconds() / 60)
         avg_decision_min = round(sum(diffs) / len(diffs), 1) if diffs else 0
 

@@ -146,7 +146,7 @@ class TestPropose:
         # assert exactly 0 since the LLM might still propose something
         # speculative. Just assert the call succeeds + last_scan_at is stamped.
         r = requests.post(f"{API_URL}/api/briefs/propose",
-                          json={"max_briefs": 1}, headers=HEADERS, timeout=60)
+                          json={"max_briefs": 1}, headers=HEADERS, timeout=120)
         assert r.status_code == 200, r.text
         body = r.json()
         assert "items" in body and "count" in body

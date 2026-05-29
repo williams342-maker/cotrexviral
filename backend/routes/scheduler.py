@@ -255,6 +255,20 @@ async def start_scheduler():
     except Exception:
         logger.exception("scheduler: failed to register uploads_cleanup_daily")
 
+    # Ori auto-conclude experiments — daily 09:30 UTC sweep.
+    try:
+        from routes.experiments import register_auto_conclude_job
+        register_auto_conclude_job(scheduler)
+    except Exception:
+        logger.exception("scheduler: failed to register ori_auto_conclude_daily")
+
+    # Week-in-Review digest — Sunday 18:00 UTC email + persist.
+    try:
+        from routes.digests import register_weekly_digest_job
+        register_weekly_digest_job(scheduler)
+    except Exception:
+        logger.exception("scheduler: failed to register weekly_digest_sunday")
+
     scheduler.start()
     logger.info("scheduler: started (worker=%s, every 60s)", WORKER_ID)
 

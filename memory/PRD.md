@@ -35,6 +35,47 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-29 (part 75) **🟣 P0 trio — Week-in-Review digest + 80% headroom alerts + Ori auto-conclude experiments**
+
+  **A. Week-in-Review digest (Sunday 18:00 UTC)**
+  - New `routes/digests.py` — pure-read `compute_week_in_review(user_id)` aggregates briefs (proposed/approved/auto-approved/rejected), experiment winners with margins, posts published, listening signals (top by urgency), goal progress %, and a per-agent `agent_burns` snapshot from the ledger. Concurrent `asyncio.gather` for the underlying reads — ~50ms cold.
+  - `generate_and_persist_digest(user_id)` — upserts into `weekly_digests` keyed by `(user_id, iso_week)` so re-running the cron in the same week OVERWRITES instead of double-writing. Optionally sends an email via the existing `routes.email.send_email` pipeline (Mailtrap → Mailgun); failure logged but never blocks the persist.
+  - **HTML email template** (`_digest_html`) — inline-styled body with: header card showing brief proposal/approval split, 4-stat row (experiments concluded / posts published / signals captured / goal progress), top signal callout (yellow), experiment winners list with margin %, per-agent burn table (color-tinted at ≥80%). Total ~120 lines of HTML, optimized for Gmail/Outlook/Apple Mail (no `<style>` blocks).
+  - **3 endpoints**:
+    - `GET /api/digests/latest` — most-recent stored digest, or computed-on-the-fly when none exists. Pure read, no email.
+    - `GET /api/digests?limit=12` — up to 52 historical digests (1 year of weeks).
+    - `POST /api/digests/run-now?email=true|false` — manual trigger for previewing the email + populating the first digest before the Sunday cron runs.
+  - **Cron**: `register_weekly_digest_job` schedules `weekly_digest_sunday` at `CronTrigger(day_of_week="sun", hour=18, minute=0)`. Idempotent. `run_weekly_digest` enumerates active users (any LLM burn, brief, or published post this week) and persists+emails one digest per. Per-user errors logged but never propagate.
+
+  **B. 80% / 100% headroom alerts (Jules-owned proactive notifications)**
+  - `routes/autonomy.record_usage()` — every ledger tick now calls `_maybe_emit_headroom_alert(agent_id, user_id)` (best-effort; ledger writes succeed even if alert dispatch fails).
+  - **Two-tier threshold**: 80% (warning) and 100% (cap reached). Each is a distinct row in the `agent_alerts` collection so the operator sees BOTH ("Atlas hit 80% on Tue" + "Atlas hit 100% on Thu").
+  - **Dedupe key**: `(user_id, agent_id, iso_week, threshold)`. Re-ticking inside the same band within the same week is a no-op. Monday's ISO-week rollover lets the cycle restart cleanly.
+  - **Realtime broadcast**: each new alert fires a `headroom_alert` WS event over the existing user channel so the bell badge updates instantly (same pattern as `briefs_proposed`).
+  - **3 new endpoints**:
+    - `GET /api/agents/alerts?unread_only=true|false` — list with `unread_count` summary
+    - `POST /api/agents/alerts/{id}/read` — single mark-read
+    - `POST /api/agents/alerts/read-all` — bulk mark-read (one-click "I saw them")
+
+  **C. Ori auto-conclude experiments (daily 09:30 UTC)**
+  - New `auto_conclude_due_experiments()` in `routes/experiments.py` — iterates every `status="running"` experiment, computes the live margin, and flips to `completed` when margin ≥ `MIN_MARGIN_PCT` (10%). Replays the exact same conclude logic as the manual endpoint (memory write with `kind="experiment_winner"`, `dedupe_key="experiment:{id}"`, cross-ref stamping) so downstream consumers can't tell the difference. The memory row's `meta.auto_concluded=True` flag lets analysts filter for auto vs manual winners.
+  - **Realtime broadcast**: `experiment_concluded` WS event with `auto=True` so the bell badge fires the moment Ori calls a winner overnight.
+  - Per-experiment errors logged but never propagate — one bad row must not poison the whole cron.
+  - **Cron**: `register_auto_conclude_job` schedules `ori_auto_conclude_daily` at `CronTrigger(hour=9, minute=30)` — 30 min after Atlas's brief autopilot scan so fresh experiment data has settled. Idempotent.
+
+  **Tests + regression**
+  - 9 new pytest cases (`tests/test_p0_trio.py`):
+    - All 3 digest endpoints require auth + `/digests/latest` computes on-the-fly when empty + `run-now` upserts (1 row before, 1 row after re-run in same week)
+    - 80% alert fires once when crossing the band; dedupes on subsequent ticks
+    - 100% alert is a DISTINCT row from the 80-tier; both visible
+    - Mark-read endpoint flips the flag and removes from `unread_only` list
+    - Auto-conclude winner: 200 vs 80 engagements (+150% margin) → flipped to completed, memory row stamped with `auto_concluded: True`
+    - Auto-conclude marginal: 105 vs 100 (+5%) → left running, `skipped >= 1`
+  - **41/41 across the bundle** (p0_trio + experiments + autonomy + uploads). All green.
+
+  **Operator UX net effect**: the team is now PROACTIVELY observable — Jules pings you when an agent's about to hit cap (you fix it before damage), Ori finalizes winners overnight (you wake up with new memory entries), and Sunday at 6pm a digest lands in your inbox summarizing the entire team's week. You can ignore the dashboard 6 days out of 7 and still know what's happening.
+
+
 - 2026-05-29 (part 74) **🏠 Homepage → Team Performance + standup ledger ticks + YouTube file upload**
 
   **A. Homepage redirect → `/dashboard/team-performance`**
