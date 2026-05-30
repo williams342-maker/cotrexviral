@@ -176,7 +176,7 @@ const Conversations = () => {
                         </div>
                         {e.body && <div className="text-[12.5px] text-zinc-300 whitespace-pre-line">{e.body}</div>}
                         {e.artifact_id && (
-                          <a href={`${API}/seller-offers/${e.artifact_id}/download.html`}
+                          <a href={`${API}/seller-offers/${e.artifact_id}/download.pdf`}
                              target="_blank" rel="noopener noreferrer"
                              data-testid={`conv-artifact-${e.id}`}
                              className="mt-2 text-[11.5px] font-semibold text-violet-300 hover:text-violet-200 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-violet-500/10 hover:bg-violet-500/20 transition">

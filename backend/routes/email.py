@@ -51,6 +51,9 @@ async def _send_via_sendgrid(
     to: str, subject: str, html: str, text: Optional[str],
     from_addr: Optional[str], tags: Optional[list[str]],
     attachments: Optional[list[dict]] = None,
+    custom_args: Optional[dict] = None,
+    template_id: Optional[str] = None,
+    dynamic_data: Optional[dict] = None,
 ) -> dict:
     if not SENDGRID_API_KEY or not SENDGRID_FROM:
         return {"sent": False, "skipped": "not_configured", "provider": "sendgrid"}
@@ -59,21 +62,55 @@ async def _send_via_sendgrid(
         from sendgrid import SendGridAPIClient
         from sendgrid.helpers.mail import (
             Mail, Email, To, Content, Attachment, FileContent, FileName,
-            FileType, Disposition, Category,
+            FileType, Disposition, Category, CustomArg,
         )
 
         sender = _parse_from(from_addr or SENDGRID_FROM)
-        message = Mail(
-            from_email=Email(sender["email"], sender.get("name")),
-            to_emails=[To(to)],
-            subject=subject,
-            html_content=Content("text/html", html),
-        )
-        if text:
-            # Inject plain-text alternative.
-            message.add_content(Content("text/plain", text))
+        # Mail() rejects html_content + template_id together, so when a
+        # template_id is provided we omit html_content and let SendGrid
+        # render the template using `dynamic_template_data`.
+        if template_id:
+            message = Mail(
+                from_email=Email(sender["email"], sender.get("name")),
+                to_emails=[To(to)],
+                subject=subject,
+            )
+            message.template_id = template_id
+            try:
+                # `set_dynamic_template_data` is on the Personalization
+                # object in newer SDKs; use the raw payload as fallback.
+                from sendgrid.helpers.mail import (
+                    DynamicTemplateData as _DTD,
+                )
+                if dynamic_data:
+                    message.dynamic_template_data = _DTD(dynamic_data)
+            except Exception:
+                if dynamic_data:
+                    # Older SDK fallback — works via personalization dict.
+                    for p in (message.personalizations or []):
+                        p.dynamic_template_data = dynamic_data
+        else:
+            message = Mail(
+                from_email=Email(sender["email"], sender.get("name")),
+                to_emails=[To(to)],
+                subject=subject,
+                html_content=Content("text/html", html),
+            )
+            if text:
+                # Inject plain-text alternative.
+                message.add_content(Content("text/plain", text))
         for tag in (tags or [])[:5]:
             message.add_category(Category(str(tag)[:255]))
+        # Custom args travel back with every SendGrid Event Webhook event,
+        # so we can correlate `delivered/opened/clicked/bounced` to the
+        # originating lead + lifecycle stage.
+        for k, v in (custom_args or {}).items():
+            if v is None:
+                continue
+            try:
+                message.add_custom_arg(CustomArg(str(k)[:50], str(v)[:255]))
+            except Exception:
+                pass
         for att in (attachments or []):
             try:
                 a = Attachment(
@@ -234,6 +271,9 @@ async def send_email(
     from_addr: Optional[str] = None,
     tags: Optional[list[str]] = None,
     attachments: Optional[list[dict]] = None,
+    custom_args: Optional[dict] = None,
+    template_id: Optional[str] = None,
+    dynamic_data: Optional[dict] = None,
 ) -> dict:
     """Provider chain: SendGrid → Mailtrap → Mailgun. Each step falls
     through ONLY on `not_configured` or `transient` errors (5xx / network).
@@ -243,9 +283,22 @@ async def send_email(
     `attachments` (optional): list of `{filename, content (base64), type,
     disposition}` dicts. Currently only honored by the SendGrid provider —
     Mailtrap/Mailgun ignore them silently.
+
+    `custom_args` (optional): dict of small string key→value pairs that
+    SendGrid echoes back with every Event Webhook event (delivered,
+    opened, clicked, bounce, etc.). Used by seller-lifecycle emails to
+    encode `lead_id` + `lifecycle` so the webhook can correlate events
+    to the originating seller thread. Ignored by Mailtrap/Mailgun.
+
+    `template_id` + `dynamic_data` (optional): SendGrid Dynamic Template
+    ID + variables map. When `template_id` is set, SendGrid renders the
+    template instead of `html` (operator can edit copy on the SendGrid UI
+    without redeploys). Ignored by Mailtrap/Mailgun, which use `html`.
     """
     # 1. Try SendGrid (preferred for seller-lifecycle + transactional)
-    result = await _send_via_sendgrid(to, subject, html, text, from_addr, tags, attachments)
+    result = await _send_via_sendgrid(
+        to, subject, html, text, from_addr, tags, attachments, custom_args,
+        template_id=template_id, dynamic_data=dynamic_data)
 
     should_fallback = (
         result.get("skipped") == "not_configured"

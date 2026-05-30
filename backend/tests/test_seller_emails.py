@@ -140,13 +140,19 @@ class TestSellerEmailHelpers:
         assert res["sent"] is True
         atts = captured.get("attachments") or []
         assert len(atts) == 1
-        assert atts[0]["filename"].endswith(".html")
-        assert atts[0]["type"] == "text/html"
-        # The content is base64 — decode and check the artifact title is in there.
+        # Either PDF (preferred when playwright succeeds) or HTML (fallback).
+        assert atts[0]["type"] in ("application/pdf", "text/html"), atts[0]
+        ext = ".pdf" if atts[0]["type"] == "application/pdf" else ".html"
+        assert atts[0]["filename"].endswith(ext)
+        # The content decodes to a real file (PDF magic header or
+        # the rendered HTML containing the artifact title).
         import base64
-        decoded = base64.b64decode(atts[0]["content"]).decode("utf-8")
-        from html import escape as _esc
-        assert _esc(artifact["title"]) in decoded
+        decoded = base64.b64decode(atts[0]["content"])
+        if atts[0]["type"] == "application/pdf":
+            assert decoded[:5] == b"%PDF-"
+        else:
+            from html import escape as _esc
+            assert _esc(artifact["title"]) in decoded.decode("utf-8")
 
     def test_nudge_email_severity_tone_high(self, user_id):
         from routes import seller_emails

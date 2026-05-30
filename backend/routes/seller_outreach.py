@@ -69,7 +69,7 @@ OFFER_TYPES = {
 
 CHANNELS = ("email", "instagram_dm", "facebook_message", "linkedin_inmail", "contact_form")
 
-EVENT_TYPES = ("sent", "delivered", "opened", "replied", "interested",
+EVENT_TYPES = ("sent", "delivered", "opened", "clicked", "replied", "interested",
                "not_interested", "bounced", "unsubscribed")
 
 

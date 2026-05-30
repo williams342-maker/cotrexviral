@@ -147,6 +147,36 @@ ALLOWED_KEYS: dict[str, dict] = {
         "secret":      False,
         "group":       "sendgrid",
     },
+    "SENDGRID_WEBHOOK_VERIFY_KEY": {
+        "label":       "SendGrid — Event Webhook Public Key",
+        "description": "Base64 ECDSA public key from Settings → Mail Settings → Signed Event Webhook Requests. When set, /api/sendgrid/webhook verifies signatures. Optional but recommended in production.",
+        "secret":      True,
+        "group":       "sendgrid",
+    },
+    "SENDGRID_TEMPLATE_WELCOME": {
+        "label":       "SendGrid — Welcome Template ID",
+        "description": "Dynamic Template ID (starts with `d-`) for the welcome email sent when a seller becomes active. When set, SendGrid renders the template using dynamic data `{business_name, dashboard_url}`. When blank, the helper falls back to inline HTML.",
+        "secret":      False,
+        "group":       "sendgrid",
+    },
+    "SENDGRID_TEMPLATE_AUDIT": {
+        "label":       "SendGrid — Audit Template ID",
+        "description": "Dynamic Template ID for Phase-4 audit delivery. Dynamic data: `{business_name, audit_title, audit_summary, audit_score, audit_url}`.",
+        "secret":      False,
+        "group":       "sendgrid",
+    },
+    "SENDGRID_TEMPLATE_NUDGE": {
+        "label":       "SendGrid — Nudge Template ID",
+        "description": "Dynamic Template ID for the Phase-8 retention nudge email. Dynamic data: `{business_name, churn_score, dashboard_url}`.",
+        "secret":      False,
+        "group":       "sendgrid",
+    },
+    "SENDGRID_TEMPLATE_RECOVERY": {
+        "label":       "SendGrid — Churn-Recovery Template ID",
+        "description": "Dynamic Template ID for the Phase-8 churn-recovery email. Dynamic data: `{business_name, audit_title, audit_summary, audit_score, audit_url, churn_score}`.",
+        "secret":      False,
+        "group":       "sendgrid",
+    },
 }
 
 _CACHE_TTL_SECONDS = 60

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import os
 from typing import Optional
 
 from routes.email import send_email
@@ -58,6 +59,44 @@ def _public_url(path: str) -> str:
     return f"{base}{path}" if base else path
 
 
+def _template_id(env_var: str) -> Optional[str]:
+    """Read a SendGrid template ID from env at call time so the admin
+    can paste/clear template IDs via /admin/integrations without a
+    backend restart."""
+    return (os.environ.get(env_var) or "").strip() or None
+
+
+async def _build_audit_attachment(lead: dict, artifact: dict) -> dict:
+    """Render the audit artifact as a PDF when possible (playwright +
+    chromium), falling back to the HTML attachment otherwise. Returns
+    the attachment dict directly usable by SendGrid's Mail helper."""
+    html_payload = _artifact_to_html(artifact, lead)
+    title = (artifact.get("title") or "audit")[:60]
+    slug = title.replace(" ", "-")
+
+    # Try PDF first
+    try:
+        from routes.audit_pdf import render_html_to_pdf
+        pdf_bytes = await render_html_to_pdf(html_payload)
+        if pdf_bytes:
+            return {
+                "filename": f"{slug}.pdf",
+                "content":  base64.b64encode(pdf_bytes).decode("ascii"),
+                "type":     "application/pdf",
+                "disposition": "attachment",
+            }
+    except Exception:
+        logger.exception("seller email: PDF render failed, falling back to HTML")
+
+    # HTML fallback (matches original behavior)
+    return {
+        "filename": f"{slug}.html",
+        "content":  base64.b64encode(html_payload.encode("utf-8")).decode("ascii"),
+        "type":     "text/html",
+        "disposition": "attachment",
+    }
+
+
 # --- 1. Welcome (lead → active) -------------------------------------
 async def send_seller_welcome_email(lead: dict) -> dict:
     """Sent right after `/seller-onboarding/start` flips a lead to `active`.
@@ -86,6 +125,12 @@ async def send_seller_welcome_email(lead: dict) -> dict:
                     cta_label="Open your storefront",
                     cta_url=_public_url("/dashboard")),
         tags=["seller-lifecycle", "welcome"],
+        custom_args={"lead_id": lead.get("id"), "lifecycle": "welcome"},
+        template_id=_template_id("SENDGRID_TEMPLATE_WELCOME"),
+        dynamic_data={
+            "business_name": name,
+            "dashboard_url": _public_url("/dashboard"),
+        },
     )
 
 
@@ -114,23 +159,27 @@ async def send_seller_audit_email(lead: dict, artifact: dict) -> dict:
       and also viewable in your browser via the button below.</p>
     """
 
-    # Attach the rendered HTML so it travels with the email.
-    html_payload = _artifact_to_html(artifact, lead).encode("utf-8")
-    attachment = {
-        "filename": f"{(art_title[:60] or 'audit').replace(' ', '-')}.html",
-        "content":  base64.b64encode(html_payload).decode("ascii"),
-        "type":     "text/html",
-        "disposition": "attachment",
-    }
+    # Attach the rendered audit (PDF preferred, HTML fallback).
+    attachment = await _build_audit_attachment(lead, artifact)
 
     return await send_email(
         to=to,
         subject=f"{art_title} — your free audit from CortexViral",
         html=_shell(art_title, body,
                     cta_label="Read the full audit",
-                    cta_url=_public_url(f"/api/seller-offers/{artifact['id']}/download.html")),
+                    cta_url=_public_url(f"/api/seller-offers/{artifact['id']}/download.pdf")),
         tags=["seller-lifecycle", "audit", artifact.get("offer_type", "audit")],
         attachments=[attachment],
+        custom_args={"lead_id": lead.get("id"), "lifecycle": "audit",
+                     "artifact_id": artifact.get("id")},
+        template_id=_template_id("SENDGRID_TEMPLATE_AUDIT"),
+        dynamic_data={
+            "business_name": name,
+            "audit_title":   art_title,
+            "audit_summary": summary,
+            "audit_score":   score,
+            "audit_url":     _public_url(f"/api/seller-offers/{artifact['id']}/download.pdf"),
+        },
     )
 
 
@@ -163,6 +212,13 @@ async def send_seller_nudge_email(lead: dict,
                     cta_label="Reopen your dashboard",
                     cta_url=_public_url("/dashboard")),
         tags=["seller-lifecycle", "nudge"],
+        custom_args={"lead_id": lead.get("id"), "lifecycle": "nudge"},
+        template_id=_template_id("SENDGRID_TEMPLATE_NUDGE"),
+        dynamic_data={
+            "business_name": name,
+            "churn_score":   churn_score or 0,
+            "dashboard_url": _public_url("/dashboard"),
+        },
     )
 
 
@@ -192,19 +248,24 @@ async def send_seller_churn_recovery_email(lead: dict, artifact: dict,
       <p>It's attached. No catch — just our way of saying we'd rather help you
       win than lose you. Reply if you want to jump on a 15-minute call.</p>
     """
-    html_payload = _artifact_to_html(artifact, lead).encode("utf-8")
-    attachment = {
-        "filename": f"{(artifact.get('title') or 'recovery-audit')[:60].replace(' ', '-')}.html",
-        "content":  base64.b64encode(html_payload).decode("ascii"),
-        "type":     "text/html",
-        "disposition": "attachment",
-    }
+    attachment = await _build_audit_attachment(lead, artifact)
     return await send_email(
         to=to,
         subject=f"A growth audit for {name} (on us)",
         html=_shell("We'd rather help you win.", body,
                     cta_label="Read the recovery audit",
-                    cta_url=_public_url(f"/api/seller-offers/{artifact['id']}/download.html")),
+                    cta_url=_public_url(f"/api/seller-offers/{artifact['id']}/download.pdf")),
         tags=["seller-lifecycle", "churn-recovery"],
         attachments=[attachment],
+        custom_args={"lead_id": lead.get("id"), "lifecycle": "churn-recovery",
+                     "artifact_id": artifact.get("id")},
+        template_id=_template_id("SENDGRID_TEMPLATE_RECOVERY"),
+        dynamic_data={
+            "business_name": name,
+            "audit_title":   artifact.get("title") or "",
+            "audit_summary": artifact.get("summary") or "",
+            "audit_score":   artifact.get("score") or 0,
+            "audit_url":     _public_url(f"/api/seller-offers/{artifact['id']}/download.pdf"),
+            "churn_score":   churn_score or 0,
+        },
     )

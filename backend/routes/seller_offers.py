@@ -374,3 +374,31 @@ async def download_artifact_html(artifact_id: str, request: Request):
         "Cache-Control": "private, max-age=300",
     }
     return Response(content=html, media_type="text/html; charset=utf-8", headers=headers)
+
+
+@api.get("/seller-offers/{artifact_id}/download.pdf")
+async def download_artifact_pdf(artifact_id: str, request: Request):
+    """Same audit, rendered as a real PDF via playwright + headless
+    Chromium. Falls back to 502 if the PDF pipeline failed (caller can
+    retry with the `.html` route)."""
+    from routes.audit_pdf import render_html_to_pdf
+    user = await get_current_user(request)
+    art = await db.seller_offer_artifacts.find_one(
+        {"id": artifact_id, "user_id": user.user_id})
+    if not art:
+        raise HTTPException(404, "Artifact not found")
+    lead = await db.seller_leads.find_one(
+        {"id": art["lead_id"], "user_id": user.user_id}) or {}
+    v = art.get("generated_at")
+    if isinstance(v, datetime):
+        art["generated_at"] = v.isoformat()
+    html = _artifact_to_html(art, lead)
+    pdf_bytes = await render_html_to_pdf(html)
+    if not pdf_bytes:
+        raise HTTPException(502, "PDF render failed — try the .html route instead")
+    slug = _slugify((art.get("title") or "audit"))
+    headers = {
+        "Content-Disposition": f'inline; filename="{slug}.pdf"',
+        "Cache-Control": "private, max-age=300",
+    }
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)

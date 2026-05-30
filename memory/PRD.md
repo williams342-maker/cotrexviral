@@ -35,6 +35,35 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-30 (part 87) **🟣 PDF audits + SendGrid Event Webhook + Dynamic Templates**
+
+  Three feature blocks delivered together because they all touch `routes/seller_emails.py`:
+
+  **A. PDF audit rendering** (`routes/audit_pdf.py` — NEW)
+  - Headless Chromium via Playwright (already installed). Single browser instance cached & reused across requests (post-warmup render is ~600ms). Auto-selects system Chromium binary from `CHROMIUM_BIN`/`/root/bin/chromium`/`/usr/bin/google-chrome` since Playwright's bundled `headless_shell` isn't in the preview image.
+  - NEW route: `GET /api/seller-offers/{id}/download.pdf` — A4 portrait, background-printing on (preserves dark theme), 16/20mm margins. Returns 502 + falls back to HTML route on render failure.
+  - `_build_audit_attachment(lead, artifact)` in `seller_emails.py` now prefers PDF attachment (`.pdf` + `application/pdf`) and silently falls back to the HTML attachment when the renderer fails.
+  - Audit CTAs in audit + churn-recovery emails now link to `.pdf`. Conversations UI "View attached audit" link also points to `.pdf`.
+
+  **B. SendGrid Event Webhook** (`routes/sendgrid_webhook.py` — NEW)
+  - `POST /api/sendgrid/webhook` receives SendGrid's Event Webhook JSON array.
+  - Optional ECDSA signature verification via `SENDGRID_WEBHOOK_VERIFY_KEY` (paste in `/admin/integrations`). Without a key, the endpoint is open (preview-friendly).
+  - Maps SendGrid events → outreach events: `delivered→delivered`, `open→opened`, `click→clicked`, `bounce/dropped→bounced`, `unsubscribe/group_unsubscribe/spamreport→unsubscribed`. Intermediate states (`processed`, `deferred`) are skipped.
+  - Idempotent on `(lead_id, event, sg_event_id)` — retries don't duplicate rows.
+  - `bounce` auto-advances the lead stage → `unresponsive`; `unsubscribe` → `not_interested` + sets `unsubscribed:true`. The operator's pipeline self-cleans.
+  - All 4 `send_seller_*_email` helpers now pass `custom_args={lead_id, lifecycle, artifact_id}` so the webhook can correlate events back to the originating thread. `_send_via_sendgrid` forwards via `CustomArg`.
+  - **Added "clicked" event type** to `seller_outreach.EVENT_TYPES`.
+
+  **C. SendGrid Dynamic Templates**
+  - 4 new admin-pasteable env vars: `SENDGRID_TEMPLATE_WELCOME`, `SENDGRID_TEMPLATE_AUDIT`, `SENDGRID_TEMPLATE_NUDGE`, `SENDGRID_TEMPLATE_RECOVERY` — registered in `app_config.ALLOWED_KEYS` (group=`sendgrid`), surfaced through `/admin/integrations`.
+  - Each helper reads its `SENDGRID_TEMPLATE_*` env at call time (so admin paste/clear works without redeploy) and forwards `template_id` + `dynamic_data` (business_name, audit_*, churn_score, dashboard_url) to `send_email`.
+  - `_send_via_sendgrid` swaps `html_content` for `template_id` + `dynamic_template_data` when the template is set, falls back to inline HTML otherwise. Mailtrap/Mailgun ignore the template fields (they use the inline `html`).
+  - Net effect: operator creates 4 SendGrid templates on app.sendgrid.com, pastes IDs in `/admin/integrations`, and can edit copy/branding in the SendGrid UI without redeploys.
+  - Also added `SENDGRID_WEBHOOK_VERIFY_KEY` env-var registration (group=`sendgrid`, secret=true).
+
+  **Tests**: `test_pdf_webhook_templates.py` 12/12 PASS (PDF magic-header check, end-to-end `/download.pdf`, audit email PDF attachment, webhook delivered/clicked/bounce/unsubscribe/idempotent/skip-no-lead, dynamic-template forwarding). Existing `test_seller_emails.py` updated to accept PDF OR HTML attachment in `test_audit_email_attaches_html_artifact`. **Full Seller-OS + admin regression: 71/71 PASS in 9m22s.**
+
+
 - 2026-05-30 (part 86) **🟢 Admin coverage for Seller OS + Email Log + SendGrid test-send**
 
   Filled the 4 admin gaps flagged for the new Seller-OS + SendGrid features:
