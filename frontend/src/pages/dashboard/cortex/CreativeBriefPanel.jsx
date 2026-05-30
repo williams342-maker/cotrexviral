@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import {
   Compass, Target, Users, Megaphone, Layers, Sparkles, RefreshCw,
   Loader2, Hash, Lightbulb, Wand2, Image as ImageIcon, AlertTriangle,
+  Rocket,
 } from 'lucide-react';
 import { API } from '../../../context/AuthContext';
 
@@ -116,6 +117,22 @@ export default function CreativeBriefPanel({ asset, onChanged }) {
     finally { setBusy(false); }
   };
 
+  const buildCampaign = async () => {
+    if (!brief?.id) return;
+    setBusy(true);
+    try {
+      const r = await axios.post(`${API}/cortex/campaigns`,
+                                    { brief_id: brief.id },
+                                    { withCredentials: true });
+      // Hop to the campaign detail so the user watches the build trace.
+      window.location.href = `/dashboard/campaigns?id=${r.data.id}`;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('build campaign failed', e?.response?.data);
+      setBusy(false);
+    }
+  };
+
   if (!brief && animate) {
     return (
       <div data-testid="brief-pending"
@@ -161,6 +178,13 @@ export default function CreativeBriefPanel({ asset, onChanged }) {
                 className={`text-[10px] uppercase tracking-wider font-bold ${tone.text}`}>
             {conf}% confidence
           </span>
+          <button onClick={buildCampaign} disabled={busy}
+                  data-testid="brief-build-campaign-btn"
+                  className="text-[11px] font-semibold px-2.5 py-1 rounded-md bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-400 hover:to-fuchsia-400 text-white shadow-md shadow-violet-500/20 transition flex items-center gap-1 disabled:opacity-50">
+            {busy
+              ? <><Loader2 size={10} className="animate-spin" /> Building…</>
+              : <><Rocket size={10} /> Build full campaign</>}
+          </button>
           <button onClick={regenerateBrief} disabled={busy}
                   data-testid="brief-regenerate-btn"
                   className="text-[11px] font-semibold px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-zinc-300 transition flex items-center gap-1 disabled:opacity-50">

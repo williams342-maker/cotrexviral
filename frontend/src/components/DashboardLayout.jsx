@@ -42,6 +42,7 @@ const SECTIONS = [
   },
   { id: 'cortex',       label: 'Cortex Brief', icon: Brain,    to: '/dashboard/cortex' },
   { id: 'assets',       label: 'Assets',       icon: FileText, to: '/dashboard/assets' },
+  { id: 'cortex_campaigns', label: 'Cortex Campaigns', icon: Rocket, to: '/dashboard/campaigns' },
   { id: 'scout',        label: 'Scout',        icon: Compass,  to: '/dashboard/teams/scout' },
   { id: 'creator',      label: 'Creator',      icon: Sparkles, to: '/dashboard/teams/creator' },
   { id: 'operator',     label: 'Operator',     icon: Send,     to: '/dashboard/teams/operator' },
