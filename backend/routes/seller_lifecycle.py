@@ -162,6 +162,13 @@ async def start_onboarding(payload: OnboardingStart, request: Request):
             {"id": payload.lead_id},
             {"$set": {"stage": "active", "updated_at": datetime.now(timezone.utc)}},
         )
+        # Send welcome email — best-effort, never blocks the flow.
+        try:
+            from routes.seller_emails import send_seller_welcome_email
+            fresh = await db.seller_leads.find_one({"id": payload.lead_id})
+            await send_seller_welcome_email(fresh or lead)
+        except Exception:
+            logger.exception("seller welcome email failed for lead=%s", payload.lead_id)
 
     out = {k: v for k, v in record.items() if k != "_id"}
     for k in ("started_at", "completed_at"):

@@ -35,6 +35,28 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-30 (part 85) **🟣 Seller Acquisition OS — SendGrid email lifecycle**
+
+  **A. Provider chain upgraded**: `routes/email.py` `send_email()` now routes **SendGrid → Mailtrap → Mailgun**. SendGrid is the preferred provider (better cold-outreach deliverability than Mailtrap's transactional inbox), with the existing chain as fallback. Permanent 4xx errors stop the chain (other providers would reject the same payload); only `not_configured` + transient 5xx/network errors fall through. `send_email()` now also accepts an `attachments` parameter — SendGrid honors it natively, Mailtrap/Mailgun ignore silently.
+  - SDK: `sendgrid==6.12.5` (frozen into `requirements.txt`).
+  - Sync SDK wrapped in `loop.run_in_executor()` for async safety.
+  - Env vars `SENDGRID_API_KEY` + `SENDGRID_FROM` surface through `/admin/integrations` (group=`sendgrid`) so the operator can paste keys without redeploy.
+
+  **B. 4 typed lifecycle email helpers** in new `routes/seller_emails.py`:
+  - `send_seller_welcome_email(lead)` — fired by Phase 3 `start_onboarding` when a lead flips to `active`.
+  - `send_seller_audit_email(lead, artifact)` — fired by Phase 4 outreach when `attach_artifact=true`. The audit HTML is base64-attached AND linked inline.
+  - `send_seller_nudge_email(lead, churn_score)` — fired by Phase 8 cron `auto_advance_due_workflows` when the `nudge_message` step advances. Severity-aware copy (>=70 score → "missing your activity", else "noticing a pause").
+  - `send_seller_churn_recovery_email(lead, artifact, churn_score)` — fired by Phase 8 `_maybe_launch_workflow` step 1 (`send_offer`). Combines the `marketplace_growth` audit attachment with a we'd-rather-help-you-win framing.
+
+  All four are best-effort: they short-circuit with `{sent: False, skipped: "no_email"}` when the lead has no `email` field, and any provider error is logged but never raised. The Phase 3/4/8 flows wrap each call in a `try/except` so an email failure never blocks the core operation.
+
+  **C. Lead schema**: `SellerLeadCreate` + `SellerLeadUpdate` now accept an optional `email` field (the delivery target). Existing leads without an email continue to work — the email helpers silently skip them.
+
+  **Tests**: `test_seller_emails.py` (14/14) — provider-chain fallback combinatorics + helper attachments/copy + 4 wire-up tests (helper-level to avoid preview-ingress LLM timeouts). Existing Phase 4/8 cron test updated to match new step-detail strings. **Backend total: 48/48 across all Seller-OS phases.**
+
+  **Verified in production**: real `seller@example.com` deliveries observed in Mailtrap log during pytest runs (SendGrid `not_configured` → Mailtrap accepted, IDs e.g. `cb17de20-5bc5-11f1-...`). Once the operator adds a real `SENDGRID_API_KEY`, the same code path delivers via SendGrid without any further changes.
+
+
 - 2026-05-30 (part 84) **🟢 Refactor cleanup — seller pages split + retention cron + sidebar fix**
 
   **A. Split `SellerLifecycle.jsx` (712 LOC) into 4 focused route files**

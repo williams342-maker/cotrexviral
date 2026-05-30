@@ -23,6 +23,7 @@ from core import (
     db, api, logger,
     MAILGUN_API_KEY, MAILGUN_DOMAIN, MAILGUN_BASE_URL, MAILGUN_FROM,
     MAILTRAP_TOKEN, MAILTRAP_FROM, MAILTRAP_API_URL,
+    SENDGRID_API_KEY, SENDGRID_FROM,
     PUBLIC_SITE_URL,
 )
 
@@ -36,6 +37,83 @@ def _parse_from(addr: str) -> dict:
     if m:
         return {"name": m.group(1).strip(), "email": m.group(2).strip()}
     return {"email": addr.strip()}
+
+
+# -----------------------------------------------------------------------------
+# Provider: SendGrid (Mail Send v3). Preferred provider for seller-lifecycle
+# emails — generally higher deliverability for cold outreach than Mailtrap's
+# transactional inbox. Falls back to Mailtrap/Mailgun if unconfigured or
+# transient error. Uses the official `sendgrid` SDK (sync) via run_in_executor.
+# Attachments are accepted as a list of dicts: {filename, content, type}
+# where `content` is already base64-encoded.
+# -----------------------------------------------------------------------------
+async def _send_via_sendgrid(
+    to: str, subject: str, html: str, text: Optional[str],
+    from_addr: Optional[str], tags: Optional[list[str]],
+    attachments: Optional[list[dict]] = None,
+) -> dict:
+    if not SENDGRID_API_KEY or not SENDGRID_FROM:
+        return {"sent": False, "skipped": "not_configured", "provider": "sendgrid"}
+
+    try:
+        from sendgrid import SendGridAPIClient
+        from sendgrid.helpers.mail import (
+            Mail, Email, To, Content, Attachment, FileContent, FileName,
+            FileType, Disposition, Category,
+        )
+
+        sender = _parse_from(from_addr or SENDGRID_FROM)
+        message = Mail(
+            from_email=Email(sender["email"], sender.get("name")),
+            to_emails=[To(to)],
+            subject=subject,
+            html_content=Content("text/html", html),
+        )
+        if text:
+            # Inject plain-text alternative.
+            message.add_content(Content("text/plain", text))
+        for tag in (tags or [])[:5]:
+            message.add_category(Category(str(tag)[:255]))
+        for att in (attachments or []):
+            try:
+                a = Attachment(
+                    FileContent(att["content"]),
+                    FileName(att.get("filename", "attachment")),
+                    FileType(att.get("type", "application/octet-stream")),
+                    Disposition(att.get("disposition", "attachment")),
+                )
+                message.add_attachment(a)
+            except Exception:
+                logger.exception("SendGrid: failed to attach %s", att.get("filename"))
+
+        def _send_sync():
+            sg = SendGridAPIClient(SENDGRID_API_KEY)
+            return sg.send(message)
+
+        loop = asyncio.get_running_loop()
+        response = await loop.run_in_executor(None, _send_sync)
+        # 202 = Accepted; anything else logged as rejection.
+        if response.status_code == 202:
+            mid = response.headers.get("X-Message-Id") if response.headers else None
+            logger.info("SendGrid ✉  sent %s to %s (id=%s)", subject, to, mid)
+            return {"sent": True, "id": mid, "provider": "sendgrid"}
+        body = (response.body or b"")
+        if isinstance(body, bytes):
+            body = body.decode("utf-8", errors="replace")
+        logger.warning("SendGrid ✉  rejected %s to %s: %s %s",
+                       subject, to, response.status_code, body[:300])
+        return {
+            "sent": False, "error": body[:300], "status": response.status_code,
+            "provider": "sendgrid",
+            # 5xx → fall back; 4xx (bad sender, unauth, etc.) → don't.
+            "transient": response.status_code >= 500,
+        }
+    except Exception as e:
+        logger.exception("SendGrid ✉  network/SDK error to %s", to)
+        return {
+            "sent": False, "error": str(e)[:300],
+            "provider": "sendgrid", "transient": True,
+        }
 
 
 # -----------------------------------------------------------------------------
@@ -155,42 +233,74 @@ async def send_email(
     text: Optional[str] = None,
     from_addr: Optional[str] = None,
     tags: Optional[list[str]] = None,
+    attachments: Optional[list[dict]] = None,
 ) -> dict:
-    """Try Mailtrap first; fall back to Mailgun if Mailtrap is unconfigured
-    or returns a transient (5xx / network) failure. Final status is logged to
-    `email_log` with the provider field so admins can see which path delivered."""
-    # 1. Try Mailtrap (primary)
-    result = await _send_via_mailtrap(to, subject, html, text, from_addr, tags)
+    """Provider chain: SendGrid → Mailtrap → Mailgun. Each step falls
+    through ONLY on `not_configured` or `transient` errors (5xx / network).
+    Permanent 4xx errors stop the chain because the next provider would
+    reject the same payload.
 
-    # 2. Mailgun fallback for: not-configured, transient network/5xx errors.
-    #    Skip fallback for 4xx (Mailgun would reject the same payload).
+    `attachments` (optional): list of `{filename, content (base64), type,
+    disposition}` dicts. Currently only honored by the SendGrid provider —
+    Mailtrap/Mailgun ignore them silently.
+    """
+    # 1. Try SendGrid (preferred for seller-lifecycle + transactional)
+    result = await _send_via_sendgrid(to, subject, html, text, from_addr, tags, attachments)
+
     should_fallback = (
         result.get("skipped") == "not_configured"
         or result.get("transient") is True
     )
+
     if not result.get("sent") and should_fallback:
-        logger.info("Falling back to Mailgun for %s (mailtrap result: %s)", to,
+        # 2. Mailtrap fallback
+        logger.info("Falling back to Mailtrap for %s (sendgrid result: %s)", to,
                     result.get("error") or result.get("skipped"))
-        mg_result = await _send_via_mailgun(to, subject, html, text, from_addr, tags)
-        # Persist a row capturing both attempts.
+        mt_result = await _send_via_mailtrap(to, subject, html, text, from_addr, tags)
+
+        should_fallback_again = (
+            mt_result.get("skipped") == "not_configured"
+            or mt_result.get("transient") is True
+        )
+        if not mt_result.get("sent") and should_fallback_again:
+            # 3. Mailgun fallback
+            logger.info("Falling back to Mailgun for %s (mailtrap result: %s)", to,
+                        mt_result.get("error") or mt_result.get("skipped"))
+            mg_result = await _send_via_mailgun(to, subject, html, text, from_addr, tags)
+            await _log_email(
+                to, subject,
+                status="sent" if mg_result.get("sent") else (
+                    "skipped" if mg_result.get("skipped") else "rejected"
+                ),
+                provider=mg_result.get("provider"),
+                mailgun_id=mg_result.get("id"),
+                mg_status=mg_result.get("status"),
+                reason=mg_result.get("error") or mg_result.get("skipped"),
+                fallback_from="sendgrid→mailtrap",
+                primary_error=result.get("error") or result.get("skipped"),
+                tags=tags,
+            )
+            mg_result.pop("transient", None)
+            return mg_result
+
+        # Mailtrap finalized (success OR 4xx)
         await _log_email(
             to, subject,
-            status="sent" if mg_result.get("sent") else (
-                "skipped" if mg_result.get("skipped") else "rejected"
+            status="sent" if mt_result.get("sent") else (
+                "skipped" if mt_result.get("skipped") else "rejected"
             ),
-            provider=mg_result.get("provider"),
-            mailgun_id=mg_result.get("id"),
-            mg_status=mg_result.get("status"),
-            reason=mg_result.get("error") or mg_result.get("skipped"),
-            fallback_from="mailtrap",
+            provider=mt_result.get("provider"),
+            mailgun_id=mt_result.get("id"),
+            mg_status=mt_result.get("status"),
+            reason=mt_result.get("error") or mt_result.get("skipped"),
+            fallback_from="sendgrid",
             primary_error=result.get("error") or result.get("skipped"),
             tags=tags,
         )
-        # Strip the internal transient flag from the response.
-        mg_result.pop("transient", None)
-        return mg_result
+        mt_result.pop("transient", None)
+        return mt_result
 
-    # No fallback needed — log the Mailtrap outcome (success OR 4xx rejection).
+    # SendGrid finalized (success OR 4xx) — no fallback.
     await _log_email(
         to, subject,
         status="sent" if result.get("sent") else (

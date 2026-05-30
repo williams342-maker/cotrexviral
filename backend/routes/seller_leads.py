@@ -53,6 +53,7 @@ class SellerLeadCreate(BaseModel):
     mission_id:    Optional[str] = None
     business_name: str = Field(..., min_length=1, max_length=200)
     website:       Optional[str] = None
+    email:         Optional[str] = None    # delivery target for lifecycle emails
     source:        str           # one of SOURCES
     platform:      Optional[str] = None    # the seller's primary platform
     niche:         Optional[str] = None    # "woodworking", "laser-engraving"
@@ -66,6 +67,7 @@ class SellerLeadCreate(BaseModel):
 class SellerLeadUpdate(BaseModel):
     stage:    Optional[str] = None
     notes:    Optional[str] = None
+    email:    Optional[str] = None
     seller_score: Optional[float] = None
 
 
@@ -116,6 +118,7 @@ async def create_lead(payload: SellerLeadCreate, request: Request):
         "mission_id":          payload.mission_id,
         "business_name":       payload.business_name.strip(),
         "website":             (payload.website or "").strip() or None,
+        "email":               (payload.email or "").strip() or None,
         "source":              payload.source,
         "platform":            payload.platform,
         "niche":               payload.niche,
@@ -188,6 +191,8 @@ async def update_lead(lead_id: str, payload: SellerLeadUpdate, request: Request)
             updates[stamp_map[payload.stage]] = datetime.now(timezone.utc)
     if payload.notes is not None:
         updates["notes"] = payload.notes
+    if payload.email is not None:
+        updates["email"] = payload.email.strip() or None
     if payload.seller_score is not None:
         updates["seller_score"] = float(payload.seller_score)
     await db.seller_leads.update_one({"id": lead_id}, {"$set": updates})

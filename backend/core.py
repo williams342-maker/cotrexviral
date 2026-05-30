@@ -83,6 +83,10 @@ MAILTRAP_TOKEN = os.environ.get("MAILTRAP_TOKEN", "")
 MAILTRAP_FROM = os.environ.get("MAILTRAP_FROM", "")
 MAILTRAP_API_URL = os.environ.get("MAILTRAP_API_URL", "https://send.api.mailtrap.io/api/send")
 
+# SendGrid (transactional; preferred provider for seller-lifecycle emails)
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+SENDGRID_FROM = os.environ.get("SENDGRID_FROM", "")
+
 # Lead-notification recipients (comma-separated emails)
 LEADS_NOTIFY_EMAILS = [
     e.strip() for e in os.environ.get("LEADS_NOTIFY_EMAILS", "").split(",") if e.strip()

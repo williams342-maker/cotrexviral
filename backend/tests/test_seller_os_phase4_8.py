@@ -320,7 +320,12 @@ class TestChurnRiskScoring:
             wf = await db.seller_retention_workflows.find_one({"id": wf_id})
             nudge = [s for s in wf["steps"] if s["step"] == "nudge_message"][0]
             assert nudge["status"] == "ok"
-            assert "cron" in (nudge.get("detail") or "")
+            # The cron's nudge step writes one of three detail patterns:
+            #   - "Step '...' executed by cron"  (legacy / no email side-effect)
+            #   - "Nudge email sent via mailtrap" (delivered)
+            #   - "Nudge email skipped: no_email" (lead had no email)
+            detail = (nudge.get("detail") or "").lower()
+            assert "cron" in detail or "nudge" in detail, f"unexpected nudge detail: {nudge.get('detail')}"
         _run(check_one())
 
         # Back-date the still-pending step 3 again so the next run picks it up.

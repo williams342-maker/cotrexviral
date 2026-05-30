@@ -295,6 +295,14 @@ async def generate_outreach(payload: OutreachGenerate, request: Request):
                 custom_brief=payload.custom_brief,
             )
             out["artifact"] = artifact
+            # Best-effort delivery via email (skips silently if lead has no email).
+            try:
+                from routes.seller_emails import send_seller_audit_email
+                email_res = await send_seller_audit_email(lead, artifact)
+                if email_res.get("sent"):
+                    out["artifact_emailed"] = True
+            except Exception:
+                logger.exception("audit email failed for lead=%s", payload.lead_id)
         except Exception:
             logger.exception("outreach: artifact gen failed (continuing without)")
 

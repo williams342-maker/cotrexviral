@@ -135,6 +135,18 @@ ALLOWED_KEYS: dict[str, dict] = {
         "secret":      False,
         "group":       "pinterest",
     },
+    "SENDGRID_API_KEY": {
+        "label":       "SendGrid — API Key",
+        "description": "Full Access API key from app.sendgrid.com → Settings → API Keys. Used as the primary provider for transactional + seller-lifecycle emails. Falls back to Mailtrap then Mailgun if missing.",
+        "secret":      True,
+        "group":       "sendgrid",
+    },
+    "SENDGRID_FROM": {
+        "label":       "SendGrid — Sender",
+        "description": "Verified sender address (e.g. 'CortexViral <hello@cortexviral.com>'). Must be authenticated via Sender Authentication in SendGrid before mail will deliver.",
+        "secret":      False,
+        "group":       "sendgrid",
+    },
 }
 
 _CACHE_TTL_SECONDS = 60

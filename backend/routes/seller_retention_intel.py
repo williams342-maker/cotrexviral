@@ -192,6 +192,13 @@ async def _maybe_launch_workflow(user_id: str, lead: dict, score: float,
                 "steps.$.artifact_id": art["id"],
             }},
         )
+        # Also deliver the recovery audit via email (best-effort, no-op
+        # when the lead has no email or SendGrid isn't configured).
+        try:
+            from routes.seller_emails import send_seller_churn_recovery_email
+            await send_seller_churn_recovery_email(lead, art, churn_score=score)
+        except Exception:
+            logger.exception("churn-recovery email failed for lead=%s", lead.get("id"))
     except Exception:
         logger.exception("retention workflow: send_offer auto-step failed")
 
@@ -403,7 +410,24 @@ async def auto_advance_due_workflows() -> dict:
                 f"steps.{idx}.detail":      detail,
             }
 
-            # Step-specific side effect.
+            # Step-specific side effects.
+            if step["step"] == "nudge_message":
+                try:
+                    lead = await db.seller_leads.find_one(
+                        {"id": wf["lead_id"], "user_id": wf["user_id"]})
+                    if lead:
+                        from routes.seller_emails import send_seller_nudge_email
+                        email_res = await send_seller_nudge_email(
+                            lead, churn_score=wf.get("score"))
+                        if email_res.get("sent"):
+                            updates[f"steps.{idx}.detail"] = (
+                                f"Nudge email sent via {email_res.get('provider')}")
+                        else:
+                            updates[f"steps.{idx}.detail"] = (
+                                f"Nudge email skipped: {email_res.get('skipped') or email_res.get('error', '')[:120]}")
+                except Exception:
+                    logger.exception("retention cron: nudge email failed wf=%s", wf.get("id"))
+
             if step["step"] == "operator_alert":
                 await db.retention_alerts.insert_one({
                     "id":         uuid.uuid4().hex,
