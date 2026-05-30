@@ -157,7 +157,7 @@ function ReportDetail({ report, onBack }) {
           </div>
           <span className="text-[10px] text-zinc-500">{fmtDate(report.created_at)}</span>
           {report.url && (
-            <a href={report.url} target="_blank" rel="noreferrer"
+            <a href={normalizeHref(report.url)} target="_blank" rel="noreferrer"
                 data-testid="report-external-link"
                 className="text-zinc-400 hover:text-white transition" title="Open URL">
               <ExternalLink size={14} />
@@ -262,4 +262,15 @@ function fmtDate(v) {
     return d.toLocaleString(undefined,
       { dateStyle: 'medium', timeStyle: 'short' });
   } catch (_e) { return String(v); }
+}
+
+
+// Some reports persist `url` without a scheme (e.g. "craftersmarket.org"),
+// which browsers treat as relative and resolve against the current page —
+// landing on /dashboard/craftersmarket.org (404). Normalize to absolute.
+function normalizeHref(u) {
+  if (!u) return '#';
+  const s = String(u).trim();
+  if (/^https?:\/\//i.test(s)) return s;
+  return `https://${s.replace(/^\/+/, '')}`;
 }
