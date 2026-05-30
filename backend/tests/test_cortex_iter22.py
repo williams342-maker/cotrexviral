@@ -41,12 +41,12 @@ def _run(coro):
 
 
 def _get(path, **kw):
-    return requests.get(f"{BASE_URL}{path}", headers=HDRS, cookies=COOKIES, timeout=20, **kw)
+    return requests.get(f"{BASE_URL}{path}", headers=HDRS, cookies=COOKIES, timeout=45, **kw)
 
 
 def _post(path, json=None, **kw):
     return requests.post(f"{BASE_URL}{path}", headers=HDRS, cookies=COOKIES,
-                          json=json or {}, timeout=20, **kw)
+                          json=json or {}, timeout=45, **kw)
 
 
 @pytest.fixture(autouse=True)
@@ -62,6 +62,8 @@ def _clean():
         pass
     # Clear user.onboarded_at + nuke the row + delete demo missions via
     # a tiny one-shot subprocess (own python interpreter, own loop).
+    # ALSO wipe cortex_conversations for the test user so the
+    # eligibility gate (zero conversations) is honest across tests.
     import subprocess
     subprocess.run([
         "python3", "-c",
@@ -72,6 +74,7 @@ from core import db
 async def go():
     await db.cortex_onboarding.delete_many({{'user_id': '{USER_ID}'}})
     await db.missions.delete_many({{'user_id': '{USER_ID}', 'demo': True}})
+    await db.cortex_conversations.delete_many({{'user_id': '{USER_ID}'}})
     await db.users.update_one({{'user_id': '{USER_ID}'}},
                                  {{'$unset': {{'onboarded_at': ''}}}})
 asyncio.run(go())

@@ -49,25 +49,65 @@ export const StagePill = ({ stage }) => {
 };
 
 
-/* ClarifyingQuestionsCard — renders the discovery-stage clarifying
-   questions as click-to-insert chips so the user can answer fast. */
-export const ClarifyingQuestionsCard = ({ questions = [], onPick }) => {
-  if (!questions.length) return null;
+/* ClarifyingQuestionsCard — discovery-stage card.
+   Per the Discovery & Consultant redesign:
+     · `answer_shortcuts` (clickable answer chips) are the PRIMARY
+       affordance. Each click submits the answer as a tagged user
+       message and advances state — it never repeats the question.
+     · `questions` render below as supporting context so the user can
+       see what's being asked, but they're click-to-insert (low key)
+       rather than the main interaction.
+   Discovery Budget: if `budget_used >= 2`, the card shows a "moving on"
+   hint so the user knows Cortex is wrapping discovery up. */
+export const ClarifyingQuestionsCard = ({
+  questions = [], answerShortcuts = [], budgetUsed = 0,
+  onPick, onPickShortcut,
+}) => {
+  if (!questions.length && !answerShortcuts.length) return null;
   return (
     <div data-testid="clarifying-questions"
          className="rounded-xl border border-cyan-500/15 bg-cyan-500/[0.03] p-3">
-      <div className="text-[10px] uppercase tracking-widest text-cyan-300 font-semibold mb-2 flex items-center gap-1">
-        <Search size={10} /> Help Cortex understand
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[10px] uppercase tracking-widest text-cyan-300 font-semibold flex items-center gap-1">
+          <Search size={10} /> Help Cortex understand
+        </div>
+        {budgetUsed > 0 && (
+          <div data-testid="discovery-budget-indicator"
+                className="text-[9px] uppercase tracking-wider text-zinc-500 font-mono">
+            Discovery {Math.min(budgetUsed, 2)}/2
+          </div>
+        )}
       </div>
-      <div className="space-y-1.5">
-        {questions.map((q, i) => (
-          <button key={i} onClick={() => onPick?.(q)}
-                  data-testid={`clarifying-question-${i}`}
-                  className="w-full text-left text-[12px] text-zinc-300 hover:text-white px-2.5 py-1.5 rounded-md bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 transition">
-            {q}
-          </button>
-        ))}
-      </div>
+
+      {/* Primary affordance: answer shortcuts. Click → advance state. */}
+      {answerShortcuts.length > 0 && (
+        <div data-testid="answer-shortcuts" className="flex flex-wrap gap-1.5 mb-2">
+          {answerShortcuts.map((s, i) => (
+            <button key={i} onClick={() => onPickShortcut?.(s)}
+                    data-testid={`answer-shortcut-${i}`}
+                    className="text-[11.5px] font-medium px-2.5 py-1.5 rounded-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-200 border border-cyan-500/30 hover:border-cyan-400/50 transition">
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Subordinate: clarifying questions stay click-to-insert but
+          appear smaller / secondary when shortcuts exist. */}
+      {questions.length > 0 && (
+        <div className={`space-y-1 ${answerShortcuts.length > 0 ? 'mt-2 pt-2 border-t border-white/5' : ''}`}>
+          {questions.map((q, i) => (
+            <button key={i} onClick={() => onPick?.(q)}
+                    data-testid={`clarifying-question-${i}`}
+                    className={`w-full text-left rounded-md transition px-2.5 py-1.5
+                                ${answerShortcuts.length > 0
+                                  ? 'text-[10.5px] text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.03]'
+                                  : 'text-[12px] text-zinc-300 hover:text-white bg-white/[0.02] hover:bg-white/[0.05] border border-white/5'}`}>
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

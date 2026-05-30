@@ -494,14 +494,31 @@ const CommandCenter = () => {
                 </div>
               </div>
             )}
-            {thread.map((turn) => (
-              <ChatMessage key={turn.id || turn.created_at}
-                            turn={turn}
-                            busyId={busyId}
-                            isStale={turn._stale}
-                            onClarifyPick={(q) => setDraft(`${q} — `)}
-                            onAction={handleAction} />
-            ))}
+            {thread.map((turn, idx) => {
+              // Count prior discovery turns in the same conversation so
+              // the ClarifyingQuestionsCard can render a Discovery N/2
+              // indicator (matches backend's enforcement window).
+              const budgetUsed = thread.slice(0, idx + 1)
+                .filter((t) => t.role === 'cortex' && t.stage === 'discovery').length;
+              return (
+                <ChatMessage key={turn.id || turn.created_at}
+                                turn={turn}
+                                busyId={busyId}
+                                isStale={turn._stale}
+                                discoveryBudgetUsed={budgetUsed}
+                                onClarifyPick={(q) => setDraft(`${q} — `)}
+                                onShortcutPick={(s) => {
+                                  // Submit the shortcut as a tagged user
+                                  // message — answers the discovery
+                                  // question + advances state. Bypasses
+                                  // the composer so the user doesn't
+                                  // have to retype the chip's text.
+                                  setDraft(s);
+                                  setTimeout(() => send(), 30);
+                                }}
+                                onAction={handleAction} />
+              );
+            })}
             <PhaseIndicator phase={sending ? phase : null}
                               phaseHistory={phaseHistory} />
           </div>

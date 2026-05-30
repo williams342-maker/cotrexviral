@@ -17,7 +17,7 @@ import { API } from '../../../context/AuthContext';
      · mission_proposal/execution → full plan card
      · analysis_complete / analysis_failed → embedded job CTAs (View / Retry / Debug) */
 
-export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick }) => {
+export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick, onShortcutPick, discoveryBudgetUsed = 0 }) => {
   if (turn._kind === 'mission_events') {
     return <MissionEventStream missionTitle={turn.missionTitle}
                                   events={turn.events || []} />;
@@ -35,7 +35,9 @@ export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick }) 
 
   const stage = turn.stage || (turn.recommendation ? 'mission_proposal' : null);
   const showPlanCard = !!turn.recommendation;
-  const showClarify = stage === 'discovery' && (turn.clarifying_questions || []).length > 0;
+  const showClarify = stage === 'discovery'
+    && ((turn.clarifying_questions || []).length > 0
+        || (turn.answer_shortcuts || []).length > 0);
   const showAnalysis = stage === 'analysis' && (turn.findings || []).length > 0;
   const showRecLite = stage === 'recommendation' && (
     turn.recommendation_summary
@@ -80,8 +82,20 @@ export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick }) 
         )}
 
         {showClarify && !isStale && (
-          <ClarifyingQuestionsCard questions={turn.clarifying_questions}
-                                       onPick={onClarifyPick} />
+          <ClarifyingQuestionsCard
+            questions={turn.clarifying_questions || []}
+            answerShortcuts={turn.answer_shortcuts || []}
+            budgetUsed={discoveryBudgetUsed}
+            onPick={onClarifyPick}
+            onPickShortcut={onShortcutPick}
+          />
+        )}
+
+        {/* Action-First inline summary cards — leads list, reports
+            count, opportunities, missions — rendered when stage=action
+            and a known action_kind is present. */}
+        {turn.stage === 'action' && turn.action_data && (
+          <ActionDataCard kind={turn.action_kind} data={turn.action_data} />
         )}
 
         {showAnalysis && !isStale && (
@@ -117,6 +131,151 @@ export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick }) 
 };
 
 export default ChatMessage;
+
+
+/* ActionDataCard — inline summary rendered for stage=action turns.
+   Mirrors the consultative-summary visualization in Cortex's prose
+   reply: highlight stats, top categories/items, plus a Deep Link
+   button that drops the user into the relevant dashboard surface. */
+function ActionDataCard({ kind, data }) {
+  if (!data || !kind) return null;
+  const deepLink = data.deep_link;
+
+  // leads_summary: total + category chips + quality tiles
+  if (kind === 'show_leads' && data.kind === 'leads_summary' && data.total > 0) {
+    return (
+      <div data-testid="action-card-leads"
+            className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-3">
+        <div className="text-[10px] uppercase tracking-widest text-cyan-300 font-semibold mb-2 flex items-center gap-1.5">
+          {data.total} leads · top categories
+        </div>
+        {(data.categories || []).length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {data.categories.map((c, i) => (
+              <span key={i}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/10 text-zinc-200">
+                {c.count} <span className="text-zinc-500">{c.name}</span>
+              </span>
+            ))}
+          </div>
+        )}
+        {data.quality && (
+          <div className="grid grid-cols-3 gap-1.5">
+            {[['high', 'High', 'text-emerald-200'],
+                ['review', 'Review', 'text-amber-200'],
+                ['low', 'Low', 'text-zinc-400']].map(([key, label, cls]) => (
+              <div key={key} className="text-center bg-white/[0.03] rounded-md py-1.5">
+                <div className={`text-[14px] font-bold tabular-nums leading-none ${cls}`}>
+                  {data.quality[key] || 0}
+                </div>
+                <div className="text-[9px] text-zinc-500 mt-0.5 uppercase tracking-wider">
+                  {label}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {deepLink && (
+          <a href={deepLink}
+              data-testid="action-card-leads-deep-link"
+              className="mt-2 inline-flex items-center gap-1 text-[10.5px] font-semibold text-cyan-200 hover:text-white">
+            Open Leads Manager <ChevronRight size={9} />
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  // reports_summary
+  if (kind === 'show_reports' && data.recent?.length) {
+    return (
+      <div data-testid="action-card-reports"
+            className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-3">
+        <div className="text-[10px] uppercase tracking-widest text-cyan-300 font-semibold mb-2">
+          {data.total} reports · most recent
+        </div>
+        <div className="space-y-1">
+          {data.recent.slice(0, 5).map((r) => (
+            <div key={r.id} className="flex items-center justify-between text-[11.5px] py-1 px-1.5 rounded hover:bg-white/[0.04]">
+              <span className="text-zinc-200 truncate">{r.url || r.type}</span>
+              <span className="text-zinc-500 ml-2 shrink-0">{r.type}</span>
+            </div>
+          ))}
+        </div>
+        {deepLink && (
+          <a href={deepLink}
+              data-testid="action-card-reports-deep-link"
+              className="mt-2 inline-flex items-center gap-1 text-[10.5px] font-semibold text-cyan-200 hover:text-white">
+            Open Reports <ChevronRight size={9} />
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  // opportunities_summary
+  if (kind === 'show_opportunities' && data.top?.length) {
+    return (
+      <div data-testid="action-card-opportunities"
+            className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-3">
+        <div className="text-[10px] uppercase tracking-widest text-cyan-300 font-semibold mb-2">
+          Top opportunities
+        </div>
+        <div className="space-y-1">
+          {data.top.map((o, i) => (
+            <div key={i} className="text-[11.5px] py-1">
+              <div className="text-zinc-200 leading-tight">{o.title}</div>
+              {o.subtitle && (
+                <div className="text-zinc-500 text-[10px] truncate">{o.subtitle}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // missions_summary
+  if (kind === 'show_missions' && data.missions?.length) {
+    return (
+      <div data-testid="action-card-missions"
+            className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-3">
+        <div className="text-[10px] uppercase tracking-widest text-cyan-300 font-semibold mb-2">
+          {data.total} active missions
+        </div>
+        <div className="space-y-1">
+          {data.missions.slice(0, 6).map((m) => (
+            <div key={m.id} className="flex items-center justify-between text-[11.5px] py-1 px-1.5 rounded hover:bg-white/[0.04]">
+              <span className="text-zinc-200 truncate">{m.title}</span>
+              <span className="text-zinc-500 ml-2 shrink-0">L{m.autonomy_level ?? '–'}</span>
+            </div>
+          ))}
+        </div>
+        {deepLink && (
+          <a href={deepLink}
+              data-testid="action-card-missions-deep-link"
+              className="mt-2 inline-flex items-center gap-1 text-[10.5px] font-semibold text-cyan-200 hover:text-white">
+            Open Missions <ChevronRight size={9} />
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  // run_scan_started — show a tiny "tracking on rail" callout
+  if (kind === 'run_scan_started' && data.job_id) {
+    return (
+      <div data-testid="action-card-scan-started"
+            className="rounded-xl border border-violet-500/25 bg-violet-500/[0.05] p-3 flex items-center gap-2">
+        <div className="flex-1 text-[11.5px] text-zinc-300">
+          Tracking on the right rail · Job <span className="font-mono text-violet-300">#{data.job_id.slice(0, 8)}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
 
 
 /* AnalysisCompleteCard — embedded CTAs inside Cortex's chat bubble

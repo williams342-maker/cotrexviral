@@ -251,24 +251,42 @@ async def console_chat(payload: ChatPayload, request: Request):
     # ---- Memory snapshot before classification ----
     from cortex import memory as cmem
     from cortex.stages import classify_and_respond, should_render_plan_card
+    from cortex.action_first import match_action_intent, execute_action
     strategy = await cmem.get_strategy(user.user_id)
     recalled = await cmem.recall_semantic(user.user_id, payload.message, k=5)
     memory_block = cmem.render_memory_block(strategy, recalled)
 
     # Pull last ~10 turns for stage continuity.
     hist_cur = db.cortex_conversations.find(
-        {"user_id": user.user_id}, {"_id": 0, "role": 1, "message": 1, "stage": 1},
+        {"user_id": user.user_id, "conversation_id": conv_id},
+        {"_id": 0, "role": 1, "message": 1, "stage": 1},
     ).sort("created_at", -1).limit(10)
     history = [h async for h in hist_cur]
     history.reverse()
 
-    stage_data = await classify_and_respond(
-        user_message=payload.message,
-        user_id=user.user_id,
-        history=history,
-        memory_block=memory_block,
-        intent_types=INTENT_TYPES,
-    )
+    # ---- Action-First fast path ------------------------------------
+    # Senior consultants don't interview before showing the data. If
+    # the user clearly asked for an existing artifact OR to start a
+    # concrete scan, bypass the discovery funnel entirely.
+    action_intent = match_action_intent(payload.message)
+    if action_intent:
+        stage_data = await execute_action(
+            action_intent, user_id=user.user_id, conversation_id=conv_id)
+    else:
+        # ---- Discovery Budget — count prior discovery turns in this
+        #      conversation. After 2 rounds, force progression.
+        discovery_count = sum(
+            1 for h in history
+            if h.get("role") == "cortex" and h.get("stage") == "discovery"
+        )
+        stage_data = await classify_and_respond(
+            user_message=payload.message,
+            user_id=user.user_id,
+            history=history,
+            memory_block=memory_block,
+            intent_types=INTENT_TYPES,
+            discovery_count=discovery_count,
+        )
 
     # Plan card is GATED — only synthesized when the consultant funnel
     # advances to mission_proposal+ OR the user explicitly requests execution.
@@ -302,10 +320,15 @@ async def console_chat(payload: ChatPayload, request: Request):
         "intent":          stage_data.get("intent"),
         "params":          stage_data.get("params"),
         "clarifying_questions": stage_data.get("clarifying_questions"),
+        "answer_shortcuts": stage_data.get("answer_shortcuts") or [],
         "findings":        stage_data.get("findings"),
         "recommendation_summary": stage_data.get("recommendation_summary"),
         "alternatives":    stage_data.get("alternatives"),
         "recommendation":  rec,
+        # Action-First metadata — `action_kind` lets ChatMessage render
+        # the inline data card (leads summary / report list / scan-started ack).
+        "action_kind":     stage_data.get("action_kind"),
+        "action_data":     stage_data.get("action_data"),
         "created_at":      now,
     })
 
@@ -356,10 +379,13 @@ async def console_chat(payload: ChatPayload, request: Request):
         "params":                  stage_data.get("params") or {},
         "ack":                     stage_data["ack"],
         "clarifying_questions":    stage_data.get("clarifying_questions") or [],
+        "answer_shortcuts":        stage_data.get("answer_shortcuts") or [],
         "findings":                stage_data.get("findings") or [],
         "recommendation_summary":  stage_data.get("recommendation_summary") or "",
         "alternatives":            stage_data.get("alternatives") or [],
         "recommendation":          rec,
+        "action_kind":             stage_data.get("action_kind"),
+        "action_data":             stage_data.get("action_data"),
         "memory": {
             "strategy_summary": (strategy or {}).get("summary", "") if strategy else "",
             "recalled_count":   len(recalled),

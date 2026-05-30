@@ -27,7 +27,11 @@ logger = logging.getLogger(__name__)
 
 # Five canonical stages.
 STAGES = ("discovery", "analysis", "recommendation",
-            "mission_proposal", "execution")
+            "mission_proposal", "execution",
+            # `action` is the Action-First bypass stage (see
+            # cortex.action_first). The classifier never emits this —
+            # it's only set by the Action-First router.
+            "action")
 
 
 # Regex shortcuts users can use to bypass discovery and jump straight
@@ -88,6 +92,36 @@ Rules for stage progression — be conservative:
      `explicit_execution_request: true` AND stage = `mission_proposal`,
      bypassing the funnel.
 
+DISCOVERY TRIGGERS — fire discovery ONLY when at least one is true:
+
+  A) Goal is genuinely ambiguous (e.g. "grow my business" with no
+     target, niche, channel, or KPI).
+  B) User is about to spend significant money or burn a one-shot
+     resource (ad budget, outreach to limited high-value list).
+  C) User's request conflicts with the available evidence (e.g.
+     they're asking to find more leads when 100+ qualified leads
+     already exist in their pipeline).
+
+If NONE of A/B/C apply — produce value immediately. Go straight to
+analysis, recommendation, or action. Senior consultants don't
+interview before doing useful work.
+
+DISCOVERY BUDGET — a runtime counter (discovery_count) is provided
+below. If discovery_count >= 2, you MUST advance the stage. NEVER
+return another `discovery` turn after the budget is exhausted —
+move to `analysis` or `recommendation` even if context is imperfect.
+Cortex must produce value after at most 2 clarification rounds.
+
+ANSWER SHORTCUTS — when stage IS `discovery`, your clarifying
+questions MUST be accompanied by 3-6 candidate ANSWERS the user can
+click to advance. Each shortcut is a short label (3-6 words) that, if
+clicked, reduces uncertainty. Examples:
+  Question: "Why are you recruiting sellers?"
+  Shortcuts: ["Marketplace growth", "Inventory expansion",
+              "Founder cohort", "Revenue goal", "Community"]
+NEVER repeat the same question as a shortcut. Shortcuts must move
+the conversation forward.
+
 Available mission intents (only set when stage is `mission_proposal`):
   %(intents)s
 
@@ -101,6 +135,7 @@ Return STRICT JSON only — no prose, no fences. Schema:
   "explicit_execution_request": true|false,
   "ack": "<your reply to the user — matches the stage's tone>",
   "clarifying_questions": ["<question1>", "<question2>"],
+  "answer_shortcuts": ["<short answer 1>", "<short answer 2>", ...],
   "findings": ["<finding1>", "<finding2>"],
   "recommendation_summary": "<1-2 sentence headline of what you'd recommend, ONLY when stage is recommendation or later>",
   "alternatives": ["<alt1>", "<alt2>"],
@@ -131,11 +166,18 @@ async def classify_and_respond(
     history: list[dict],
     memory_block: str = "",
     intent_types: list[str],
+    discovery_count: int = 0,
 ) -> dict:
     """Run the stage classifier. Returns a dict with `stage`, `ack`,
-    `clarifying_questions`, `findings`, plus optional `intent` / `params`
-    when the stage advances to `mission_proposal`. Plan-card synthesis is
-    handled by the caller (only when stage ∈ {mission_proposal, execution})."""
+    `clarifying_questions`, `answer_shortcuts`, `findings`, plus
+    optional `intent` / `params` when the stage advances to
+    `mission_proposal`. Plan-card synthesis is handled by the caller
+    (only when stage ∈ {mission_proposal, execution}).
+
+    `discovery_count` is the number of prior discovery turns in the
+    current conversation. Used to enforce the Discovery Budget —
+    after 2 rounds, the classifier output is post-processed to force
+    progression to analysis/recommendation."""
     from core import EMERGENT_LLM_KEY
 
     # ----- Fast-path: explicit execution override --------------------
@@ -174,10 +216,18 @@ async def classify_and_respond(
             )
             user_payload = (
                 f"Recent conversation:\n{transcript}\n\n"
-                f"Latest user message:\n{user_message}"
+                f"discovery_count (turns already spent on discovery): {discovery_count}\n"
+                + ("⚠️ DISCOVERY BUDGET EXHAUSTED — you MUST advance past discovery this turn.\n"
+                    if discovery_count >= 2 else "")
+                + f"\nLatest user message:\n{user_message}"
             )
         else:
-            user_payload = f"Latest user message:\n{user_message}"
+            user_payload = (
+                f"discovery_count (turns already spent on discovery): {discovery_count}\n"
+                + ("⚠️ DISCOVERY BUDGET EXHAUSTED — you MUST advance past discovery this turn.\n"
+                    if discovery_count >= 2 else "")
+                + f"\nLatest user message:\n{user_message}"
+            )
 
         tool = {
             "name":        "classify_stage_response",
@@ -193,6 +243,9 @@ async def classify_and_respond(
                     "ack":                        {"type": "string"},
                     "clarifying_questions":       {"type": "array",
                                                    "items": {"type": "string"}},
+                    "answer_shortcuts":           {"type": "array",
+                                                   "items": {"type": "string"},
+                                                   "description": "Short clickable answers when stage=discovery. NEVER mirror the question."},
                     "findings":                   {"type": "array",
                                                    "items": {"type": "string"}},
                     "recommendation_summary":     {"type": "string"},
@@ -216,7 +269,27 @@ async def classify_and_respond(
         )
         if not args:
             return _heuristic_response(user_message, intent_types)
-        return _normalize(args, intent_types)
+        result = _normalize(args, intent_types)
+
+        # ----- Discovery Budget enforcement -------------------------
+        # If we've already burned 2 discovery rounds and the model
+        # STILL returned discovery, force progression to analysis so
+        # the user always sees forward motion after 2 rounds.
+        if discovery_count >= 2 and result["stage"] == "discovery":
+            logger.info("classify_and_respond: budget exhausted, forcing advance")
+            result["stage"] = "analysis"
+            result["discovery_complete"] = True
+            # Replace the pure-question ack with a "moving forward" message.
+            if not result["findings"]:
+                result["findings"] = [
+                    "Working with what we have so far — happy to refine as we go.",
+                ]
+            if "?" in (result.get("ack") or "") and not result.get("recommendation_summary"):
+                result["ack"] = (
+                    "I have enough to work with. Let me share what I'm seeing "
+                    "and a recommendation — we can refine from there."
+                )
+        return result
     except Exception:
         logger.exception("classify_and_respond: LLM failed, using heuristic fallback")
         return _heuristic_response(user_message, intent_types)
@@ -230,6 +303,26 @@ def _normalize(data: dict, intent_types: list[str]) -> dict:
     intent = data.get("intent") if data.get("intent") in intent_types else None
     ack = str(data.get("ack") or "")[:600]
     clarifying = [str(q)[:160] for q in (data.get("clarifying_questions") or [])][:3]
+    # Answer shortcuts (3-6 short clickable answers). Stripped down to
+    # avoid noise — drop any that are obvious mirrors of the question.
+    raw_short = [str(s).strip() for s in (data.get("answer_shortcuts") or [])]
+    answer_shortcuts: list[str] = []
+    seen = set()
+    for s in raw_short:
+        if not s or len(s) > 60:
+            continue
+        # Reject shortcuts that look like restatements of any clarifying
+        # question (the spec forbids this).
+        if "?" in s:
+            continue
+        low = s.lower()
+        if low in seen:
+            continue
+        seen.add(low)
+        answer_shortcuts.append(s)
+        if len(answer_shortcuts) >= 6:
+            break
+
     # Discovery-stage UX: the spec requires the assistant to actually
     # ask a question, not just preamble. If Claude's ack ends without
     # a '?', append the first clarifying question so the user always
@@ -244,6 +337,7 @@ def _normalize(data: dict, intent_types: list[str]) -> dict:
         "explicit_execution_request":  bool(data.get("explicit_execution_request")),
         "ack":                         ack,
         "clarifying_questions":        clarifying,
+        "answer_shortcuts":            answer_shortcuts,
         "findings": [
             str(f)[:200] for f in (data.get("findings") or [])
         ][:5],
