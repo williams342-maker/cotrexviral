@@ -1,18 +1,21 @@
 import React from 'react';
-import { Brain } from 'lucide-react';
+import axios from 'axios';
+import { Brain, CheckCircle2, AlertTriangle, ChevronRight, RotateCw, Bug } from 'lucide-react';
 import PlanCard from './PlanCard';
 import MissionEventStream from './MissionEventStream';
 import {
   StagePill, ClarifyingQuestionsCard, RecommendationLiteCard,
   FindingsCard,
 } from './StageComponents';
+import { API } from '../../../context/AuthContext';
 
 /* ChatMessage — Discovery-First aware.
    Renders different surfaces per stage:
      · discovery       → clarifying questions chips (no plan card)
      · analysis        → findings card (no plan card)
      · recommendation  → recommendation-lite card with [Create Mission] CTA
-     · mission_proposal/execution → full plan card */
+     · mission_proposal/execution → full plan card
+     · analysis_complete / analysis_failed → embedded job CTAs (View / Retry / Debug) */
 
 export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick }) => {
   if (turn._kind === 'mission_events') {
@@ -66,6 +69,16 @@ export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick }) 
           </div>
         )}
 
+        {/* Inline analysis-job CTAs — Cortex never silently completes a
+            scan. View Report / Create Mission for completed; Retry +
+            Debug for failed. Keeps everything in the conversation. */}
+        {turn.kind === 'analysis_complete' && turn.job_id && (
+          <AnalysisCompleteCard turn={turn} />
+        )}
+        {turn.kind === 'analysis_failed' && turn.job_id && (
+          <AnalysisFailedCard turn={turn} />
+        )}
+
         {showClarify && !isStale && (
           <ClarifyingQuestionsCard questions={turn.clarifying_questions}
                                        onPick={onClarifyPick} />
@@ -104,3 +117,96 @@ export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick }) 
 };
 
 export default ChatMessage;
+
+
+/* AnalysisCompleteCard — embedded CTAs inside Cortex's chat bubble
+   when an `analysis_jobs` row finishes. Reads the kind-specific
+   action labels off the turn metadata (view_label / create_label).
+   Each button references the real job_id so the user can correlate
+   with the Active Work rail. */
+function AnalysisCompleteCard({ turn }) {
+  const metrics = turn.metrics || {};
+  const view = async () => {
+    try {
+      await axios.post(`${API}/cortex/analysis-jobs/${turn.job_id}/mark-reviewed`,
+                        {}, { withCredentials: true });
+    } catch (_e) { /* */ }
+    // Naive: open reports list. Per-job result_link is on the rail card.
+    window.open('/dashboard/reports', '_self');
+  };
+  return (
+    <div data-testid={`chat-analysis-complete-${turn.job_id}`}
+          className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.05] p-3 mt-1">
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-emerald-300 font-semibold mb-1.5">
+        <CheckCircle2 size={10} /> Analysis Complete · Job #{(turn.job_id || '').slice(0, 8)}
+      </div>
+      {Object.keys(metrics).length > 0 && (
+        <div className="grid grid-cols-3 gap-1.5 mb-2">
+          {Object.entries(metrics).slice(0, 3).map(([k, v]) => (
+            <div key={k} className="text-center bg-white/[0.04] rounded-md py-1.5 px-1">
+              <div className="text-[14px] text-emerald-200 font-bold tabular-nums leading-none">
+                {typeof v === 'boolean' ? (v ? 'Yes' : 'No') : v}
+              </div>
+              <div className="text-[9px] text-zinc-500 mt-0.5 uppercase tracking-wider truncate">
+                {k.replace(/_/g, ' ')}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        <button onClick={view}
+                data-testid={`chat-analysis-view-${turn.job_id}`}
+                className="text-[10.5px] font-semibold px-2.5 py-1 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 border border-emerald-500/30 transition flex items-center gap-1">
+          View Report <ChevronRight size={9} />
+        </button>
+        <button data-testid={`chat-analysis-create-${turn.job_id}`}
+                className="text-[10.5px] font-semibold px-2.5 py-1 rounded-md bg-violet-500/15 hover:bg-violet-500/25 text-violet-200 border border-violet-500/30 transition">
+          Create Mission
+        </button>
+        <button disabled title="Coming soon"
+                data-testid={`chat-analysis-optimize-${turn.job_id}`}
+                className="text-[10.5px] font-semibold px-2.5 py-1 rounded-md bg-white/5 text-zinc-500 border border-white/10 transition opacity-60 cursor-not-allowed">
+          Optimize Automatically · soon
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+/* AnalysisFailedCard — failure CTAs inside the Cortex chat bubble.
+   Retry re-fires the runner via the analysis-jobs endpoint; Debug
+   opens the debug pane scoped to the failed job. */
+function AnalysisFailedCard({ turn }) {
+  const err = (turn.metrics?.error || 'Unknown error');
+  const retry = async () => {
+    try {
+      await axios.post(`${API}/cortex/analysis-jobs/${turn.job_id}/retry`,
+                        {}, { withCredentials: true });
+    } catch (_e) { /* */ }
+  };
+  return (
+    <div data-testid={`chat-analysis-failed-${turn.job_id}`}
+          className="rounded-xl border border-rose-500/30 bg-rose-500/[0.05] p-3 mt-1">
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-rose-300 font-semibold mb-1.5">
+        <AlertTriangle size={10} /> Analysis Failed · Job #{(turn.job_id || '').slice(0, 8)}
+      </div>
+      <div className="text-[11.5px] text-rose-100 leading-snug mb-2">
+        <span className="text-zinc-500">Reason:</span> {err}
+      </div>
+      <div className="flex gap-1.5">
+        <button onClick={retry}
+                data-testid={`chat-analysis-retry-${turn.job_id}`}
+                className="text-[10.5px] font-semibold px-2.5 py-1 rounded-md bg-rose-500/15 hover:bg-rose-500/25 text-rose-200 border border-rose-500/30 transition flex items-center gap-1">
+          <RotateCw size={9} /> Retry
+        </button>
+        <button onClick={() => window.open('/dashboard?debug=1&job=' + turn.job_id, '_self')}
+                data-testid={`chat-analysis-debug-${turn.job_id}`}
+                className="text-[10.5px] font-semibold px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/10 transition flex items-center gap-1">
+          <Bug size={9} /> Debug
+        </button>
+      </div>
+    </div>
+  );
+}

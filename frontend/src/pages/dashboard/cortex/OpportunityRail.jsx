@@ -1,6 +1,7 @@
 import React from 'react';
 import { Sparkles, AlertCircle, ChevronRight, Loader2, TrendingUp, AlertTriangle } from 'lucide-react';
 import ActiveMissionRail from './ActiveMissionRail';
+import ActiveWorkRail from './ActiveWorkRail';
 import OptimizationStatus from './OptimizationStatus';
 
 /* OpportunityRail — right sidebar showing AI-surfaced opportunities,
@@ -16,7 +17,7 @@ const URGENCY = {
 export const OpportunityRail = ({
   opportunities = [], loading, onPrompt, strategy,
   activeMissions = [], missionsLoading = false, onOpenMission,
-  onDiscussFinding,
+  onDiscussFinding, onLaunchScan,
 }) => {
   return (
     <aside data-testid="cortex-opportunity-rail"
@@ -27,6 +28,9 @@ export const OpportunityRail = ({
       {/* Active missions */}
       <ActiveMissionRail missions={activeMissions} loading={missionsLoading}
                             onOpenDetails={onOpenMission} />
+
+      {/* Active Work — long-running analyses with real job IDs */}
+      <ActiveWorkRail onLaunchScan={onLaunchScan} />
 
       {/* Strategic memory header */}
       {(strategy?.summary || (strategy?.goals && strategy.goals.length > 0)) && (

@@ -533,6 +533,35 @@ const CommandCenter = () => {
                 setDraft(`I see Cortex flagged: "${f.bottleneck}". What's your reasoning, and what would you recommend?`);
               }}
               onPrompt={handlePrompt}
+              onLaunchScan={async (jobType) => {
+                // Friendly prompt for URL/target then enqueue a real job.
+                // Real job IDs are the only way Cortex is allowed to claim
+                // it's scanning — no fake "I'm working on it..." messages.
+                const target = window.prompt(
+                  jobType === 'seo_scan'
+                    ? 'Which URL should Cortex audit?'
+                    : 'What target?',
+                  jobType === 'seo_scan' ? 'https://' : '');
+                if (!target) return;
+                try {
+                  const r = await axios.post(`${API}/cortex/analysis-jobs`,
+                    { job_type: jobType, target, conversation_id: activeConvId },
+                    { withCredentials: true });
+                  // Cortex posts a real "scan started" message into the
+                  // chat that references the job_id, so the user can
+                  // correlate it with the rail.
+                  setThread((m) => [...m, {
+                    id: `cortex-${Date.now()}`,
+                    role: 'assistant',
+                    content: `Started ${r.data.job_label} for ${target}. ` +
+                              `Job #${r.data.id.slice(0, 8)} — track progress on the right rail.`,
+                    metadata: { kind: 'analysis_started', job_id: r.data.id },
+                  }]);
+                } catch (e) {
+                  toast({ title: 'Could not start scan',
+                          description: e?.response?.data?.detail || 'Try again' });
+                }
+              }}
             />
           </div>
         )}

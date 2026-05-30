@@ -35,6 +35,28 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 100) **🛠️ Long-Running Analysis Queue — real jobs, real IDs, real proof of work**
+  - **Core mandate enforced**: Cortex never claims to be running an analysis without a real `analysis_jobs` row backing it. Every "scanning…" message references a `job_id` visible in the Active Work rail. No fake progress messages possible.
+  - **State machine**: `queued → running → completed → reviewed → mission_created`. Failure branch: `running → failed` with Retry/Debug CTAs.
+  - **Backend** (`routes/cortex_analysis_jobs.py` + `cortex/analysis_runner.py`):
+    - 6 endpoints (`POST /analysis-jobs`, `GET /list`, `GET /{id}`, `/retry`, `/cancel`, `/mark-reviewed`). 5-job concurrent cap per user (429 when exceeded).
+    - Runner fires via `asyncio.create_task` on enqueue. Per-job phase plans drive `current_step` / `next_step` / `eta_seconds` / `progress_pct` so the rail's polling client sees real progress.
+    - **SEO Scan = REAL work**: drives through site fetch + LLM analysis using existing `_fetch_url_snippet` + `_llm_for_user` + `_safe_json` from `routes/ai.py`. Persists a real `reports` row so `View Report` opens the actual report.
+    - **Seller Discovery = SAFE MOCK**: simulates phases (~9s) but **fires no outreach**. Result message explicitly says "No outreach has been sent — launch a mission to start contact." Compliance rules pending.
+    - **Site Scan / Competitor Audit / Content Audit**: scaffold-only fast mocks. UI fully functional; real work lands next iteration.
+    - **Cancellation**: runner checks `status == cancelled` between every phase + post-sleep. Cooperative termination.
+    - **Auto-completion chat message**: on completion or failure, runner inserts a turn into `cortex_conversations` (same collection chat uses) with `kind: analysis_complete` / `analysis_failed`, `job_id`, `job_type`, and `metrics`. Lands in user's current conversation.
+  - **Frontend** (`ActiveWorkRail.jsx`):
+    - Mounted below Active Missions in the right rail (`OpportunityRail`).
+    - Sections: Running / Queued / Completed / Failed. Polls 1.5s while active, 8s when idle.
+    - Per-card: animated gradient progress bar, current step, next step, ETA, status chip. Failed cards: Retry + Debug CTAs. Completed cards: View Report + Create Mission + "Optimize Automatically · soon" (stubbed per user spec). framer-motion layout/exit animations + pulse-flash on status transitions.
+    - Empty state: "Run SEO Scan" CTA → prompts for URL → enqueues real job + drops a confirmation message into the chat thread with the job ID. **No scanning message without a real job.**
+  - **Chat integration** (`ChatMessage.jsx`):
+    - `analysis_complete` turns render an embedded green card inside Cortex's chat bubble with metrics tiles + `View Report` / `Create Mission` / `Optimize Automatically · soon` buttons.
+    - `analysis_failed` turns render a red card inside the bubble with the error reason + `Retry` / `Debug` buttons. Failure surfaces in chat, not just in the rail (user-requested).
+    - Each card displays `Job #abcd1234` — the same job_id visible on the rail — so users can correlate the chat artifact with the work.
+  - **iter23 tests**: 8 tests covering create (with 5-cap 429 + 400 on unknown type), runner end-to-end (queued → completed in ≤18s, metrics populated, chat message persisted), cancel/retry, mark-reviewed, grouped list shape. **All 8 pass + iter17→iter23 full regression: 66/67 (1 skipped, 0 failures)**.
+
 - 2026-02-26 (part 99) **🎓 AI-guided onboarding mission — Cortex teaches the platform through conversation**
   - **Not a tour, not tooltips, not modals.** A first-run AI-guided mission where Cortex acts as a consultant introducing itself, asking the user's growth goal, building a real DEMO mission off it, and narrating the lifecycle as the demo auto-progresses through phases on the rail. Spotlight cues (soft radial overlay via portal — UI stays interactive) draw the eye to whatever Cortex is talking about.
   - **8-step state machine** in `routes/cortex_onboarding.py`: `welcome → set_goal → cc_intro → sample_mission_proposal → mission_lifecycle → autonomous_execution → autonomy_explain → complete`. Personalized off user's first name + stated goal. Step row persisted in `cortex_onboarding`.

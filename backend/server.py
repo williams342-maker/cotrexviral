@@ -79,6 +79,7 @@ from routes import (  # noqa: F401
     cortex_plan_actions,  # Plan-card actions: cancel + email-to-inbox
     cortex_stream,   # SSE-streamed Cortex chat (phase events)
     cortex_active_missions,  # Active Mission Rail — live status per running mission
+    cortex_analysis_jobs,    # Active Work rail — long-running analysis with job IDs
     cortex_optimization,     # OODA loop endpoints: status, log, run-now
     cortex_onboarding,       # AI-guided first-run onboarding mission (replaces tour)
     mission_loop,    # Event-driven relay: scout→creator→operator→intelligence
