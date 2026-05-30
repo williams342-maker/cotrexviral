@@ -5,7 +5,7 @@ import {
   Calendar, CheckSquare, Brain, TrendingUp, Inbox,
   KeyRound, User as UserIcon, LogOut, ChevronRight, ChevronDown,
   Command as CommandIcon, Compass, Sparkles, Send,
-  ShoppingBag, Search, MessageSquare, ShieldCheck,
+  ShoppingBag, Search, MessageSquare, ShieldCheck, FileText,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ImpersonateBanner from './ImpersonateBanner';
@@ -41,6 +41,7 @@ const SECTIONS = [
     ],
   },
   { id: 'cortex',       label: 'Cortex Brief', icon: Brain,    to: '/dashboard/cortex' },
+  { id: 'assets',       label: 'Assets',       icon: FileText, to: '/dashboard/assets' },
   { id: 'scout',        label: 'Scout',        icon: Compass,  to: '/dashboard/teams/scout' },
   { id: 'creator',      label: 'Creator',      icon: Sparkles, to: '/dashboard/teams/creator' },
   { id: 'operator',     label: 'Operator',     icon: Send,     to: '/dashboard/teams/operator' },
