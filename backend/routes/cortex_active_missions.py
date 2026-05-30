@@ -74,25 +74,31 @@ async def _infer_seller_phase(user_id: str, mission_id: str) -> dict:
 
 
 async def _last_action(user_id: str, mission_id: str) -> Optional[dict]:
-    """Most recent event — from mission_events, then seller_outreach_events."""
+    """Most recent event across BOTH mission_events and
+    seller_outreach_events. Merges by created_at and returns the
+    single newest row so the rail reflects the freshest activity."""
+    candidates: list[dict] = []
     for coll in ("mission_events", "seller_outreach_events"):
         try:
-            cur = db[coll].find(
-                {"user_id": user_id, **({"mission_id": mission_id}
-                                          if coll == "mission_events" else {})},
-                {"_id": 0},
-            ).sort("created_at", -1).limit(1)
+            base = {"user_id": user_id, "mission_id": mission_id}
+            cur = db[coll].find(base, {"_id": 0}).sort("created_at", -1).limit(1)
             async for r in cur:
-                ts = r.get("created_at")
-                return {
+                candidates.append({
                     "label":      (r.get("event") or r.get("type") or "tick").replace("_", " "),
                     "summary":    r.get("body") or r.get("payload", {}).get("title") or "",
-                    "created_at": ts.isoformat() if isinstance(ts, datetime) else ts,
+                    "created_at": r.get("created_at"),
                     "source":     coll,
-                }
+                })
         except Exception:
             continue
-    return None
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x.get("created_at") or datetime.min.replace(tzinfo=timezone.utc),
+                     reverse=True)
+    top = candidates[0]
+    ts = top.get("created_at")
+    top["created_at"] = ts.isoformat() if isinstance(ts, datetime) else ts
+    return top
 
 
 @api.get("/cortex/missions/active")

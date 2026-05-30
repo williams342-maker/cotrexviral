@@ -35,6 +35,17 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-25 (part 91) **⚡ Conversational Execution Architecture — Cortex works WHILE you chat**
+  - **The architecture shift**: Plan card execution is now a side-effect of conversation, not a separate workflow. User stays on `/dashboard` after Launch — no nav-away, ever.
+  - **`/api/cortex/missions/active`** (new): real-time list of running/queued/paused missions with rich status — `progress {current, target, pct, eta_days, confidence}`, `phase {key, label, next_label, stages, leads_total}` (inferred from seller_leads stage distribution), `last_action`, `next_action`. Updates poll every 5s on the frontend.
+  - **`/api/cortex/missions/{id}` + `/api/cortex/missions/{id}/events?since=&limit=`** for single-mission detail + incremental event timeline.
+  - **Execute endpoint now returns a `followup` object** — Cortex auto-appends a contextual refinement Cortex turn after every launch/queue/draft (e.g. *"Mission launched. Current phase: Discovery. While I work, would you like me to: • focus on premium • focus on high-volume • prioritize a region…"*). Persisted to `cortex_conversations` with `intent='followup'`.
+  - **Active Mission Rail** (`ActiveMissionRail.jsx`): top of the right sidebar, replacing the "AI Opportunities only" view. Each tile shows live progress bar, phase icon + color, autonomy level chip, current phase, ETA, next-action description, last-action timestamp, and an animated pulse dot indicating live status.
+  - **MissionEventStream** (`MissionEventStream.jsx`): inline chat-thread entry rendering timestamped mission events — `[12:04 PM] Discovered — Found 342 woodworking sellers`. Polls per-mission every 8s for tracked missions (seeded from active list on first load + each new launch).
+  - **Stale plan + dismissed styling**: plan card visually "shrinks away" after launch (auto-minimized + grayed) so the next Cortex turn (the followup) becomes the focal point.
+  - **iteration_14.json**: 12/12 backend tests + 100% frontend critical flows. Testing agent caught + fixed a P0 (`phaseHistory` useState was undeclared); confirmed in CommandCenter.jsx:194. Polish: `_last_action()` now merges mission_events + seller_outreach_events by newest timestamp; seeded 3 events to visually verify the live MissionEventStream rendering in the chat.
+
+
 - 2026-02-25 (part 90) **🛠️ Cortex Command Center polish — UI affordances + SSE + Phase 3 memory**
   - **Resizable + collapsible right rail** (`useResizableRail.js` hook): drag-handle resize (240–520px) + one-click collapse, both persisted via localStorage. Header buttons: rail-toggle + memory-search (⌘K).
   - **PlanCard secondary actions**: Minimize (collapses to one-line title + confidence + cost + timeline), Close (×, hides card), Cancel (Ø, calls /api/cortex/plan/cancel — card stays visible with "DISMISSED PLAN" badge + greyed actions for 7d), Email (✉, sends HTML plan to user inbox via SendGrid→Mailgun fallback).
