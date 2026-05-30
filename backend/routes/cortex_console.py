@@ -670,22 +670,33 @@ async def _maybe_auto_rename(user_id: str, conv_id: str) -> None:
         for r in rows
     )[:3000]
     try:
-        from cortex.llm_provider import cortex_chat
-        raw, _label = await cortex_chat(
+        from cortex.llm_provider import cortex_tool_call
+        tool = {
+            "name":        "set_conversation_title",
+            "description": "Produce a 3-7 word title that captures the SUBJECT of the conversation (what they're discussing), not the act of talking.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "3-7 words, no punctuation, no quotes. Examples: 'Recruit Etsy woodworking sellers', 'Q3 outreach throttling', 'Fathers Day campaign plan'.",
+                    },
+                },
+                "required": ["title"],
+            },
+        }
+        args, _label, _mode = await cortex_tool_call(
             system=(
                 "You write short, descriptive titles for business conversations. "
-                "Return JSON: {\"title\": \"<3-7 words, no punctuation, no quotes>\"}. "
-                "Capture the subject of the conversation, not the act of talking. "
-                "Examples: 'Recruit Etsy woodworking sellers', "
-                "'Q3 outreach throttling', 'Father's Day campaign plan'."
+                "Capture the subject of the conversation, not the act of talking."
             ),
             user_text=f"Conversation:\n{transcript}",
+            tool=tool,
             session_id=f"cortex-title-{user_id}-{conv_id[:8]}",
-            user_id=user_id, prefer="claude", json_mode=True,
+            user_id=user_id, prefer="claude",
+            required=["title"],
         )
-        import json as _json
-        data = _json.loads(raw)
-        title = str(data.get("title") or "").strip()[:80]
+        title = str((args or {}).get("title") or "").strip()[:80]
     except Exception:
         logger.exception("auto_rename: LLM call failed (non-fatal)")
         return

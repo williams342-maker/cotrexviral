@@ -74,6 +74,56 @@ async def memory_health(request: Request):
     return info
 
 
+@api.get("/cortex/memory/tool-call-trend")
+async def tool_call_trend(request: Request):
+    """Durable rolling-window stats from `cortex_tool_call_log`.
+
+    Returns rates for the last 1h / 24h / 7d so the promotion gate
+    (rate >0.95 over multiple days) is observable without resetting on
+    backend restart. Used by the iter21 monitoring rule before
+    promoting the wrapper to more LLM call sites."""
+    await get_current_user(request)
+    now = datetime.now(timezone.utc)
+    windows = {
+        "1h":  now - timedelta(hours=1),
+        "24h": now - timedelta(hours=24),
+        "7d":  now - timedelta(days=7),
+    }
+    out: dict = {}
+    for name, since in windows.items():
+        pipeline = [
+            {"$match": {"created_at": {"$gte": since}}},
+            {"$group": {
+                "_id":          "$mode",
+                "n":            {"$sum": 1},
+                "avg_latency":  {"$avg": "$latency_ms"},
+            }},
+        ]
+        rows = []
+        try:
+            async for r in db.cortex_tool_call_log.aggregate(pipeline):
+                rows.append(r)
+        except Exception:
+            logger.exception("tool_call_trend: aggregate failed")
+        total = sum(int(r["n"] or 0) for r in rows) or 0
+        by_mode = {r["_id"]: int(r["n"] or 0) for r in rows}
+        latency_by_mode = {r["_id"]: round(float(r.get("avg_latency") or 0)) for r in rows}
+        out[name] = {
+            "total":            total,
+            "by_mode":          by_mode,
+            "tool_call_rate":   (by_mode.get("tool_call", 0) / total) if total else 0.0,
+            "fallback_rate":    (by_mode.get("json_fallback", 0) / total) if total else 0.0,
+            "hard_fail_rate":   (by_mode.get("hard_fail", 0) / total) if total else 0.0,
+            "avg_latency_ms":   latency_by_mode,
+        }
+    out["promotion_ready"] = (
+        out["24h"]["total"] >= 50          # enough volume to be meaningful
+        and out["24h"]["tool_call_rate"] >= 0.95
+        and out["24h"]["hard_fail_rate"] <= 0.02
+    )
+    return out
+
+
 # ---------------------------------------------------------- exec log
 @api.get("/cortex/execution-log")
 async def cortex_execution_log(request: Request, limit: int = 30):

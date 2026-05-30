@@ -35,6 +35,13 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 98) **📊 Durable tool-call stats + auto-rename promoted to wrapper**
+  - **`cortex_tool_call_log` Mongo collection** — `_persist_outcome()` appends one row per call: `{user_id, tool_name, mode, label, success, latency_ms, created_at}`. Stats now survive backend restarts (in-memory counters reset on every process restart, which would mask multi-day trends).
+  - **`GET /api/cortex/memory/tool-call-trend`** — rolling 1h/24h/7d aggregates: total, by_mode breakdown, `tool_call_rate`, `fallback_rate`, `hard_fail_rate`, avg latency per mode, plus a **`promotion_ready`** boolean gate (≥50 calls in 24h AND tool_call_rate ≥0.95 AND hard_fail_rate ≤0.02). When that flips true, it's safe to promote the wrapper to the remaining LLM call sites.
+  - **Promoted `_maybe_auto_rename` in `routes/cortex_console.py`** to use `cortex_tool_call()` (`set_conversation_title` tool). Low-risk cosmetic call site — verified 1/1 successful native tool-call in live test. Memory distillation + optimization_loop's `_llm_rules` remain on the proven JSON path until trend data validates >0.95 over the next few days.
+  - **Live verification**: 8 calls persisted; 100% tool_call success across stage_classifier (7) and auto-rename (1). Trend endpoint correctly returns `promotion_ready: false` because we're under the 50-call volume threshold.
+  - **iter21 tests**: 3 tests — `_persist_outcome` row shape, trend endpoint shape, promotion_ready gate logic. All 3 pass + 49 from iter17/18/19/20 (52/52 green).
+
 - 2026-02-26 (part 97) **🔧 Native LLM tool-calling — hybrid wrapper with graceful JSON fallback**
   - **`cortex_tool_call()` in `cortex/llm_provider.py`** — thin wrapper that forwards `tools=[...]` + `tool_choice` through `LlmChat.with_params()` (LiteLLM accepts them as extra kwargs), then calls the private `_execute_completion()` to capture the raw `ModelResponse` and extract `tool_calls`. Bypasses `emergentintegrations`'s text-only `send_message()` while preserving the Emergent LLM Key proxy + spend tracking.
   - **Graceful degradation**: if no tool_calls returned (or library internals change), falls back to `cortex_chat(json_mode=True)` — the same pattern the codebase used before. Library-breakage risk is isolated to one file.

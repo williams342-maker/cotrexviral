@@ -191,18 +191,25 @@ async def cortex_tool_call(
         args_dict is None only on total hard failure (caller decides
         how to recover — typically a deterministic regex/heuristic).
     """
+    import time
+    _started = time.monotonic()
+    tool_name = (tool or {}).get("name") or "extract"
     _TOOL_CALL_STATS["attempts"] += 1
     from core import EMERGENT_LLM_KEY
     if not EMERGENT_LLM_KEY:
-        return await _json_fallback(system, user_text, tool=tool,
-                                      session_id=session_id, user_id=user_id,
-                                      prefer=prefer, required=required,
-                                      reason="no_key")
+        result = await _json_fallback(system, user_text, tool=tool,
+                                        session_id=session_id, user_id=user_id,
+                                        prefer=prefer, required=required,
+                                        reason="no_key")
+        await _persist_outcome(user_id=user_id, tool_name=tool_name,
+                                 mode=result[2], label=result[1],
+                                 success=result[0] is not None,
+                                 latency_ms=int((time.monotonic() - _started) * 1000))
+        return result
 
     from emergentintegrations.llm.chat import LlmChat, UserMessage
 
     sid = session_id or f"cortex-tool-{user_id}-{uuid.uuid4().hex[:8]}"
-    tool_name = tool.get("name") or "extract"
     tools_payload = [{
         "type": "function",
         "function": {
@@ -247,6 +254,9 @@ async def cortex_tool_call(
             _TOOL_CALL_STATS["tool_call_ok"] += 1
             logger.info("cortex_tool_call: %s OK via %s (rate=%.2f)",
                          tool_name, label, _tool_call_stats()["tool_call_rate"])
+            await _persist_outcome(user_id=user_id, tool_name=tool_name,
+                                     mode="tool_call", label=label, success=True,
+                                     latency_ms=int((time.monotonic() - _started) * 1000))
             return args, label, "tool_call"
         except Exception as e:  # noqa: BLE001
             last_err = e
@@ -255,10 +265,15 @@ async def cortex_tool_call(
             continue
 
     # Native path exhausted — fall back to JSON mode.
-    return await _json_fallback(system, user_text, tool=tool,
-                                  session_id=sid, user_id=user_id,
-                                  prefer=prefer, required=required,
-                                  reason=f"native_exhausted({last_err})")
+    result = await _json_fallback(system, user_text, tool=tool,
+                                    session_id=sid, user_id=user_id,
+                                    prefer=prefer, required=required,
+                                    reason=f"native_exhausted({last_err})")
+    await _persist_outcome(user_id=user_id, tool_name=tool_name,
+                             mode=result[2], label=result[1],
+                             success=result[0] is not None,
+                             latency_ms=int((time.monotonic() - _started) * 1000))
+    return result
 
 
 def _extract_tool_args(response, tool_name: str) -> Optional[dict]:
@@ -378,6 +393,30 @@ def _attribute_spend(response, *, user_id: str, model: str) -> None:
         asyncio.create_task(record_usage("cortex", user_id, tokens=total, usd=usd))
     except Exception:
         logger.debug("cortex_tool_call: spend attribution skipped", exc_info=True)
+
+
+async def _persist_outcome(*, user_id: str, tool_name: str, mode: str,
+                            label: str, success: bool, latency_ms: int) -> None:
+    """Append one row to `cortex_tool_call_log` so tool-call success
+    rate trend is durable across backend restarts (in-memory counters
+    reset on every process restart). Used by the admin trend endpoint
+    `/api/cortex/memory/tool-call-trend` to render rolling 24h/7d rates.
+
+    Best-effort — failure to log must never block the LLM call path."""
+    try:
+        from core import db
+        from datetime import datetime, timezone
+        await db.cortex_tool_call_log.insert_one({
+            "user_id":    user_id,
+            "tool_name":  tool_name,
+            "mode":       mode,        # tool_call | json_fallback | hard_fail
+            "label":      label,       # claude | gpt | none
+            "success":    bool(success),
+            "latency_ms": int(latency_ms),
+            "created_at": datetime.now(timezone.utc),
+        })
+    except Exception:
+        logger.debug("cortex_tool_call: _persist_outcome skipped", exc_info=True)
 
 
 # ----------------------------------------------------------------- diag
