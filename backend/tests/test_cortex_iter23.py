@@ -190,6 +190,119 @@ asyncio.run(go())
         assert r.json()["status"] == "reviewed"
 
 
+class TestCreateMissionFromJob:
+    def test_seo_scan_completed_creates_seo_fix_mission(self):
+        """Seed a completed SEO job, hit /create-mission, verify a real
+        mission row exists in the missions collection with seo_fix type."""
+        subprocess.run([
+            "python3", "-c",
+            f"""
+import asyncio, sys
+from datetime import datetime, timezone
+sys.path.insert(0, '/app/backend')
+from core import db
+async def go():
+    await db.analysis_jobs.insert_one({{
+        'id': 'seoscan-finished-1',
+        'user_id': '{USER_ID}',
+        'job_type': 'seo_scan',
+        'status': 'completed',
+        'progress_pct': 100,
+        'target': 'https://example.com',
+        'queued_at': datetime.now(timezone.utc),
+        'completed_at': datetime.now(timezone.utc),
+        'metrics': {{'issues_found': 14, 'high_priority': 3, 'recommendations': 9}},
+        'result_summary': 'done',
+    }})
+asyncio.run(go())
+"""
+        ], check=True, timeout=15)
+        r = _post("/api/cortex/analysis-jobs/seoscan-finished-1/create-mission")
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["mission_id"]
+        assert "Fix SEO findings" in d["title"]
+        assert d["already_created"] is False
+
+        # Idempotency: second call returns same mission.
+        r2 = _post("/api/cortex/analysis-jobs/seoscan-finished-1/create-mission")
+        assert r2.status_code == 200
+        assert r2.json()["mission_id"] == d["mission_id"]
+        assert r2.json()["already_created"] is True
+
+        # Mission row exists in `missions` with correct shape.
+        result = subprocess.run([
+            "python3", "-c",
+            f"""
+import asyncio, sys
+sys.path.insert(0, '/app/backend')
+from core import db
+async def go():
+    m = await db.missions.find_one({{'id': '{d["mission_id"]}',
+                                       'user_id': '{USER_ID}'}}, {{'_id': 0}})
+    print('TYPE:', m.get('mission_type') if m else 'MISSING')
+    print('TARGET:', m.get('target') if m else 'MISSING')
+    print('AUTONOMY:', m.get('autonomy_level') if m else 'MISSING')
+asyncio.run(go())
+"""
+        ], capture_output=True, text=True, timeout=15)
+        assert "TYPE: seo_fix" in result.stdout, result.stdout
+        assert "TARGET: 14" in result.stdout
+        assert "AUTONOMY: 2" in result.stdout
+
+    def test_seller_discovery_creates_seller_acquisition_mission(self):
+        subprocess.run([
+            "python3", "-c",
+            f"""
+import asyncio, sys
+from datetime import datetime, timezone
+sys.path.insert(0, '/app/backend')
+from core import db
+async def go():
+    await db.analysis_jobs.insert_one({{
+        'id': 'sd-finished-1',
+        'user_id': '{USER_ID}',
+        'job_type': 'seller_discovery',
+        'status': 'completed',
+        'progress_pct': 100,
+        'target': 'candles',
+        'queued_at': datetime.now(timezone.utc),
+        'completed_at': datetime.now(timezone.utc),
+        'metrics': {{'qualified': 32, 'tier_1': 8}},
+    }})
+asyncio.run(go())
+"""
+        ], check=True, timeout=15)
+        r = _post("/api/cortex/analysis-jobs/sd-finished-1/create-mission")
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["mission_id"]
+        assert "Recruit qualified sellers" in d["title"]
+
+    def test_non_completed_job_rejected(self):
+        subprocess.run([
+            "python3", "-c",
+            f"""
+import asyncio, sys
+from datetime import datetime, timezone
+sys.path.insert(0, '/app/backend')
+from core import db
+async def go():
+    await db.analysis_jobs.insert_one({{
+        'id': 'running-1',
+        'user_id': '{USER_ID}',
+        'job_type': 'seo_scan',
+        'status': 'running',
+        'progress_pct': 50,
+        'queued_at': datetime.now(timezone.utc),
+    }})
+asyncio.run(go())
+"""
+        ], check=True, timeout=15)
+        r = _post("/api/cortex/analysis-jobs/running-1/create-mission")
+        assert r.status_code == 409, r.text
+
+
 class TestListGrouping:
     def test_list_groups_by_status(self):
         # Insert one of each status via subprocess.

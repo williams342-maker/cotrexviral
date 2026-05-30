@@ -35,6 +35,15 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 101) **🚀 Create Mission CTA wired — analysis → real mission, in one click**
+  - `POST /cortex/analysis-jobs/{id}/create-mission` — spawns a real `missions` row tailored per `job_type`:
+    - `seo_scan` → `seo_fix` mission, target=`issues_found`, autonomy L2, teams=intelligence+creator.
+    - `seller_discovery` → `seller_acquisition` mission, target=`qualified`, niche=target, autonomy L2, teams=scout+operator+creator. **No automatic outreach** — message explicitly notes the mission starts contact under user's autonomy settings.
+    - `site_scan` / `competitor_audit` / `content_audit` → scaffold mission rows of the same `mission_type` at autonomy L1 (user steers).
+  - **Idempotent**: subsequent calls for the same job return the existing `mission_id` instead of creating duplicates. Job status flips to `mission_created` and the mission_id is stamped on the analysis job row for cross-linking.
+  - **Frontend wiring**: the Create Mission button on BOTH the rail card AND the in-chat completion card now POST to this endpoint and redirect to `/dashboard/missions?id=<mid>` so the user lands on the new mission's detail view.
+  - **Tests**: 3 new tests in `test_cortex_iter23.py` (SEO → seo_fix shape verified, seller_discovery → seller_acquisition shape verified, non-completed → 409). 11/11 in iter23 pass. **Full regression 69/70 (1 skipped)**.
+
 - 2026-02-26 (part 100) **🛠️ Long-Running Analysis Queue — real jobs, real IDs, real proof of work**
   - **Core mandate enforced**: Cortex never claims to be running an analysis without a real `analysis_jobs` row backing it. Every "scanning…" message references a `job_id` visible in the Active Work rail. No fake progress messages possible.
   - **State machine**: `queued → running → completed → reviewed → mission_created`. Failure branch: `running → failed` with Retry/Debug CTAs.

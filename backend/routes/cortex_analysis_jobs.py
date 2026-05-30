@@ -277,6 +277,117 @@ async def mark_analysis_reviewed(job_id: str, request: Request):
     return _project(j)
 
 
+@api.post("/cortex/analysis-jobs/{job_id}/create-mission")
+async def create_mission_from_job(job_id: str, request: Request):
+    """Spawn a real mission from a completed analysis job. Each
+    `job_type` maps to a tailored mission spec — what the user sees on
+    the Create Mission button is wired here, not stubbed.
+
+    Mapping:
+      seo_scan         → seo_fix mission (autonomy L2; user reviews fixes before execution)
+      seller_discovery → seller_acquisition mission (uses qualified target, niche=target, no auto-outreach)
+      site_scan        → content_refresh stub mission
+      competitor_audit → counter_competitor stub mission
+      content_audit    → content_calendar stub mission
+
+    Idempotent: subsequent calls for the same job return the existing
+    mission row instead of creating duplicates."""
+    user = await get_current_user(request)
+    j = await db.analysis_jobs.find_one(
+        {"id": job_id, "user_id": user.user_id}, {"_id": 0})
+    if not j:
+        raise HTTPException(404, "Job not found")
+    if j["status"] not in ("completed", "reviewed", "mission_created"):
+        raise HTTPException(409, f"Job must be completed first (status={j['status']})")
+
+    # Idempotency: if a mission was already created from this job, return it.
+    if j.get("mission_id"):
+        m = await db.missions.find_one(
+            {"id": j["mission_id"], "user_id": user.user_id}, {"_id": 0})
+        if m:
+            return {"mission_id": m["id"], "title": m.get("title"),
+                    "already_created": True}
+
+    spec = _spec_for_job(j)
+    from routes.missions import _create_mission_core
+    mid = await _create_mission_core(
+        user_id=user.user_id,
+        title=spec["title"],
+        description=spec["description"],
+        metric=spec["metric"],
+        target=spec["target"],
+        autonomy_level=spec["autonomy_level"],
+        teams_assigned=spec["teams"],
+        mission_type=spec["mission_type"],
+        seller_target_niche=spec.get("seller_target_niche"),
+        status="running",
+    )
+
+    # Stamp the job row with the mission_id so the rail card can link
+    # to it + idempotency works on next call.
+    await db.analysis_jobs.update_one(
+        {"id": job_id, "user_id": user.user_id},
+        {"$set": {"mission_id": mid, "status": "mission_created"}},
+    )
+    return {"mission_id": mid, "title": spec["title"], "already_created": False}
+
+
+def _spec_for_job(j: dict) -> dict:
+    """Build a mission spec from a completed analysis job. Each job
+    type has its own translation; metrics from the analysis inform the
+    mission target where it makes sense."""
+    job_type = j.get("job_type") or "analysis"
+    metrics = j.get("metrics") or {}
+    target_str = j.get("target") or ""
+
+    if job_type == "seo_scan":
+        # Use issues_found as the mission target so progress is tied to
+        # the number of fixes shipped vs. the number found.
+        issues = int(metrics.get("issues_found", 0)) or 3
+        return {
+            "title":          f"Fix SEO findings for {target_str or 'site'}",
+            "description":    (f"Auto-generated from SEO scan job #{j['id'][:8]}. "
+                                f"{issues} improvements detected, "
+                                f"{metrics.get('high_priority', 0)} high-priority."),
+            "metric":         "issues_resolved",
+            "target":         issues,
+            "mission_type":   "seo_fix",
+            "autonomy_level": 2,   # L2 — Cortex drafts, user approves
+            "teams":          ["intelligence", "creator"],
+        }
+
+    if job_type == "seller_discovery":
+        qualified = int(metrics.get("qualified", 0)) or 25
+        return {
+            "title":          f"Recruit qualified sellers in {target_str or 'niche'}",
+            "description":    (f"Auto-generated from seller-discovery job #{j['id'][:8]}. "
+                                f"{qualified} qualified sellers found. "
+                                f"Tier 1: {metrics.get('tier_1', 0)}. "
+                                "No outreach has been sent yet — this mission will start contact "
+                                "under your autonomy settings."),
+            "metric":         "sellers_acquired",
+            "target":         qualified,
+            "mission_type":   "seller_acquisition",
+            "autonomy_level": 2,   # L2 — operator drafts outreach, user approves
+            "teams":          ["scout", "operator", "creator"],
+            "seller_target_niche": target_str or "general",
+        }
+
+    # Generic mapping for the scaffold-only job types — creates a real
+    # mission row so the user can shepherd it manually until each scan
+    # gets its dedicated implementation.
+    return {
+        "title":          f"{job_type.replace('_', ' ').title()} follow-up",
+        "description":    (f"Auto-generated from {job_type} job #{j['id'][:8]}. "
+                            "Open the mission to refine scope and launch."),
+        "metric":         "actions_completed",
+        "target":         5,
+        "mission_type":   job_type,
+        "autonomy_level": 1,   # L1 — user steers; safer default for stub kinds
+        "teams":          ["intelligence"],
+    }
+
+
 def _estimate_eta(job_type: str) -> int:
     """Coarse ETAs displayed before the runner kicks off. Once running,
     the runner updates these per-phase with sharper numbers."""

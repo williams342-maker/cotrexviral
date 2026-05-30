@@ -182,6 +182,18 @@ function JobCard({ job, onChange }) {
       onChange?.();
     } catch (_e) { /* */ }
   };
+  const createMission = async () => {
+    try {
+      const r = await axios.post(
+        `${API}/cortex/analysis-jobs/${job.id}/create-mission`,
+        {}, { withCredentials: true });
+      // Hop to Mission Control so the user lands on the new mission.
+      window.location.href = `/dashboard/missions?id=${r.data.mission_id}`;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('create mission failed', e?.response?.data);
+    }
+  };
 
   return (
     <div data-testid={`active-work-job-${job.id}`}
@@ -293,7 +305,8 @@ function JobCard({ job, onChange }) {
                     className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 border border-emerald-500/30 transition flex items-center gap-1">
               {job.view_label} <ChevronRight size={9} />
             </button>
-            <button data-testid={`active-work-create-${job.id}`}
+            <button onClick={createMission}
+                    data-testid={`active-work-create-${job.id}`}
                     className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-violet-500/15 hover:bg-violet-500/25 text-violet-200 border border-violet-500/30 transition">
               {job.create_label}
             </button>

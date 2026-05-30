@@ -134,6 +134,17 @@ function AnalysisCompleteCard({ turn }) {
     // Naive: open reports list. Per-job result_link is on the rail card.
     window.open('/dashboard/reports', '_self');
   };
+  const createMission = async () => {
+    try {
+      const r = await axios.post(
+        `${API}/cortex/analysis-jobs/${turn.job_id}/create-mission`,
+        {}, { withCredentials: true });
+      window.location.href = `/dashboard/missions?id=${r.data.mission_id}`;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('create mission from chat failed', e?.response?.data);
+    }
+  };
   return (
     <div data-testid={`chat-analysis-complete-${turn.job_id}`}
           className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.05] p-3 mt-1">
@@ -160,7 +171,8 @@ function AnalysisCompleteCard({ turn }) {
                 className="text-[10.5px] font-semibold px-2.5 py-1 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 border border-emerald-500/30 transition flex items-center gap-1">
           View Report <ChevronRight size={9} />
         </button>
-        <button data-testid={`chat-analysis-create-${turn.job_id}`}
+        <button onClick={createMission}
+                data-testid={`chat-analysis-create-${turn.job_id}`}
                 className="text-[10.5px] font-semibold px-2.5 py-1 rounded-md bg-violet-500/15 hover:bg-violet-500/25 text-violet-200 border border-violet-500/30 transition">
           Create Mission
         </button>
