@@ -1,0 +1,37 @@
+{
+  "summary": "Phase D refinement (single-post push) + P1 verifications. New endpoint POST /api/cortex/campaigns/{cid}/posts/{pid}/push and frontend Push as draft button tested end-to-end. 16/16 backend tests pass, frontend UI flow works as specified, prior bulk-push regression (test_cortex_phase_d_push.py) still 6/6 passing (7 skips are pre-existing intentional skips when no fresh-push target exists).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_cortex_phase_d_single_push.py",
+    "/app/test_reports/pytest/cortex_phase_d_single_push.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "_materialize_push() and _resolve_default_media() helpers are clean and shared between bulk and single endpoints — good refactor, no duplication.",
+    "Single-push endpoint correctly handles all error paths (400/404/409/422) and emits the documented response shape {ok, posts_id, platform, status, scheduled_at}.",
+    "Idempotent return shape {ok:true, already_pushed:true, posts_id, platform, pushed_at} matches the bulk endpoint convention.",
+    "PostCard now has campaign+onChanged props wired and PUSHABLE platform check guards rendering correctly.",
+    "Cross-user isolation enforced (cortex_social_posts query filtered by user_id)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_cortex_phase_d_single_push.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16 new + 6/6 regress)",
+    "frontend": "100% (push button appears for unpushed pushable, disappears after click, pushed badge appears, error banner stays empty)"
+  },
+  "test_credentials": "test@automatex.dev / session_token=test_session_1779636592168 (user_test1779636592168). Used cookie auth for both API and UI.",
+  "seed_data_creation": "Temporarily $unset pushed_at/posts_id/pushed_mode/pushed_platform on one cortex_social_posts row (id=61c0010b6bfe460c9325796c707c27e8, pinterest) in campaign 3d579a6bd5f04df39261d8a2779a13cb to create a fresh-push target for the UI test, then restored from a stored _test_backup field; deleted the /posts row created by the UI action. Backend pytest uses fixtures with try/finally to restore stamps after each fresh-push test. Seeded a single cortex_optimization_log row for the apply-test (kind=qualification_bottleneck) and removed it in teardown.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Tested cases: 7 error paths (404 unknown post, 404 unknown campaign, 400 invalid mode, 400 missing scheduled_at, 422 non-pushable platform, cross-user isolation, 409 incomplete campaign, 404 soft-deleted campaign), idempotency on already-pushed row, fresh draft push (response shape + /posts row + cortex_social_posts stamps), fresh scheduled push, creative_id override (storage_key embedded in media_url), GET /cortex/console/conversations returns items list, create new conversation + chat persists under conversation_id, POST /optimization/{id}/apply with qualification_bottleneck + idempotent already_applied retry. The fresh-push fixture in the test file uses $unset + restore pattern; safe to re-run repeatedly. Note: WebSocket /api/ws/hitl-inbox shows 401 in console — not in scope for this task but worth flagging for a future iteration.",
+  "rca of the issue": "N/A — no bugs found."
+}

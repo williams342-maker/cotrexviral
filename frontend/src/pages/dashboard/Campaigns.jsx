@@ -283,7 +283,7 @@ function PostsTab({ posts, campaign, onChanged }) {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {items.map((p) => (
-                <PostCard key={p.id} post={p} />
+                <PostCard key={p.id} post={p} campaign={campaign} onChanged={onChanged} />
               ))}
             </div>
           </div>
@@ -404,8 +404,10 @@ function BulkPushBar({ campaign, posts, onChanged }) {
 }
 
 
-function PostCard({ post }) {
+function PostCard({ post, campaign, onChanged }) {
   const [copied, setCopied] = useState(false);
+  const [pushing, setPushing] = useState(false);
+  const [pushErr, setPushErr] = useState('');
   const copy = async () => {
     try {
       const text = [post.headline, post.body, (post.hashtags || []).join(' '), post.cta]
@@ -414,6 +416,22 @@ function PostCard({ post }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
     } catch (_e) { /* */ }
+  };
+  const platformNorm = _normPlatform(post.platform);
+  const pushable = PUSHABLE.has(platformNorm) && campaign?.status === 'complete';
+  const alreadyPushed = !!post.pushed_at;
+  const push = async () => {
+    if (pushing) return;
+    setPushing(true);
+    setPushErr('');
+    try {
+      await axios.post(
+        `${API}/cortex/campaigns/${campaign.id}/posts/${post.id}/push`,
+        { mode: 'draft' }, { withCredentials: true });
+      onChanged?.();
+    } catch (e) {
+      setPushErr(e?.response?.data?.detail || 'Push failed');
+    } finally { setPushing(false); }
   };
   return (
     <div data-testid={`post-${post.id}`}
@@ -434,11 +452,20 @@ function PostCard({ post }) {
           </span>
         )}
         <div className="flex-1" />
-        {post.pushed_at && (
+        {alreadyPushed ? (
           <span data-testid={`post-pushed-${post.id}`}
                 className="text-[10.5px] font-bold text-emerald-300 flex items-center gap-1">
             <CheckCircle2 size={10} /> Pushed
           </span>
+        ) : pushable && (
+          <button onClick={push}
+                  disabled={pushing}
+                  data-testid={`post-push-${post.id}`}
+                  className="text-[10.5px] font-bold text-emerald-300 hover:text-emerald-200 transition flex items-center gap-1 disabled:opacity-50">
+            {pushing
+              ? <><Loader2 size={9} className="animate-spin" /> Pushing…</>
+              : <><Upload size={9} /> Push as draft</>}
+          </button>
         )}
         <button onClick={copy}
                 data-testid={`post-copy-${post.id}`}
@@ -446,6 +473,11 @@ function PostCard({ post }) {
           {copied ? '✓ Copied' : 'Copy'}
         </button>
       </div>
+      {pushErr && (
+        <div className="mt-1.5 text-[10.5px] text-rose-300 flex items-center gap-1">
+          <AlertTriangle size={9} /> {pushErr}
+        </div>
+      )}
     </div>
   );
 }

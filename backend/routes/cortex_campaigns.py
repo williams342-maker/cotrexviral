@@ -213,6 +213,99 @@ class CampaignPushPayload(BaseModel):
     cadence_hours: int = 24
 
 
+class SinglePostPushPayload(BaseModel):
+    mode: str = "draft"             # draft | scheduled
+    scheduled_at: Optional[datetime] = None
+    creative_id: Optional[str] = None      # override default creative
+
+
+def _normalize_platform(raw: str) -> str:
+    """Lower + collapse whitespace → underscore + apply alias map."""
+    norm = "_".join((raw or "").strip().lower().split())
+    return _PLATFORM_ALIASES.get(norm, norm)
+
+
+async def _materialize_push(*, user_id: str, campaign_id: str, cp: dict,
+                              default_media: Optional[str],
+                              mode: str, scheduled_at: Optional[datetime],
+                              now: datetime) -> dict:
+    """Create a /posts row from a cortex_social_post and stamp the
+    cross-references. Returns the pushed-entry dict."""
+    import uuid
+    from routes.content_layer import mirror_post_to_normalized
+
+    platform_raw = cp.get("platform") or ""
+    platform = _normalize_platform(platform_raw)
+    post_id = str(uuid.uuid4())
+    post_row = {
+        "id":           post_id,
+        "user_id":      user_id,
+        "content":      _compose_content(cp),
+        "platforms":    [platform],
+        "media_url":    default_media,
+        "status":       "scheduled" if mode == "scheduled" else "draft",
+        "scheduled_at": scheduled_at,
+        "campaign_id":  campaign_id,
+        "cortex_post_id":     cp.get("id"),
+        "cortex_campaign_id": campaign_id,
+        "source":       "cortex_campaign_push",
+        "created_at":   now,
+    }
+    if platform == "pinterest":
+        post_row["pinterest_title"] = (cp.get("headline") or "")[:100] or None
+        post_row["pinterest_link"] = None
+        post_row["pinterest_board_id"] = None
+
+    await db.posts.insert_one(post_row)
+    try:
+        await mirror_post_to_normalized(post_row)
+    except Exception:
+        logger.exception("mirror_post_to_normalized failed for %s", post_id)
+
+    await db.cortex_social_posts.update_one(
+        {"id": cp.get("id"), "user_id": user_id},
+        {"$set": {
+            "pushed_at":  now,
+            "posts_id":   post_id,
+            "pushed_mode": mode,
+            "pushed_platform": platform,
+        }})
+
+    return {"cortex_post_id": cp.get("id"),
+              "posts_id":       post_id,
+              "platform":       platform,
+              "status":         post_row["status"],
+              "scheduled_at":   scheduled_at.isoformat() if scheduled_at else None}
+
+
+async def _resolve_default_media(*, user_id: str, campaign_id: str,
+                                   brief_id: Optional[str],
+                                   creative_id: Optional[str] = None) -> Optional[str]:
+    """Pick the creative URL to attach. Override > campaign > brief.
+    Returns absolute backend URL or None when no creative exists."""
+    if creative_id:
+        c = await db.cortex_creatives.find_one(
+            {"id": creative_id, "user_id": user_id,
+              "status": "complete", "deleted_at": {"$exists": False}},
+            {"_id": 0})
+        if c and c.get("storage_key"):
+            return _abs_media_url(c["storage_key"])
+    c = await db.cortex_creatives.find_one(
+        {"campaign_id": campaign_id, "user_id": user_id,
+          "status": "complete", "deleted_at": {"$exists": False}},
+        {"_id": 0})
+    if c and c.get("storage_key"):
+        return _abs_media_url(c["storage_key"])
+    if brief_id:
+        c = await db.cortex_creatives.find_one(
+            {"brief_id": brief_id, "user_id": user_id,
+              "status": "complete", "deleted_at": {"$exists": False}},
+            {"_id": 0})
+        if c and c.get("storage_key"):
+            return _abs_media_url(c["storage_key"])
+    return None
+
+
 @api.post("/cortex/campaigns/{campaign_id}/push")
 async def push_campaign_to_calendar(campaign_id: str,
                                        payload: CampaignPushPayload,
@@ -236,43 +329,25 @@ async def push_campaign_to_calendar(campaign_id: str,
         raise HTTPException(400, "start_at is required when mode='scheduled'.")
     cadence_hours = max(1, min(int(payload.cadence_hours or 24), 24 * 14))
 
-    # Load posts + creatives once.
+    # Load posts once; default media resolves to the campaign's first
+    # complete creative (fallback to brief-level).
     cortex_posts: list[dict] = []
     async for p in db.cortex_social_posts.find(
             {"campaign_id": campaign_id, "user_id": user.user_id},
             {"_id": 0}).sort("platform", 1):
         cortex_posts.append(p)
+    default_media = await _resolve_default_media(
+        user_id=user.user_id, campaign_id=campaign_id,
+        brief_id=campaign.get("brief_id"))
 
-    creatives: list[dict] = []
-    async for c in db.cortex_creatives.find(
-            {"campaign_id": campaign_id, "user_id": user.user_id,
-              "status": "complete", "deleted_at": {"$exists": False}},
-            {"_id": 0}):
-        creatives.append(c)
-    # Fallback to brief-level creatives (Phase B output) when the
-    # campaign hasn't generated its own (matches GET behaviour).
-    if not creatives and campaign.get("brief_id"):
-        async for c in db.cortex_creatives.find(
-                {"brief_id": campaign["brief_id"], "user_id": user.user_id,
-                  "status": "complete", "deleted_at": {"$exists": False}},
-                {"_id": 0}):
-            creatives.append(c)
-    default_media = _abs_media_url(creatives[0]["storage_key"]) if creatives else None
-
-    # Materialise rows.
-    import uuid
-    from routes.content_layer import mirror_post_to_normalized
     now = datetime.now(timezone.utc)
     cursor_at = payload.start_at
     pushed: list[dict] = []
     skipped: list[dict] = []
 
     for cp in cortex_posts:
-        platform_raw = (cp.get("platform") or "").strip().lower()
-        # Normalize whitespace → underscore so "instagram story" matches
-        # the canonical "instagram_story" alias key.
-        platform_norm = "_".join(platform_raw.split())
-        platform = _PLATFORM_ALIASES.get(platform_norm, platform_norm)
+        platform_raw = (cp.get("platform") or "")
+        platform = _normalize_platform(platform_raw)
         if platform not in _PUSHABLE_PLATFORMS:
             skipped.append({"id": cp.get("id"),
                               "platform": platform_raw,
@@ -285,52 +360,17 @@ async def push_campaign_to_calendar(campaign_id: str,
                               "posts_id": cp.get("posts_id")})
             continue
 
-        post_id = str(uuid.uuid4())
         sched_at = None
         if payload.mode == "scheduled":
             sched_at = cursor_at
             from datetime import timedelta
             cursor_at = (cursor_at or now) + timedelta(hours=cadence_hours)
 
-        post_row = {
-            "id":           post_id,
-            "user_id":      user.user_id,
-            "content":      _compose_content(cp),
-            "platforms":    [platform],
-            "media_url":    default_media,
-            "status":       "scheduled" if payload.mode == "scheduled" else "draft",
-            "scheduled_at": sched_at,
-            "campaign_id":  campaign_id,
-            "cortex_post_id":     cp.get("id"),
-            "cortex_campaign_id": campaign_id,
-            "source":       "cortex_campaign_push",
-            "created_at":   now,
-        }
-        if platform == "pinterest":
-            post_row["pinterest_title"] = (cp.get("headline") or "")[:100] or None
-            post_row["pinterest_link"] = None
-            post_row["pinterest_board_id"] = None
-
-        await db.posts.insert_one(post_row)
-        try:
-            await mirror_post_to_normalized(post_row)
-        except Exception:
-            logger.exception("mirror_post_to_normalized failed for %s", post_id)
-
-        await db.cortex_social_posts.update_one(
-            {"id": cp.get("id"), "user_id": user.user_id},
-            {"$set": {
-                "pushed_at":  now,
-                "posts_id":   post_id,
-                "pushed_mode": payload.mode,
-                "pushed_platform": platform,
-            }})
-
-        pushed.append({"cortex_post_id": cp.get("id"),
-                        "posts_id":       post_id,
-                        "platform":       platform,
-                        "status":         post_row["status"],
-                        "scheduled_at":   sched_at.isoformat() if sched_at else None})
+        entry = await _materialize_push(
+            user_id=user.user_id, campaign_id=campaign_id, cp=cp,
+            default_media=default_media, mode=payload.mode,
+            scheduled_at=sched_at, now=now)
+        pushed.append(entry)
 
     # Stamp summary on the campaign for the UI.
     await db.cortex_campaigns.update_one(
@@ -348,3 +388,63 @@ async def push_campaign_to_calendar(campaign_id: str,
         "skipped":  skipped,
         "counts":   {"pushed": len(pushed), "skipped": len(skipped)},
     }
+
+
+@api.post("/cortex/campaigns/{campaign_id}/posts/{post_id}/push")
+async def push_single_post_to_calendar(campaign_id: str, post_id: str,
+                                         payload: SinglePostPushPayload,
+                                         request: Request):
+    """Push a single cortex_social_post to the user's /posts calendar.
+    Mirrors the bulk endpoint's persistence shape for full traceability."""
+    user = await get_current_user(request)
+
+    campaign = await db.cortex_campaigns.find_one(
+        {"id": campaign_id, "user_id": user.user_id}, {"_id": 0})
+    if not campaign or campaign.get("deleted_at"):
+        raise HTTPException(404, "Campaign not found.")
+    if campaign.get("status") != "complete":
+        raise HTTPException(409, "Campaign is not complete yet.")
+
+    cp = await db.cortex_social_posts.find_one(
+        {"id": post_id, "user_id": user.user_id,
+          "campaign_id": campaign_id}, {"_id": 0})
+    if not cp:
+        raise HTTPException(404, "Post not found in this campaign.")
+
+    if payload.mode not in ("draft", "scheduled"):
+        raise HTTPException(400, "mode must be 'draft' or 'scheduled'.")
+    if payload.mode == "scheduled" and not payload.scheduled_at:
+        raise HTTPException(400, "scheduled_at is required when mode='scheduled'.")
+
+    platform_raw = cp.get("platform") or ""
+    platform = _normalize_platform(platform_raw)
+    if platform not in _PUSHABLE_PLATFORMS:
+        raise HTTPException(
+            422,
+            f"Platform '{platform_raw}' is not pushable to the social calendar.")
+    if cp.get("pushed_at") and cp.get("posts_id"):
+        return {"ok": True, "already_pushed": True,
+                "posts_id": cp.get("posts_id"),
+                "platform": cp.get("pushed_platform"),
+                "pushed_at": (cp["pushed_at"].isoformat()
+                              if isinstance(cp["pushed_at"], datetime)
+                              else cp["pushed_at"])}
+
+    media = await _resolve_default_media(
+        user_id=user.user_id, campaign_id=campaign_id,
+        brief_id=campaign.get("brief_id"),
+        creative_id=payload.creative_id)
+    now = datetime.now(timezone.utc)
+    entry = await _materialize_push(
+        user_id=user.user_id, campaign_id=campaign_id, cp=cp,
+        default_media=media, mode=payload.mode,
+        scheduled_at=payload.scheduled_at, now=now)
+
+    await db.cortex_campaigns.update_one(
+        {"id": campaign_id, "user_id": user.user_id},
+        {"$set": {"last_pushed_at": now,
+                   "last_pushed_mode": payload.mode,
+                   "updated_at": now},
+          "$inc": {"last_pushed_count": 1}})
+
+    return {"ok": True, **entry}
