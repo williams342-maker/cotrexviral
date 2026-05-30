@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
   FileText, Globe, Search, BarChart3, Users, Lightbulb,
-  ChevronRight, ExternalLink, ArrowLeft, AlertTriangle,
+  ChevronRight, ExternalLink, ArrowLeft, X,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { API } from '../../context/AuthContext';
@@ -42,6 +42,44 @@ export default function Reports() {
   const active = useMemo(() =>
     reports.find((r) => r.id === activeId), [reports, activeId]);
 
+  // ---- filter state (only applies on the list view) ----
+  const [q, setQ] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [range, setRange] = useState('all');    // all | 7d | 30d | 90d
+  const [sort, setSort] = useState('newest');   // newest | oldest
+
+  const filtered = useMemo(() => {
+    const now = Date.now();
+    const rangeMs = { '7d': 7, '30d': 30, '90d': 90 }[range];
+    const cutoff = rangeMs ? now - rangeMs * 24 * 60 * 60 * 1000 : null;
+    const query = q.trim().toLowerCase();
+    const out = reports.filter((r) => {
+      if (typeFilter !== 'all' && (r.type || 'site_scan') !== typeFilter) return false;
+      if (cutoff) {
+        const t = new Date(r.created_at || 0).getTime();
+        if (!t || t < cutoff) return false;
+      }
+      if (query) {
+        const hay = `${r.url || ''} ${r.target || ''} ${r.report?.summary || ''}`.toLowerCase();
+        if (!hay.includes(query)) return false;
+      }
+      return true;
+    });
+    out.sort((a, b) => {
+      const ta = new Date(a.created_at || 0).getTime();
+      const tb = new Date(b.created_at || 0).getTime();
+      return sort === 'newest' ? tb - ta : ta - tb;
+    });
+    return out;
+  }, [reports, q, typeFilter, range, sort]);
+
+  // Available type chips (only show types that exist in the data so we
+  // don't render a Competitor chip for a user with zero competitor scans).
+  const availableTypes = useMemo(() => {
+    const set = new Set(reports.map((r) => r.type || 'site_scan'));
+    return ['all', ...['seo_scan', 'site_scan', 'competitor_audit', 'content_audit', 'seller_discovery'].filter((t) => set.has(t))];
+  }, [reports]);
+
   return (
     <DashboardLayout>
       <div data-testid="reports-page" className="space-y-6">
@@ -61,11 +99,119 @@ export default function Reports() {
         ) : active ? (
           <ReportDetail report={active} onBack={() => setSearchParams({})} />
         ) : (
-          <ReportList reports={reports}
-                       onOpen={(id) => setSearchParams({ id })} />
+          <>
+            <FilterBar
+              q={q} onQ={setQ}
+              typeFilter={typeFilter} onType={setTypeFilter}
+              availableTypes={availableTypes}
+              range={range} onRange={setRange}
+              sort={sort} onSort={setSort}
+              total={reports.length} filtered={filtered.length}
+            />
+            {filtered.length === 0 ? (
+              <FilteredEmpty onClear={() => { setQ(''); setTypeFilter('all'); setRange('all'); }} />
+            ) : (
+              <ReportList reports={filtered}
+                            onOpen={(id) => setSearchParams({ id })} />
+            )}
+          </>
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+
+function FilterBar({ q, onQ, typeFilter, onType, availableTypes,
+                       range, onRange, sort, onSort, total, filtered }) {
+  const hasFilter = q || typeFilter !== 'all' || range !== 'all' || sort !== 'newest';
+  return (
+    <div data-testid="reports-filter-bar"
+          className="rounded-xl border border-white/5 bg-white/[0.02] p-3 space-y-3">
+      {/* Row 1 — free-text search + result counter */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <input value={q} onChange={(e) => onQ(e.target.value)}
+                  placeholder="Search by URL or finding…"
+                  data-testid="reports-search-input"
+                  className="w-full text-[13px] text-zinc-100 bg-white/[0.03] border border-white/10 rounded-md pl-8 pr-8 py-1.5 focus:outline-none focus:border-violet-500/40" />
+          {q && (
+            <button onClick={() => onQ('')}
+                    data-testid="reports-search-clear"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <span className="text-[11px] text-zinc-500 tabular-nums shrink-0"
+                data-testid="reports-result-count">
+          {filtered === total ? `${total} reports` : `${filtered} of ${total}`}
+        </span>
+      </div>
+
+      {/* Row 2 — type chips + date range + sort */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {availableTypes.map((t) => (
+          <button key={t}
+                  onClick={() => onType(t)}
+                  data-testid={`reports-type-${t}`}
+                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-md border transition ${
+                    typeFilter === t
+                      ? 'bg-violet-500/20 text-violet-200 border-violet-500/40'
+                      : 'bg-white/[0.02] text-zinc-400 border-white/10 hover:bg-white/[0.05]'}`}>
+            {t === 'all' ? 'All types' : (TYPE_META[t]?.label || t)}
+          </button>
+        ))}
+        <div className="w-px h-4 bg-white/10 mx-1" />
+        {[
+          ['all', 'Any time'],
+          ['7d',  '7 days'],
+          ['30d', '30 days'],
+          ['90d', '90 days'],
+        ].map(([k, label]) => (
+          <button key={k}
+                  onClick={() => onRange(k)}
+                  data-testid={`reports-range-${k}`}
+                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-md border transition ${
+                    range === k
+                      ? 'bg-cyan-500/15 text-cyan-200 border-cyan-500/30'
+                      : 'bg-white/[0.02] text-zinc-400 border-white/10 hover:bg-white/[0.05]'}`}>
+            {label}
+          </button>
+        ))}
+        <div className="flex-1 hidden md:block" />
+        <select value={sort} onChange={(e) => onSort(e.target.value)}
+                data-testid="reports-sort"
+                className="text-[11px] font-semibold px-2 py-1 rounded-md bg-white/[0.02] border border-white/10 text-zinc-300 hover:bg-white/[0.05] focus:outline-none focus:border-violet-500/40">
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+        </select>
+        {hasFilter && (
+          <button onClick={() => { onQ(''); onType('all'); onRange('all'); onSort('newest'); }}
+                  data-testid="reports-clear-all"
+                  className="text-[10.5px] font-semibold px-2 py-1 rounded-md text-zinc-400 hover:text-white hover:bg-white/5 transition flex items-center gap-1">
+            <X size={10} /> Clear
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+function FilteredEmpty({ onClear }) {
+  return (
+    <div data-testid="reports-filtered-empty"
+          className="rounded-xl border border-white/5 bg-white/[0.02] p-8 text-center">
+      <Search size={22} className="text-zinc-500 mx-auto mb-2" />
+      <div className="text-sm text-zinc-300 mb-3">No reports match your filters.</div>
+      <button onClick={onClear}
+              data-testid="reports-filtered-empty-clear"
+              className="text-[12px] font-semibold px-3 py-1.5 rounded-md bg-violet-500/15 hover:bg-violet-500/25 text-violet-200 border border-violet-500/30 transition">
+        Clear filters
+      </button>
+    </div>
   );
 }
 
