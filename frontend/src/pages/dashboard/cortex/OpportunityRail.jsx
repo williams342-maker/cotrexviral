@@ -1,6 +1,7 @@
 import React from 'react';
 import { Sparkles, TrendingUp, AlertCircle, ChevronRight, Loader2 } from 'lucide-react';
 import ActiveMissionRail from './ActiveMissionRail';
+import OptimizationStatus from './OptimizationStatus';
 
 /* OpportunityRail — right sidebar showing AI-surfaced opportunities,
    recommended actions, and recent discoveries. Each card is a
@@ -15,11 +16,15 @@ const URGENCY = {
 export const OpportunityRail = ({
   opportunities = [], loading, onPrompt, strategy,
   activeMissions = [], missionsLoading = false, onOpenMission,
+  onDiscussFinding,
 }) => {
   return (
     <aside data-testid="cortex-opportunity-rail"
            className="h-full flex flex-col gap-4 overflow-y-auto pr-1">
-      {/* Active missions — TOP of the rail (live status) */}
+      {/* Autonomous monitoring status — TOP (the headline) */}
+      <OptimizationStatus onDiscuss={onDiscussFinding} />
+
+      {/* Active missions */}
       <ActiveMissionRail missions={activeMissions} loading={missionsLoading}
                             onOpenDetails={onOpenMission} />
 

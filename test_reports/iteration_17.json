@@ -1,0 +1,37 @@
+{
+  "summary": "Iter17 — Cortex Autonomous OODA Optimization Loop fully verified end-to-end. Backend: 12/12 executed pytest pass + 1 skip (scheduler-in-process check skipped since pytest spawns its own process; verified via live backend log instead). All 5 detector rules fire on synthetic snapshots. /api/cortex/optimization/run-now correctly fired discovery_stall (confidence=0.78) for user_test1779636592168 (5 running missions, funnel_total=0). 12h de-dupe verified — 2nd run-now within seconds returned {ran:true, fired:false, finding:null}. /api/cortex/optimization/log returns the persisted finding (newest-first). /api/cortex/optimization/status flips active=true and surfaces detections_24h=1. cortex.stages._normalize() appends the first clarifying_question to a discovery ack that lacks '?' — confirms iter16 soft-failure closed. Scheduler: cortex_optimization_loop job is registered live (confirmed in supervisor log: 'cortex optimization sweep: {total_users: 2, fired: 0, ...}'). Frontend: dashboard renders [data-testid=cortex-optimization-status] at TOP of right rail above Active Missions with 'Cortex is monitoring' headline + pulsing radar; 3-cell stats row shows 24H/7D/Improved tabular numerics; optimization-latest tile displays the discovery_stall bottleneck + recommendation + 78% confidence bar; clicking the tile pre-fills the composer with exactly: 'I see Cortex flagged: \"<bottleneck>\". What's your reasoning, and what would you recommend?'; optimization-scan-now button triggers POST /api/cortex/optimization/run-now and refreshes status without page reload. Empty-state copy ('Healthy — no bottlenecks detected. Cortex is watching your funnel...') renders before findings exist. 60s polling is wired via setInterval(load, 60_000) — verified in source, not waited out in test.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_cortex_iter17.py",
+    "/app/test_reports/pytest/cortex_iter17.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "cortex/optimization_loop.py: clean OODA implementation with deterministic rule-based detection (no LLM dependency for the loop tick) — reliable and testable. The _measure_prior() learning step is a nice touch but is opportunistic (only triggers when run-now is called again ≥24h after a prior detection); consider also calling it from the scheduler sweep on detection-free ticks so learnings still accrue when no new bottleneck fires.",
+    "routes/cortex_optimization.py: endpoint shapes match the spec exactly. _serialize() correctly strips _id and iso-formats created_at — no ObjectId leakage.",
+    "cortex/stages.py _normalize() discovery-ack post-processing: 'ack' is merged with the first clarifying_question with an em-dash separator when '?' missing — works as a robust fallback against LLM phrasing variance. Iter16 soft-fail closed.",
+    "routes/scheduler.py: cortex_optimization_loop registered with 30min IntervalTrigger and next_run_time=startup+2min, max_instances=1, coalesce=True. Sweep correctly iterates only users with mission activity in the last 14d (cap 500). Confirmed firing in live backend logs.",
+    "OptimizationStatus.jsx: clean component, withCredentials on axios, polling via setInterval cleanup, accessible markup with data-testid hooks. The latest tile is a full button (good for keyboard a11y).",
+    "OpportunityRail.jsx: OptimizationStatus correctly placed at TOP, above ActiveMissionRail, with onDiscussFinding plumbed through. Matches spec exactly.",
+    "Minor (nit): OpportunityRail imports unused icons (Sparkles, TrendingUp, AlertCircle, ChevronRight, Loader2) — can be pruned. Not blocking."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_cortex_iter17.py (new — 13 pytest cases, 12 passed + 1 skipped scheduler-in-process check)"
+  ],
+  "success_rate": {"backend": "100% (12/12 executed)", "frontend": "100% (6/6 spec items)"},
+  "test_credentials": "Authorization: Bearer test_session_1779636592168 + session_token cookie (user_test1779636592168). Source: /app/memory/test_credentials.md.",
+  "seed_data_creation": "Cleared cortex_optimization_log for user_test1779636592168 once at test start (setup_class) so dedupe assertion is deterministic. After the suite, the user has 1 fresh discovery_stall finding + N from the live scheduler.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter17 test file = /app/backend/tests/test_cortex_iter17.py. Run with: REACT_APP_BACKEND_URL=https://social-sync-ai-1.preview.emergentagent.com python -m pytest tests/test_cortex_iter17.py -v. The scheduler-job-registration test is intentionally a SKIP when run outside the live backend process (pytest spawns a fresh interpreter — apscheduler is only started in the uvicorn worker). Verify scheduler liveness instead via `grep cortex_optimization /var/log/supervisor/backend.*.log`. The test class TestRunNowAndDetector wipes cortex_optimization_log for user_test1779636592168 at setup_class to ensure the discovery_stall dedupe test is deterministic — be aware if other suites depend on the log state. The 5 OODA detector rules are deterministic (no LLM): discovery_stall, qualification_bottleneck, deliverability_risk, copy_conversion_gap, onboarding_stall — each has a unit test in TestDetectorRules. To exercise different rules end-to-end on the test user, seed seller_leads rows with specific stage distributions (see request 'other_misc_info' for thresholds).",
+  "rca of the issue": "N/A — all spec items pass cleanly."
+}

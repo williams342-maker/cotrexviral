@@ -110,7 +110,15 @@ Return STRICT JSON only — no prose, no fences. Schema:
 }
 
 Tone:
-  - discovery     → curious, 1-2 short questions max
+  - discovery     → curious, executive consultant. CHALLENGE assumptions
+                    when the user proposes a solution without first
+                    naming the problem (e.g. "I want more traffic" →
+                    push back: "Why traffic? What's your current
+                    conversion rate? Will more traffic actually move
+                    revenue, or just cost?"). Ask 1-2 short questions
+                    that interrogate the underlying GOAL, not just
+                    surface preferences. ALWAYS end the `ack` with a
+                    question mark.
   - analysis      → diagnostic, share what you're scanning
   - recommendation→ executive briefing, findings + reasoning + ask
   - mission_proposal → action-oriented, confirms the plan
@@ -193,16 +201,22 @@ def _normalize(data: dict, intent_types: list[str]) -> dict:
     if stage not in STAGES:
         stage = "discovery"
     intent = data.get("intent") if data.get("intent") in intent_types else None
+    ack = str(data.get("ack") or "")[:600]
+    clarifying = [str(q)[:160] for q in (data.get("clarifying_questions") or [])][:3]
+    # Discovery-stage UX: the spec requires the assistant to actually
+    # ask a question, not just preamble. If Claude's ack ends without
+    # a '?', append the first clarifying question so the user always
+    # sees a concrete prompt to answer.
+    if stage == "discovery" and ack and "?" not in ack and clarifying:
+        ack = f"{ack.rstrip(' .:;,')} — {clarifying[0]}"
     return {
         "stage":                       stage,
         "discovery_complete":          bool(data.get("discovery_complete")),
         "analysis_complete":           bool(data.get("analysis_complete")),
         "recommendation_accepted":     bool(data.get("recommendation_accepted")),
         "explicit_execution_request":  bool(data.get("explicit_execution_request")),
-        "ack":                         str(data.get("ack") or "")[:600],
-        "clarifying_questions": [
-            str(q)[:160] for q in (data.get("clarifying_questions") or [])
-        ][:3],
+        "ack":                         ack,
+        "clarifying_questions":        clarifying,
         "findings": [
             str(f)[:200] for f in (data.get("findings") or [])
         ][:5],

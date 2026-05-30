@@ -336,6 +336,28 @@ async def start_scheduler():
     except Exception:
         logger.exception("scheduler: failed to register cortex_strategy_daily_refresh")
 
+    # Cortex — autonomous optimization loop (OODA). Sweeps all active
+    # users every 30 minutes, detects bottlenecks, and drops findings
+    # into cortex_optimization_log. The UI surfaces them in real time.
+    try:
+        async def _cortex_optimization_sweep():
+            from cortex.optimization_loop import run_loop_all_users
+            try:
+                summary = await run_loop_all_users()
+                logger.info("cortex optimization sweep: %s", summary)
+            except Exception:
+                logger.exception("cortex optimization sweep failed")
+        scheduler.add_job(
+            _cortex_optimization_sweep,
+            trigger=IntervalTrigger(minutes=30),
+            id="cortex_optimization_loop",
+            max_instances=1,
+            coalesce=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2),
+        )
+    except Exception:
+        logger.exception("scheduler: failed to register cortex_optimization_loop")
+
     scheduler.start()
     logger.info("scheduler: started (worker=%s, every 60s)", WORKER_ID)
 
