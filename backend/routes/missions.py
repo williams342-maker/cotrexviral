@@ -217,42 +217,81 @@ def _serialize(mission: dict) -> dict:
 
 
 # -----------------------------------------------------------------
+async def _create_mission_core(
+    user_id: str,
+    title: str,
+    description: Optional[str],
+    metric: str,
+    target: Optional[float],
+    autonomy_level: int = 2,
+    teams_assigned: Optional[list] = None,
+    deadline: Optional[datetime] = None,
+    mission_type: str = "generic",
+    seller_target_niche: Optional[str] = None,
+    seller_target_location: Optional[str] = None,
+    qualification_threshold: Optional[int] = None,
+    budget_usd_cap: Optional[float] = None,
+    status: str = "running",
+) -> str:
+    """Shared mission-creation helper. Returns the new mission's id.
+    Used by both `POST /missions` and the Cortex Console execute path."""
+    if autonomy_level not in AUTONOMY_LEVELS:
+        raise HTTPException(400, "autonomy_level must be 0-5")
+    teams = teams_assigned or list(TEAMS)
+    for t in teams:
+        if t not in TEAMS:
+            raise HTTPException(400, f"Unknown team: {t}")
+    now = datetime.now(timezone.utc)
+    doc = {
+        "id":              uuid.uuid4().hex,
+        "user_id":         user_id,
+        "title":           title.strip(),
+        "description":     (description or "").strip() or None,
+        "metric":          metric,
+        "target":          target,
+        "deadline":        deadline,
+        "autonomy_level":  autonomy_level,
+        "team_autonomy":   {},
+        "teams_assigned":  teams,
+        "budget_usd_cap":  budget_usd_cap,
+        "growth_goal_id":  None,
+        "mission_type":    mission_type,
+        "seller_target_niche":     seller_target_niche,
+        "seller_target_location":  seller_target_location,
+        "qualification_threshold": qualification_threshold,
+        "status":          status,
+        "created_at":      now,
+        "updated_at":      now,
+        "started_at":      now if status == "running" else None,
+        "completed_at":    None,
+    }
+    await db.missions.insert_one(doc)
+    return doc["id"]
+
+
+# -----------------------------------------------------------------
 # Routes
 # -----------------------------------------------------------------
 @api.post("/missions")
 async def create_mission(payload: MissionCreate, request: Request):
     user = await get_current_user(request)
-    if payload.autonomy_level not in AUTONOMY_LEVELS:
-        raise HTTPException(400, "autonomy_level must be 0-5")
-    for team in payload.teams_assigned:
-        if team not in TEAMS:
-            raise HTTPException(400, f"Unknown team: {team}")
-
-    now = datetime.now(timezone.utc)
-    doc = {
-        "id":              uuid.uuid4().hex,
-        "user_id":         user.user_id,
-        "title":           payload.title.strip(),
-        "description":     (payload.description or "").strip() or None,
-        "metric":          payload.metric,
-        "target":          payload.target,
-        "deadline":        payload.deadline,
-        "autonomy_level":  payload.autonomy_level,
-        "team_autonomy":   payload.team_autonomy or {},
-        "teams_assigned":  payload.teams_assigned,
-        "budget_usd_cap":  payload.budget_usd_cap,
-        "growth_goal_id":  payload.growth_goal_id,
-        "mission_type":    payload.mission_type or "generic",
-        "seller_target_niche":    payload.seller_target_niche,
-        "seller_target_location": payload.seller_target_location,
-        "qualification_threshold": payload.qualification_threshold,
-        "status":          "draft",
-        "created_at":      now,
-        "updated_at":      now,
-        "started_at":      None,
-        "completed_at":    None,
-    }
-    await db.missions.insert_one(doc)
+    mid = await _create_mission_core(
+        user_id=user.user_id,
+        title=payload.title,
+        description=payload.description,
+        metric=payload.metric,
+        target=payload.target,
+        autonomy_level=payload.autonomy_level,
+        teams_assigned=payload.teams_assigned,
+        deadline=payload.deadline,
+        mission_type=payload.mission_type or "generic",
+        seller_target_niche=payload.seller_target_niche,
+        seller_target_location=payload.seller_target_location,
+        qualification_threshold=payload.qualification_threshold,
+        budget_usd_cap=payload.budget_usd_cap,
+        status="draft",
+    )
+    doc = await db.missions.find_one({"id": mid})
     return _serialize(doc)
 
 
