@@ -303,6 +303,23 @@ async def console_chat(payload: ChatPayload, request: Request):
     except Exception:
         logger.exception("cortex chat: strategy refresh failed (non-fatal)")
 
+    # ---- Auto-rename conversation after 4+ turns ----
+    # On the 4th total turn (2nd round-trip), let Claude generate a
+    # concise 3-7 word title that replaces the verbose first-message
+    # default. Stored on cortex_conversation_meta so the history
+    # sidebar picks it up immediately.
+    try:
+        if conv_id and conv_id != "legacy":
+            cnt = await db.cortex_conversations.count_documents(
+                {"user_id": user.user_id, "conversation_id": conv_id})
+            existing_meta = await db.cortex_conversation_meta.find_one(
+                {"user_id": user.user_id, "conversation_id": conv_id},
+                {"_id": 0, "auto_renamed": 1})
+            if cnt >= 4 and not (existing_meta or {}).get("auto_renamed"):
+                await _maybe_auto_rename(user.user_id, conv_id)
+    except Exception:
+        logger.exception("cortex chat: auto-rename failed (non-fatal)")
+
     return {
         "conversation_id":         conv_id,
         "stage":                   stage_data["stage"],
@@ -607,3 +624,52 @@ async def _execute_launch(user_id: str, rec: dict, level: int,
         "autonomy_level": level,
         "message":      f"{msg_prefix}Cortex recorded the recommendation. Deep execution for `{t}` ships in the next iteration.",
     }
+
+
+
+async def _maybe_auto_rename(user_id: str, conv_id: str) -> None:
+    """Generate a concise 3-7 word title from the conversation so far
+    and store it on cortex_conversation_meta. Best-effort; failures
+    are logged and silently ignored."""
+    rows = []
+    cur = db.cortex_conversations.find(
+        {"user_id": user_id, "conversation_id": conv_id},
+        {"_id": 0, "role": 1, "message": 1},
+    ).sort("created_at", 1).limit(10)
+    async for r in cur:
+        rows.append(r)
+    if len(rows) < 2:
+        return
+    transcript = "\n".join(
+        f"[{r.get('role','user')}] {(r.get('message') or '')[:200]}"
+        for r in rows
+    )[:3000]
+    try:
+        from cortex.llm_provider import cortex_chat
+        raw, _label = await cortex_chat(
+            system=(
+                "You write short, descriptive titles for business conversations. "
+                "Return JSON: {\"title\": \"<3-7 words, no punctuation, no quotes>\"}. "
+                "Capture the subject of the conversation, not the act of talking. "
+                "Examples: 'Recruit Etsy woodworking sellers', "
+                "'Q3 outreach throttling', 'Father's Day campaign plan'."
+            ),
+            user_text=f"Conversation:\n{transcript}",
+            session_id=f"cortex-title-{user_id}-{conv_id[:8]}",
+            user_id=user_id, prefer="claude", json_mode=True,
+        )
+        import json as _json
+        data = _json.loads(raw)
+        title = str(data.get("title") or "").strip()[:80]
+    except Exception:
+        logger.exception("auto_rename: LLM call failed (non-fatal)")
+        return
+    if not title:
+        return
+    await db.cortex_conversation_meta.update_one(
+        {"user_id": user_id, "conversation_id": conv_id},
+        {"$set": {"title": title, "auto_renamed": True,
+                   "updated_at": datetime.now(timezone.utc)},
+         "$setOnInsert": {"created_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )

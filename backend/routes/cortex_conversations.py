@@ -62,12 +62,40 @@ async def list_conversations(request: Request, limit: int = 30):
         items.append({
             "id":            r["_id"],
             "title":         title,
+            "auto_title":    title,
+            "pinned":        False,
             "last_message":  str(r.get("last_message") or "")[:120],
             "message_count": int(r.get("message_count") or 0),
             "updated_at":    _iso(r.get("last_at")),
             "created_at":    _iso(r.get("first_at")),
         })
+
+    # Merge sidecar meta (custom titles, pinned flags).
+    if items:
+        ids = [it["id"] for it in items]
+        meta_cur = db.cortex_conversation_meta.find(
+            {"user_id": user.user_id, "conversation_id": {"$in": ids}},
+            {"_id": 0})
+        meta_by_id: dict[str, dict] = {m["conversation_id"]: m async for m in meta_cur}
+        for it in items:
+            m = meta_by_id.get(it["id"])
+            if m:
+                if m.get("title"):  it["title"]  = m["title"]
+                if m.get("pinned"): it["pinned"] = True
+
+    # Pinned to the top.
+    items.sort(key=lambda x: (0 if x.get("pinned") else 1,
+                                -(_dt_ord(x.get("updated_at")))))
     return {"items": items, "count": len(items)}
+
+
+def _dt_ord(iso: Optional[str]) -> float:
+    if not iso:
+        return 0.0
+    try:
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return 0.0
 
 
 @api.get("/cortex/console/conversations/{conv_id}")
@@ -108,6 +136,53 @@ async def new_conversation(request: Request):
     cid = uuid.uuid4().hex
     return {"conversation_id": cid, "created_for": user.user_id,
             "created_at": datetime.now(timezone.utc).isoformat()}
+
+
+# -------- rename / pin / delete -------------------------------------
+from pydantic import BaseModel, Field
+
+class ConvPatchPayload(BaseModel):
+    title:  Optional[str] = Field(None, max_length=120)
+    pinned: Optional[bool] = None
+
+
+@api.patch("/cortex/console/conversations/{conv_id}")
+async def patch_conversation(conv_id: str, payload: ConvPatchPayload,
+                              request: Request):
+    """Rename or pin a conversation. Patches are stored on a sidecar
+    `cortex_conversation_meta` collection (1 row per conv_id) so we
+    don't touch the underlying message rows."""
+    user = await get_current_user(request)
+    if conv_id == LEGACY_ID:
+        raise HTTPException(400, "Cannot edit the legacy bucket")
+    if payload.title is None and payload.pinned is None:
+        raise HTTPException(400, "Nothing to update")
+    update: dict = {"updated_at": datetime.now(timezone.utc)}
+    if payload.title is not None:
+        update["title"] = payload.title.strip()[:120]
+    if payload.pinned is not None:
+        update["pinned"] = bool(payload.pinned)
+    await db.cortex_conversation_meta.update_one(
+        {"user_id": user.user_id, "conversation_id": conv_id},
+        {"$set": update,
+         "$setOnInsert": {"created_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return {"updated": True, "conversation_id": conv_id, **{
+        k: v for k, v in update.items() if k != "updated_at"}}
+
+
+@api.delete("/cortex/console/conversations/{conv_id}")
+async def delete_conversation(conv_id: str, request: Request):
+    """Delete a conversation's messages + sidecar meta row."""
+    user = await get_current_user(request)
+    if conv_id == LEGACY_ID:
+        raise HTTPException(400, "Refusing to delete the legacy bucket")
+    res = await db.cortex_conversations.delete_many(
+        {"user_id": user.user_id, "conversation_id": conv_id})
+    await db.cortex_conversation_meta.delete_many(
+        {"user_id": user.user_id, "conversation_id": conv_id})
+    return {"deleted": True, "removed_messages": res.deleted_count}
 
 
 # ---------------------------------------------------------- helpers

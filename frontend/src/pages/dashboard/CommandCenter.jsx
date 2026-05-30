@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
-  Sparkles, Loader2, PanelRightClose, PanelRightOpen, GripVertical, Search,
+  Sparkles, Loader2, PanelRightClose, PanelRightOpen, PanelLeftOpen, GripVertical, Search,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { API } from '../../context/AuthContext';
@@ -58,6 +58,10 @@ const CommandCenter = () => {
   const lastPlanIdRef = useRef(null);
   const [activeConvId, setActiveConvId] = useState('legacy');
   const [historyKey, setHistoryKey] = useState(0);   // bump to refresh history list
+  const [historyOpen, setHistoryOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('cortex-history-open') === '1';
+  });
 
   const rail = useResizableRail({
     key: 'cortex-right-rail',
@@ -384,6 +388,15 @@ const CommandCenter = () => {
       subtitle="Your AI executive. Ask anything — Cortex plans, explains, and executes."
       headerExtra={
         <div className="flex items-center gap-2">
+          <button onClick={() => {
+            const next = !historyOpen;
+            setHistoryOpen(next);
+            try { localStorage.setItem('cortex-history-open', next ? '1' : '0'); } catch { /* */ }
+          }} data-testid="history-toggle-btn"
+                  title={historyOpen ? 'Hide history' : 'Show conversation history'}
+                  className="text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/5 transition flex items-center gap-1.5">
+            <PanelLeftOpen size={11} /> History
+          </button>
           <button onClick={() => setSearchOpen(true)} data-testid="memory-search-btn"
                   title="Search past conversations (⌘⇧K)"
                   className="text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/5 transition flex items-center gap-1.5">
@@ -397,23 +410,45 @@ const CommandCenter = () => {
         </div>
       }
     >
-      <div className="grid gap-0 lg:grid-cols-[auto_1fr_auto_auto]"
+      <div className="grid gap-0 lg:grid-cols-[1fr_auto_auto]"
             style={{ gridTemplateColumns: window.innerWidth >= 1024
-              ? `auto ${gridTemplate}` : undefined }}>
+              ? gridTemplate : undefined }}>
 
-        {/* Conversation history panel */}
-        <ConversationHistory
-          activeId={activeConvId}
-          refreshKey={historyKey}
-          onSelect={(c) => { setActiveConvId(c.id); loadHistory(c.id); }}
-          onNew={(cid) => {
-            setActiveConvId(cid);
-            setThread([]);
-            lastPlanIdRef.current = null;
-          }} />
+        {/* Conversation history — slide-out drawer overlay.
+            Renders OUTSIDE the grid so the chat panel gets full width
+            by default. Click 'History' button in header to open. */}
+        {historyOpen && (
+          <>
+            <div data-testid="history-drawer-backdrop"
+                  className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm"
+                  onClick={() => {
+                    setHistoryOpen(false);
+                    try { localStorage.setItem('cortex-history-open', '0'); } catch { /* */ }
+                  }} />
+            <div data-testid="history-drawer"
+                  className="fixed left-0 top-0 bottom-0 z-40 w-[280px] bg-zinc-950 border-r border-white/10 shadow-2xl animate-in slide-in-from-left duration-200">
+              <ConversationHistory
+                activeId={activeConvId}
+                refreshKey={historyKey}
+                onSelect={(c) => {
+                  setActiveConvId(c.id);
+                  loadHistory(c.id);
+                  setHistoryOpen(false);
+                  try { localStorage.setItem('cortex-history-open', '0'); } catch { /* */ }
+                }}
+                onNew={(cid) => {
+                  setActiveConvId(cid);
+                  setThread([]);
+                  lastPlanIdRef.current = null;
+                  setHistoryOpen(false);
+                  try { localStorage.setItem('cortex-history-open', '0'); } catch { /* */ }
+                }} />
+            </div>
+          </>
+        )}
 
         {/* Left: conversation — chat area is now the dominant surface */}
-        <div className="flex flex-col gap-3 min-h-[85vh] ml-3">
+        <div className="flex flex-col gap-3 min-h-[85vh]">
           <div ref={scrollRef}
                data-testid="cortex-chat-thread"
                className="flex-1 rounded-2xl border border-white/5 bg-white/[0.02] p-5 overflow-y-auto min-h-[68vh] max-h-[80vh]">

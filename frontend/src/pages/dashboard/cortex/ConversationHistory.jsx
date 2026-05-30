@@ -71,7 +71,7 @@ export const ConversationHistory = ({ activeId, onSelect, onNew, refreshKey }) =
 
   return (
     <aside data-testid="cortex-conversation-history"
-           className="flex flex-col h-full min-h-0 w-[240px] shrink-0 border-r border-white/5 bg-white/[0.01] backdrop-blur-md">
+           className="flex flex-col h-full min-h-0 w-full bg-white/[0.01] backdrop-blur-md">
       {/* Header — New + search */}
       <div className="p-3 border-b border-white/5 space-y-2">
         <button onClick={handleNew} data-testid="conversation-new-btn"
