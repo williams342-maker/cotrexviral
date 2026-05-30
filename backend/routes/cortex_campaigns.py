@@ -15,7 +15,7 @@ Routes:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import HTTPException, Request
@@ -206,11 +206,49 @@ def _compose_content(post: dict) -> str:
 
 
 class CampaignPushPayload(BaseModel):
-    mode: str = "draft"             # draft | scheduled
+    mode: str = "draft"             # draft | scheduled | optimal_times
     # When mode=scheduled, posts are spread starting at start_at with
     # cadence_hours between consecutive items. UTC ISO string accepted.
     start_at: Optional[datetime] = None
     cadence_hours: int = 24
+    # When mode=optimal_times, posts are scheduled at AI-recommended
+    # slots per channel (see _compute_optimal_slot). No user inputs
+    # required — slots come from routes/channels.OPTIMAL_BASE.
+
+
+def _compute_optimal_slot(platform: str, *, after: datetime,
+                            already_used: set) -> Optional[datetime]:
+    """Return the next available best-time slot for `platform` strictly
+    after `after`, that isn't already in `already_used`. Falls through
+    weeks until a free slot lands.
+
+    Uses the same heuristic baseline as routes.channels._ai_optimal_times
+    (Tue/Wed/Thu mornings for B2B; Mon/Tue/Wed late-morning + evenings
+    for IG; weekend evenings for Pinterest, etc.)."""
+    from routes.channels import OPTIMAL_BASE
+    day_index = {"Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3,
+                 "Fri": 4, "Sat": 5, "Sun": 6}
+    slots = OPTIMAL_BASE.get(platform) or [
+        {"day": "Tue", "hour": 10}, {"day": "Thu", "hour": 15}]
+
+    # Generate candidate datetimes for the next 6 weeks, sort ascending,
+    # pick the first that's strictly after `after` and not already used.
+    candidates: list[datetime] = []
+    base = after.replace(minute=0, second=0, microsecond=0)
+    for week_offset in range(6):
+        for slot in slots:
+            target_dow = day_index.get(slot["day"], 1)
+            today_dow = base.weekday()
+            delta = (target_dow - today_dow) % 7 + week_offset * 7
+            d = base + timedelta(days=delta)
+            d = d.replace(hour=int(slot["hour"]),
+                          minute=0, second=0, microsecond=0)
+            if d > after and d not in already_used:
+                candidates.append(d)
+    if not candidates:
+        return None
+    candidates.sort()
+    return candidates[0]
 
 
 class SinglePostPushPayload(BaseModel):
@@ -243,7 +281,7 @@ async def _materialize_push(*, user_id: str, campaign_id: str, cp: dict,
         "content":      _compose_content(cp),
         "platforms":    [platform],
         "media_url":    default_media,
-        "status":       "scheduled" if mode == "scheduled" else "draft",
+        "status":       "scheduled" if scheduled_at else "draft",
         "scheduled_at": scheduled_at,
         "campaign_id":  campaign_id,
         "cortex_post_id":     cp.get("id"),
@@ -323,8 +361,9 @@ async def push_campaign_to_calendar(campaign_id: str,
     if campaign.get("status") != "complete":
         raise HTTPException(409, "Campaign is not complete yet.")
 
-    if payload.mode not in ("draft", "scheduled"):
-        raise HTTPException(400, "mode must be 'draft' or 'scheduled'.")
+    if payload.mode not in ("draft", "scheduled", "optimal_times"):
+        raise HTTPException(400,
+            "mode must be 'draft', 'scheduled', or 'optimal_times'.")
     if payload.mode == "scheduled" and not payload.start_at:
         raise HTTPException(400, "start_at is required when mode='scheduled'.")
     cadence_hours = max(1, min(int(payload.cadence_hours or 24), 24 * 14))
@@ -344,6 +383,10 @@ async def push_campaign_to_calendar(campaign_id: str,
     cursor_at = payload.start_at
     pushed: list[dict] = []
     skipped: list[dict] = []
+    # Per-platform cursor for optimal_times mode + a global set to
+    # avoid scheduling two posts to the exact same minute.
+    per_platform_after: dict = {}
+    used_slots: set = set()
 
     for cp in cortex_posts:
         platform_raw = (cp.get("platform") or "")
@@ -363,8 +406,14 @@ async def push_campaign_to_calendar(campaign_id: str,
         sched_at = None
         if payload.mode == "scheduled":
             sched_at = cursor_at
-            from datetime import timedelta
             cursor_at = (cursor_at or now) + timedelta(hours=cadence_hours)
+        elif payload.mode == "optimal_times":
+            after = per_platform_after.get(platform, now)
+            sched_at = _compute_optimal_slot(
+                platform, after=after, already_used=used_slots)
+            if sched_at:
+                used_slots.add(sched_at)
+                per_platform_after[platform] = sched_at
 
         entry = await _materialize_push(
             user_id=user.user_id, campaign_id=campaign_id, cp=cp,

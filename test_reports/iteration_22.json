@@ -1,0 +1,25 @@
+{
+  "summary": "P1 'Auto-schedule on optimal times' — full backend + frontend verification. mode='optimal_times' on the bulk push endpoint works as designed: every pushable cortex_social_post is scheduled at the next free OPTIMAL_BASE slot for its platform, with round-robin per platform, global slot dedup across platforms, idempotency on re-push, non-pushable platforms (google_ads) skipped, and 400 on invalid modes. Existing draft + scheduled modes regression-pass. Single-post push endpoint correctly rejects mode='optimal_times' and still requires scheduled_at for mode='scheduled'. Frontend BulkPushBar: third 'Optimal' pill renders, hides datetime+cadence inputs, shows violet hint banner 'Cortex picks the best time per channel from industry posting heuristics — no inputs needed', CTA label flips to 'Auto-schedule N' on violet button, result line reads 'Auto-scheduled 12 posts across 3 channels at AI-recommended slots.' Mode flips back to Drafts/Schedule restore their inputs correctly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_cortex_optimal_times.py",
+    "/app/test_reports/pytest/cortex_optimal_times.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Mode pills (bulk-push-mode-{draft,scheduled,optimal}) are <input type=radio class=\"hidden\"> wrapped in labels — testid is on the hidden input so Playwright must click the parent <label>. Consider also putting a data-testid on the visible <label> wrapper for easier E2E targeting.",
+    "_compute_optimal_slot iterates up to 6 weeks forward (OPTIMAL_BASE has 9-10 slots/week per platform) — at high volumes (>50 posts/platform) it could run out. Currently fine; flag if volume grows.",
+    "Frontend 'channels' count in the result line dedupes via alias (instagram_story → instagram). That matches backend behavior — verified live: 12 posts, 3 channels (facebook + instagram(+story) + pinterest)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_cortex_optimal_times.py (new)"
+  ],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100% (all UI assertions passed)"},
+  "test_credentials": "test@automatex.dev / session_token=test_session_1779636592168 (cookie name: session_token)",
+  "seed_data_creation": "Tests temporarily $unset pushed_at/posts_id/pushed_mode/pushed_platform on cortex_social_posts for campaigns f4fb952252934d5383ae1168157d73c6 (optimal), 2d546710e31b47819883100eb87d52fc (draft regression), 960b69244447430e87bbafc3373620d4 (scheduled regression), and 0b134d3bdd314519aaa97586efdff1f7 (UI). All campaigns are restamped to original state in fixture teardown / explicit cleanup. /tmp/ui_test_backup.json holds the UI-campaign snapshot taken before the Playwright run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bulk push endpoint POST /api/cortex/campaigns/{cid}/push now supports mode=optimal_times in addition to draft|scheduled. Pytest file /app/backend/tests/test_cortex_optimal_times.py covers slot adherence to OPTIMAL_BASE (in routes/channels.py lines 410-422), round-robin, global dedup, idempotency, mode regressions, and single-push regression. Re-use the _unstamp/_restamp helpers (and IDEMP_CID for already-pushed checks) if you need fresh-push fixtures. Backend was occasionally slow (LiteLLM Gemini image-gen saturating event loop) — give /api calls a 60s timeout when chained back-to-back.",
+  "rca of the issue": "N/A — feature works as specified, no bugs found."
+}

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Rocket, Sparkles, ArrowLeft, Mail, MessageCircle, FileText,
   Loader2, CheckCircle2, AlertTriangle, ImageIcon, Calendar, Target,
-  ChevronRight, Globe, Send, Upload,
+  ChevronRight, Globe, Send, Upload, Brain,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { API } from '../../context/AuthContext';
@@ -333,6 +333,10 @@ function BulkPushBar({ campaign, posts, onChanged }) {
     } finally { setPushing(false); }
   };
 
+  const ctaLabel = mode === 'optimal_times' ? `Auto-schedule ${eligible}`
+                 : mode === 'scheduled'     ? `Schedule ${eligible}`
+                 : `Push ${eligible}`;
+
   return (
     <div data-testid="bulk-push-bar"
          className="rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.05] to-emerald-500/[0.01] p-3">
@@ -356,16 +360,27 @@ function BulkPushBar({ campaign, posts, onChanged }) {
             <input type="radio" name="bulk-push-mode" value="scheduled" checked={mode === 'scheduled'} onChange={() => setMode('scheduled')} className="hidden"
                    data-testid="bulk-push-mode-scheduled" /> Schedule
           </label>
+          <label className={`text-[11px] px-2 py-1 rounded border cursor-pointer transition flex items-center gap-1 ${mode === 'optimal_times' ? 'bg-violet-500/20 border-violet-500/40 text-violet-200' : 'border-white/10 text-zinc-400 hover:text-white'}`}>
+            <input type="radio" name="bulk-push-mode" value="optimal_times" checked={mode === 'optimal_times'} onChange={() => setMode('optimal_times')} className="hidden"
+                   data-testid="bulk-push-mode-optimal" />
+            <Brain size={10} /> Optimal
+          </label>
           <button onClick={push}
                   disabled={disabled}
                   data-testid="bulk-push-submit"
-                  className="text-[11.5px] font-bold px-3 py-1.5 rounded-md bg-emerald-500 hover:bg-emerald-400 text-emerald-950 disabled:bg-zinc-700 disabled:text-zinc-500 transition flex items-center gap-1.5">
+                  className={`text-[11.5px] font-bold px-3 py-1.5 rounded-md transition flex items-center gap-1.5 disabled:bg-zinc-700 disabled:text-zinc-500 ${mode === 'optimal_times' ? 'bg-violet-500 hover:bg-violet-400 text-violet-950' : 'bg-emerald-500 hover:bg-emerald-400 text-emerald-950'}`}>
             {pushing
               ? <><Loader2 size={11} className="animate-spin" /> Pushing…</>
-              : <><Upload size={11} /> Push {eligible}</>}
+              : <><Upload size={11} /> {ctaLabel}</>}
           </button>
         </div>
       </div>
+      {mode === 'optimal_times' && (
+        <div className="mt-2 pt-2 border-t border-violet-500/15 flex items-center gap-1.5 text-[11px] text-violet-200">
+          <Brain size={10} className="text-violet-300" />
+          Cortex picks the best time per channel from industry posting heuristics — no inputs needed.
+        </div>
+      )}
       {mode === 'scheduled' && (
         <div className="mt-2 pt-2 border-t border-emerald-500/15 flex items-center gap-2 flex-wrap">
           <label className="text-[11px] text-zinc-400">
@@ -393,8 +408,17 @@ function BulkPushBar({ campaign, posts, onChanged }) {
         <div data-testid="bulk-push-result"
              className="mt-2 text-[11.5px] text-emerald-300 flex items-center gap-2">
           <CheckCircle2 size={11} />
-          Pushed {result.counts?.pushed || 0} post{(result.counts?.pushed || 0) === 1 ? '' : 's'}.
-          {result.counts?.skipped > 0 && <span className="text-zinc-500">({result.counts.skipped} skipped)</span>}
+          {mode === 'optimal_times' ? (
+            <span>
+              Auto-scheduled {result.counts?.pushed || 0} post{(result.counts?.pushed || 0) === 1 ? '' : 's'} across
+              {' '}{new Set((result.pushed || []).map((p) => p.platform)).size} channel{new Set((result.pushed || []).map((p) => p.platform)).size === 1 ? '' : 's'} at AI-recommended slots.
+            </span>
+          ) : (
+            <span>
+              Pushed {result.counts?.pushed || 0} post{(result.counts?.pushed || 0) === 1 ? '' : 's'}.
+              {result.counts?.skipped > 0 && <span className="text-zinc-500 ml-1">({result.counts.skipped} skipped)</span>}
+            </span>
+          )}
           <a href="/dashboard/marketing-calendar" target="_blank" rel="noreferrer"
              className="text-emerald-200 underline ml-1">Open calendar →</a>
         </div>
