@@ -59,10 +59,12 @@ const MissionTile = ({ m, onClick }) => {
           <div className="text-[12.5px] font-semibold text-white leading-tight truncate">
             {m.title}
           </div>
-          <div className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5">
-            {(m.mission_type || 'mission').replace('_', ' ')}
+          <div className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5 flex items-center gap-1.5">
+            <span>{(m.mission_type || 'mission').replace('_', ' ')}</span>
             {m.autonomy_level != null && (
-              <span className="ml-1 text-violet-400/70">· L{m.autonomy_level}</span>
+              <span className="px-1 py-px rounded-sm text-[9px] font-bold bg-violet-500/15 text-violet-300 border border-violet-500/25">
+                AUTONOMY L{m.autonomy_level}
+              </span>
             )}
           </div>
         </div>

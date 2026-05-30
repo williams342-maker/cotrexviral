@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { API } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
 import {
-  Loader2, Sparkles, Target, Rocket, Activity, Pause, Play,
+  Loader2, Sparkles, Target, Rocket, Activity, Pause, Play, XCircle,
   TrendingUp, Send, Brain, ArrowRight, X, Trophy, Compass,
   Zap, Calendar, Hash,
 } from 'lucide-react';
@@ -255,20 +255,38 @@ const MissionAction = ({ mission, reload }) => {
   };
   if (mission.status === 'running') {
     return (
-      <button onClick={() => fire('pause')} disabled={pending}
-              className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 transition flex items-center gap-1 disabled:opacity-50"
-              data-testid={`mission-pause-${mission.id}`}>
-        <Pause size={11} /> Pause
-      </button>
+      <div className="flex items-center gap-1.5">
+        <button onClick={() => fire('pause')} disabled={pending}
+                className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 transition flex items-center gap-1 disabled:opacity-50"
+                data-testid={`mission-pause-${mission.id}`}>
+          <Pause size={11} /> Pause
+        </button>
+        <button onClick={() => {
+          if (window.confirm(`Cancel "${mission.title}"? This stops further automation.`)) fire('cancel');
+        }} disabled={pending} title="Cancel mission"
+                className="text-[11.5px] font-semibold w-7 h-7 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 transition flex items-center justify-center disabled:opacity-50"
+                data-testid={`mission-cancel-${mission.id}`}>
+          <XCircle size={11} />
+        </button>
+      </div>
     );
   }
   if (mission.status === 'paused' || mission.status === 'draft') {
     return (
-      <button onClick={() => fire('start')} disabled={pending}
-              className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 transition flex items-center gap-1 disabled:opacity-50"
-              data-testid={`mission-start-${mission.id}`}>
-        <Play size={11} /> {mission.status === 'paused' ? 'Resume' : 'Start'}
-      </button>
+      <div className="flex items-center gap-1.5">
+        <button onClick={() => fire('start')} disabled={pending}
+                className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 transition flex items-center gap-1 disabled:opacity-50"
+                data-testid={`mission-start-${mission.id}`}>
+          <Play size={11} /> {mission.status === 'paused' ? 'Resume' : 'Start'}
+        </button>
+        <button onClick={() => {
+          if (window.confirm(`Cancel "${mission.title}"? This stops further automation.`)) fire('cancel');
+        }} disabled={pending} title="Cancel mission"
+                className="text-[11.5px] font-semibold w-7 h-7 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 transition flex items-center justify-center disabled:opacity-50"
+                data-testid={`mission-cancel-${mission.id}`}>
+          <XCircle size={11} />
+        </button>
+      </div>
     );
   }
   return null;

@@ -2,184 +2,36 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
-  Sparkles, Loader2, Brain, ArrowUp, Command,
-  PanelRightClose, PanelRightOpen, GripVertical, Search,
+  Sparkles, Loader2, PanelRightClose, PanelRightOpen, GripVertical, Search,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { API } from '../../context/AuthContext';
 import { useToast } from '../../hooks/use-toast';
-import PlanCard from './cortex/PlanCard';
 import OpportunityRail from './cortex/OpportunityRail';
 import ExecutionLog from './cortex/ExecutionLog';
-import MissionEventStream from './cortex/MissionEventStream';
+import ChatMessage from './cortex/ChatMessage';
+import Composer from './cortex/Composer';
+import PhaseIndicator from './cortex/PhaseIndicator';
+import MemorySearch from './cortex/MemorySearch';
 import useResizableRail from '../../hooks/useResizableRail';
 
 /* /dashboard — the Conversational Command Center.
 
-   v2 features (this iteration):
-     · Right rail is collapsible + drag-resizable (persisted via localStorage)
-     · PlanCard supports minimize / cancel / email / close
-     · SSE-streamed chat shows live phases: classifying → recalling → planning → ready
-     · Stale plan card is marked "superseded" when a new turn is sent
-     · Memory continuity hint surfaces "Based on our prior conversation…" on plans
-*/
+   This is the primary product surface. Users interact with Cortex
+   through natural language. Cortex understands goals, proposes plans
+   with reasoning/confidence/cost/timeline/risk, and executes through
+   the autonomy engine (L0-L5) — but execution is a SIDE-EFFECT of
+   conversation. Conversation never ends; missions stream live updates
+   inline as Cortex works in the background.
+
+   This file orchestrates state + side-effects. Visual components are
+   in /pages/dashboard/cortex/. */
 
 const PHASE_COPY = {
   classifying: 'Understanding your goal…',
   recalling:   'Recalling our prior conversations…',
   planning:    'Cortex is drafting the plan…',
   ready:       'Done.',
-};
-
-
-const ChatMessage = ({ turn, onAction, busyId, isStale }) => {
-  const isUser = turn.role === 'user';
-
-  // Mission event stream entry (rendered inline in chat).
-  if (turn._kind === 'mission_events') {
-    return (
-      <MissionEventStream missionTitle={turn.missionTitle}
-                            events={turn.events || []} />
-    );
-  }
-
-  if (isUser) {
-    return (
-      <div data-testid="chat-user-turn" className="flex justify-end mb-3">
-        <div className="max-w-[80%] rounded-2xl rounded-tr-md bg-violet-500/15 border border-violet-500/30 px-4 py-2.5 text-[13.5px] text-zinc-100 leading-relaxed">
-          {turn.message}
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div data-testid="chat-cortex-turn" className="flex items-start gap-3 mb-4">
-      <span className="shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shadow-lg shadow-violet-500/20">
-        <Brain size={14} className="text-white" />
-      </span>
-      <div className="flex-1 min-w-0 space-y-3">
-        <div className="text-[10px] uppercase tracking-widest font-semibold text-violet-300">
-          Cortex {isStale && <span className="text-zinc-500 normal-case tracking-normal ml-2">· superseded</span>}
-        </div>
-        {turn.message && (
-          <div className={`text-[13.5px] leading-relaxed whitespace-pre-line ${
-            isStale ? 'text-zinc-500' : 'text-zinc-200'
-          }`}>
-            {turn.message}
-          </div>
-        )}
-        {turn.recommendation && (
-          <PlanCard rec={turn.recommendation}
-                    memoryHint={turn.memoryHint}
-                    busy={busyId === turn.id}
-                    initiallyMinimized={isStale && !turn._dismissed}
-                    dismissed={turn._dismissed || isStale}
-                    onPreview={() => onAction('preview', turn)}
-                    onExecute={() => onAction('execute', turn)}
-                    onAutomate={() => onAction('automate', turn)}
-                    onCancel={(onDone) => onAction('cancel', turn, onDone)}
-                    onEmail={() => onAction('email', turn)} />
-        )}
-      </div>
-    </div>
-  );
-};
-
-
-const Composer = ({ value, onChange, onSubmit, sending }) => {
-  const ref = useRef(null);
-  const handleKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      onSubmit();
-    }
-  };
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 144) + 'px';
-  }, [value]);
-
-  return (
-    <div data-testid="cortex-composer"
-         className="rounded-2xl border border-white/10 bg-white/[0.03] focus-within:border-violet-500/40 backdrop-blur-md transition">
-      <div className="flex items-end gap-2 p-2">
-        <textarea ref={ref} rows={1}
-          data-testid="cortex-composer-input"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKey}
-          placeholder="Message Cortex — try: 'recruit 50 woodworking sellers' or 'what should I focus on this week?'"
-          className="flex-1 resize-none bg-transparent px-2 py-2 text-[13.5px] text-white placeholder:text-zinc-500 focus:outline-none leading-relaxed"
-          disabled={sending} />
-        <button onClick={onSubmit} disabled={sending || !value.trim()}
-                data-testid="cortex-composer-send"
-                className="shrink-0 w-9 h-9 rounded-lg bg-violet-500 hover:bg-violet-400 disabled:bg-white/5 disabled:cursor-not-allowed text-white flex items-center justify-center transition shadow-lg shadow-violet-500/20 disabled:shadow-none">
-          {sending ? <Loader2 size={14} className="animate-spin" /> : <ArrowUp size={14} />}
-        </button>
-      </div>
-      <div className="px-3 pb-2 pt-0.5 text-[10px] text-zinc-500 flex items-center gap-2">
-        <Command size={10} /> Press Enter to send, Shift+Enter for newline
-      </div>
-    </div>
-  );
-};
-
-
-/* Memory search modal — semantic recall across all past conversations. */
-const MemorySearch = ({ open, onClose }) => {
-  const [q, setQ] = useState('');
-  const [hits, setHits] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const run = async () => {
-    if (!q.trim()) return;
-    setBusy(true);
-    try {
-      const r = await axios.post(`${API}/cortex/memory/recall`,
-                                  { query: q, k: 8 },
-                                  { withCredentials: true });
-      setHits(r.data?.hits || []);
-    } finally { setBusy(false); }
-  };
-  if (!open) return null;
-  return (
-    <div data-testid="cortex-memory-search-modal"
-         className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start justify-center pt-24 px-4"
-         onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()}
-           className="w-full max-w-2xl rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-        <div className="p-4 border-b border-white/5">
-          <div className="flex items-center gap-2">
-            <Search size={14} className="text-violet-300" />
-            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && run()}
-                    data-testid="memory-search-input"
-                    placeholder="Search past conversations: e.g. 'Etsy sellers', 'Father's Day'"
-                    className="flex-1 bg-transparent text-[14px] text-white placeholder:text-zinc-500 focus:outline-none" />
-            {busy && <Loader2 size={13} className="animate-spin text-zinc-500" />}
-            <button onClick={onClose} className="text-zinc-500 hover:text-white text-[11px]">Esc</button>
-          </div>
-        </div>
-        <div className="max-h-[60vh] overflow-y-auto p-4 space-y-2">
-          {hits.length === 0 && !busy && q && (
-            <div className="text-[12px] text-zinc-500 italic">No relevant past messages found.</div>
-          )}
-          {hits.map((h, i) => (
-            <div key={i} data-testid={`memory-hit-${i}`}
-                  className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-              <div className="flex items-center gap-2 text-[10px] text-zinc-500 mb-1 uppercase tracking-wider">
-                <span>{h.role}</span>
-                <span>· {(h.created_at || '').slice(0, 10)}</span>
-                <span className="ml-auto">score {Math.round(h.score * 100) / 100}</span>
-              </div>
-              <div className="text-[13px] text-zinc-200 leading-relaxed">{h.text}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
 };
 
 
@@ -190,8 +42,8 @@ const CommandCenter = () => {
   const [thread, setThread]   = useState([]);
   const [draft, setDraft]     = useState('');
   const [sending, setSending] = useState(false);
-  const [phase, setPhase]     = useState(null);          // SSE phase indicator
-  const [phaseHistory, setPhaseHistory] = useState([]);   // recent phases for the indicator
+  const [phase, setPhase]     = useState(null);
+  const [phaseHistory, setPhaseHistory] = useState([]);
   const [busyId, setBusyId]   = useState(null);
   const [strategy, setStrategy] = useState(null);
   const [opportunities, setOpps] = useState([]);
@@ -200,9 +52,9 @@ const CommandCenter = () => {
   const [execLoading, setExecLoading] = useState(true);
   const [activeMissions, setActiveMissions] = useState([]);
   const [missionsLoading, setMissionsLoading] = useState(true);
-  const trackedMissionsRef = useRef({});         // missionId -> {title, lastSeen}
+  const trackedMissionsRef = useRef({});
   const [searchOpen, setSearchOpen] = useState(false);
-  const lastPlanIdRef = useRef(null);            // for stale-marking
+  const lastPlanIdRef = useRef(null);
 
   const rail = useResizableRail({
     key: 'cortex-right-rail',
@@ -212,23 +64,22 @@ const CommandCenter = () => {
   const scrollRef = useRef(null);
   const esRef = useRef(null);
 
+  // ----- Initial + periodic data loaders -----------------------------
   const loadHistory = useCallback(async () => {
     try {
       const r = await axios.get(`${API}/cortex/console/history?limit=40`,
                                   { withCredentials: true });
       const turns = r.data?.turns || [];
-      // Mark all but the latest plan card as superseded so old proposals collapse.
       let latestPlanIdx = -1;
       for (let i = turns.length - 1; i >= 0; i--) {
         if (turns[i].recommendation) { latestPlanIdx = i; break; }
       }
       const annotated = turns.map((t, i) => ({
-        ...t,
-        _stale: t.recommendation && i !== latestPlanIdx,
+        ...t, _stale: t.recommendation && i !== latestPlanIdx,
       }));
       setThread(annotated);
       lastPlanIdRef.current = latestPlanIdx >= 0 ? turns[latestPlanIdx].id : null;
-    } catch (_e) { /* empty history is fine */ }
+    } catch (_e) { /* */ }
   }, []);
   const loadStrategy = useCallback(async () => {
     try {
@@ -255,25 +106,27 @@ const CommandCenter = () => {
     } catch (_e) { setExecItems([]); }
     finally { setExecLoading(false); }
   }, []);
-
   const loadActiveMissions = useCallback(async () => {
     try {
       const r = await axios.get(`${API}/cortex/missions/active?limit=6`,
                                   { withCredentials: true });
       setActiveMissions(r.data?.missions || []);
-    } catch (_e) { /* silent */ }
+    } catch (_e) { /* */ }
     finally { setMissionsLoading(false); }
   }, []);
 
-  // Poll active missions every 5s. Cheap (single endpoint per user).
+  useEffect(() => {
+    loadHistory(); loadStrategy(); loadOpps(); loadExec();
+  }, [loadHistory, loadStrategy, loadOpps, loadExec]);
+
+  // Poll active missions every 5s.
   useEffect(() => {
     loadActiveMissions();
     const t = setInterval(loadActiveMissions, 5000);
     return () => clearInterval(t);
   }, [loadActiveMissions]);
 
-  // On first load, seed tracked-missions from currently-running ones so we
-  // also stream events for missions launched in previous sessions.
+  // Seed tracked-missions from active list so we stream events for pre-existing missions too.
   useEffect(() => {
     if (activeMissions.length && Object.keys(trackedMissionsRef.current).length === 0) {
       const seed = {};
@@ -285,16 +138,14 @@ const CommandCenter = () => {
     }
   }, [activeMissions]);
 
-  // Stream NEW mission events into the chat thread as live timeline entries.
-  // For each mission Cortex just launched (tracked via trackedMissionsRef),
-  // poll its events endpoint and append fresh ones as system-style turns.
+  // Per-mission event polling — streams live updates into chat.
   useEffect(() => {
     let cancelled = false;
     const poll = async () => {
       const tracked = trackedMissionsRef.current;
       const ids = Object.keys(tracked);
       if (ids.length === 0) return;
-      for (const mid of ids.slice(0, 3)) {     // cap concurrent polls
+      for (const mid of ids.slice(0, 3)) {
         try {
           const t = tracked[mid];
           const since = t?.lastSeen || new Date(Date.now() - 60_000).toISOString();
@@ -309,7 +160,7 @@ const CommandCenter = () => {
               id: `mev-${mid}-${Date.now()}`,
               _kind: 'mission_events',
               missionTitle: t.title,
-              events: evs.reverse(),    // oldest-first reads better as a stream
+              events: evs.reverse(),
               created_at: new Date().toISOString(),
             }]);
           }
@@ -320,16 +171,13 @@ const CommandCenter = () => {
     return () => { cancelled = true; clearInterval(iv); };
   }, []);
 
-  useEffect(() => {
-    loadHistory(); loadStrategy(); loadOpps(); loadExec();
-  }, [loadHistory, loadStrategy, loadOpps, loadExec]);
-
+  // Auto-scroll on thread / phase change.
   useEffect(() => {
     if (!scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [thread, phase]);
 
-  // Cmd/Ctrl+K → memory search
+  // Cmd/Ctrl+K → memory search.
   useEffect(() => {
     const onKey = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k' && !e.shiftKey) {
@@ -350,12 +198,12 @@ const CommandCenter = () => {
     setSending(true);
     setPhase({ phase: 'classifying', label: PHASE_COPY.classifying });
     setPhaseHistory([{ phase: 'classifying', label: PHASE_COPY.classifying }]);
-    // Mark prior plan card as superseded immediately (stale UX fix).
+
+    // Mark prior plan cards as superseded immediately.
     setThread((t) => t.map((turn) =>
       turn.recommendation ? { ...turn, _stale: true } : turn
     ));
 
-    // Optimistic user turn.
     const userTurn = {
       id: `u-${Date.now()}`, role: 'user', message: msg,
       created_at: new Date().toISOString(),
@@ -363,7 +211,6 @@ const CommandCenter = () => {
     setThread((t) => [...t, userTurn]);
     setDraft('');
 
-    // SSE stream.
     try {
       const url = `${API}/cortex/console/chat/stream?message=${encodeURIComponent(msg)}`;
       const es = new EventSource(url, { withCredentials: true });
@@ -407,7 +254,7 @@ const CommandCenter = () => {
           loadOpps(); loadStrategy();
         }
       });
-      es.addEventListener('error', (ev) => {
+      es.addEventListener('error', () => {
         toast({ title: 'Cortex failed to respond', variant: 'destructive' });
         es.close(); esRef.current = null;
         setSending(false); setPhase(null);
@@ -435,11 +282,8 @@ const CommandCenter = () => {
                           { withCredentials: true });
         toast({ title: 'Plan dismissed',
                 description: "Cortex won't re-suggest this for 7 days." });
-        // Mark turn dismissed — card stays visible with grey/dismissed styling
-        // and disabled actions (per spec). Does NOT close (X) the card.
         setThread((t) => t.map((x) => x.id === turn.id
           ? { ...x, _stale: true, _dismissed: true } : x));
-        // Note: doneCb intentionally NOT called — we want the dismissed card to remain.
       } else if (action === 'email') {
         const r = await axios.post(`${API}/cortex/plan/email`,
                                      { recommendation: rec },
@@ -447,7 +291,6 @@ const CommandCenter = () => {
         toast({ title: 'Plan emailed',
                 description: r.data?.message || 'Sent to your inbox.' });
       } else {
-        // execute / automate
         const body = { recommendation: rec };
         if (action === 'automate') body.override_autonomy = 5;
         const r = await axios.post(`${API}/cortex/console/execute`, body,
@@ -457,21 +300,15 @@ const CommandCenter = () => {
           title: `Cortex · ${taken.toUpperCase()}`,
           description: r.data?.message || `Autonomy L${r.data?.autonomy_level}.`,
         });
-
-        // Mark the launched plan as completed (so it shrinks into rail visually).
         if (r.data?.mission_id) {
           setThread((t) => t.map((x) => x.id === turn.id
             ? { ...x, _stale: true, _launched: true } : x));
-          // Start tracking this mission for live event polling.
           trackedMissionsRef.current[r.data.mission_id] = {
             title: rec.title || 'Mission',
             lastSeen: new Date().toISOString(),
           };
-          // Auto-refresh active missions immediately.
           setTimeout(loadActiveMissions, 400);
         }
-
-        // Render the auto-followup as a new Cortex turn.
         if (r.data?.followup?.message) {
           setThread((t) => [...t, {
             id: r.data.followup.id || `f-${Date.now()}`,
@@ -527,11 +364,11 @@ const CommandCenter = () => {
     >
       <div className="grid gap-0 lg:grid-cols-[1fr_auto_auto]"
             style={{ gridTemplateColumns: window.innerWidth >= 1024 ? gridTemplate : undefined }}>
-        {/* Left: conversation */}
-        <div className="flex flex-col gap-3 min-h-[70vh]">
+        {/* Left: conversation — chat area is now the dominant surface */}
+        <div className="flex flex-col gap-3 min-h-[85vh]">
           <div ref={scrollRef}
                data-testid="cortex-chat-thread"
-               className="flex-1 rounded-2xl border border-white/5 bg-white/[0.02] p-5 overflow-y-auto max-h-[68vh] min-h-[50vh]">
+               className="flex-1 rounded-2xl border border-white/5 bg-white/[0.02] p-5 overflow-y-auto min-h-[68vh] max-h-[80vh]">
             {!hasHistory && !sending && (
               <div data-testid="cortex-empty-state"
                    className="h-full flex flex-col items-center justify-center text-center py-12">
@@ -555,28 +392,8 @@ const CommandCenter = () => {
                             isStale={turn._stale}
                             onAction={handleAction} />
             ))}
-            {sending && phase && (
-              <div data-testid="cortex-phase-indicator"
-                   className="flex flex-col gap-1 mt-2">
-                <div className="flex items-center gap-2 text-[12px] text-violet-300 italic">
-                  <Loader2 size={11} className="animate-spin" />
-                  <span className="font-medium">{phase.label}</span>
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider">· {phase.phase}</span>
-                </div>
-                {phaseHistory.length > 1 && (
-                  <div className="flex items-center gap-1.5 ml-5 text-[10px] text-zinc-600">
-                    {phaseHistory.slice(0, -1).map((p, i) => (
-                      <React.Fragment key={i}>
-                        <span className="text-emerald-500/60">✓</span>
-                        <span>{p.phase}</span>
-                        <span>·</span>
-                      </React.Fragment>
-                    ))}
-                    <span className="text-violet-400">{phase.phase}…</span>
-                  </div>
-                )}
-              </div>
-            )}
+            <PhaseIndicator phase={sending ? phase : null}
+                              phaseHistory={phaseHistory} />
           </div>
           <Composer value={draft} onChange={setDraft}
                     onSubmit={send} sending={sending} />
@@ -584,7 +401,6 @@ const CommandCenter = () => {
                           onRefresh={loadExec} />
         </div>
 
-        {/* Drag handle (visible on lg+) */}
         {!rail.collapsed && (
           <div {...rail.dragProps} data-testid="rail-drag-handle"
                className="hidden lg:flex items-center justify-center cursor-col-resize group">
@@ -594,7 +410,6 @@ const CommandCenter = () => {
           </div>
         )}
 
-        {/* Right rail */}
         {!rail.collapsed && (
           <div className="lg:max-h-[90vh] lg:sticky lg:top-4">
             <OpportunityRail
@@ -603,7 +418,7 @@ const CommandCenter = () => {
               strategy={strategy}
               activeMissions={activeMissions}
               missionsLoading={missionsLoading}
-              onOpenMission={(m) => navigate(`/dashboard/missions`)}
+              onOpenMission={() => navigate(`/dashboard/missions`)}
               onPrompt={handlePrompt}
             />
           </div>

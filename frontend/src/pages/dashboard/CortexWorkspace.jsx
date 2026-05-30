@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { API } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
 import {
-  Brain, Loader2, ArrowLeft, Sparkles, Play, Pause, Target, Zap,
+  Brain, Loader2, ArrowLeft, Sparkles, Play, Pause, Target, Zap, XCircle,
   Calendar, Hash, Trophy, Compass, Wand2, Send, TrendingUp, Activity,
 } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
@@ -151,6 +151,17 @@ const CortexWorkspace = () => {
                         className="text-[12px] font-semibold px-3 py-2 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 transition flex items-center gap-1.5"
                         data-testid="cortex-mission-start">
                   <Play size={12} /> {status === 'paused' ? 'Resume' : 'Start'}
+                </button>
+              )}
+              {!['cancelled', 'completed', 'failed'].includes(status) && (
+                <button onClick={() => {
+                  if (window.confirm(`Cancel mission "${mission.title}"? This stops all further automation and cannot be undone.`)) {
+                    toggle('cancel');
+                  }
+                }}
+                        className="text-[12px] font-semibold px-3 py-2 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 transition flex items-center gap-1.5"
+                        data-testid="cortex-mission-cancel">
+                  <XCircle size={12} /> Cancel
                 </button>
               )}
             </div>

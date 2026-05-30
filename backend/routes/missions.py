@@ -469,3 +469,38 @@ async def pause_mission(mission_id: str, request: Request):
     )
     fresh = await db.missions.find_one({"id": mission_id})
     return {**_serialize(fresh), "progress": await compute_progress(fresh)}
+
+
+@api.post("/missions/{mission_id}/cancel")
+async def cancel_mission(mission_id: str, request: Request):
+    """Cancel a mission permanently. Sets status='cancelled' and stamps
+    cancelled_at; the mission-loop scheduler skips cancelled rows so no
+    further phase ticks fire."""
+    user = await get_current_user(request)
+    doc = await db.missions.find_one({"id": mission_id, "user_id": user.user_id})
+    if not doc:
+        raise HTTPException(404, "Mission not found")
+    if doc.get("status") in ("cancelled", "completed", "failed"):
+        raise HTTPException(400, f"Cannot cancel mission in status {doc['status']}")
+    now = datetime.now(timezone.utc)
+    await db.missions.update_one(
+        {"id": mission_id},
+        {"$set": {"status":       "cancelled",
+                   "cancelled_at": now,
+                   "updated_at":   now}},
+    )
+    # Audit event so the execution log + analytics know.
+    try:
+        await db.mission_events.insert_one({
+            "id":         uuid.uuid4().hex,
+            "user_id":    user.user_id,
+            "mission_id": mission_id,
+            "event":      "cancelled",
+            "body":       "Mission cancelled by user",
+            "created_at": now,
+        })
+    except Exception:
+        pass
+    fresh = await db.missions.find_one({"id": mission_id})
+    return {**_serialize(fresh), "progress": await compute_progress(fresh)}
+

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
 from core import db
@@ -209,6 +209,24 @@ async def build_briefing(user_id: str, max_opportunities: int = 6) -> dict:
     opps.extend(await _opps_from_seller_funnel(user_id))
     opps.extend(await _opps_from_missions(user_id))
     opps.extend(await _opps_seasonal(user_id))
+
+    # Skip opportunities whose type was dismissed by this user in the
+    # last 7 days. cortex_dismissed_plans is written by /api/cortex/plan/cancel.
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        dismissed_types: set[str] = set()
+        cur = db.cortex_dismissed_plans.find(
+            {"user_id": user_id, "created_at": {"$gte": cutoff}},
+            {"_id": 0, "rec_type": 1},
+        )
+        async for row in cur:
+            if row.get("rec_type"):
+                dismissed_types.add(row["rec_type"])
+        if dismissed_types:
+            opps = [o for o in opps if (o.get("type") or o.get("intent")) not in dismissed_types]
+    except Exception:
+        logger.exception("build_briefing: dismissed-plan filter failed (non-fatal)")
+
     opps = opps[:max_opportunities]
 
     # Pick the top recommendation: prefer one whose intent matches the
