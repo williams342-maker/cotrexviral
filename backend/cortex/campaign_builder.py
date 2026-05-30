@@ -56,6 +56,9 @@ def _coerce_nested(args: dict) -> dict:
                     k, len(s), s[:160])
         if parsed is not None:
             args[k] = parsed
+            logger.info(
+                "campaign_builder._coerce_nested: parsed %s from string (len=%d)",
+                k, len(s))
     return args
 
 
