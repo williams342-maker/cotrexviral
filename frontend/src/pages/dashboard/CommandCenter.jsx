@@ -62,8 +62,8 @@ const ChatMessage = ({ turn, onAction, busyId, isStale }) => {
           <PlanCard rec={turn.recommendation}
                     memoryHint={turn.memoryHint}
                     busy={busyId === turn.id}
-                    initiallyMinimized={isStale}
-                    dismissed={isStale}
+                    initiallyMinimized={isStale && !turn._dismissed}
+                    dismissed={turn._dismissed || isStale}
                     onPreview={() => onAction('preview', turn)}
                     onExecute={() => onAction('execute', turn)}
                     onAutomate={() => onAction('automate', turn)}
@@ -271,7 +271,7 @@ const CommandCenter = () => {
     if (!msg || sending) return;
     setSending(true);
     setPhase({ phase: 'classifying', label: PHASE_COPY.classifying });
-
+    setPhaseHistory([{ phase: 'classifying', label: PHASE_COPY.classifying }]);
     // Mark prior plan card as superseded immediately (stale UX fix).
     setThread((t) => t.map((turn) =>
       turn.recommendation ? { ...turn, _stale: true } : turn
@@ -296,7 +296,9 @@ const CommandCenter = () => {
       es.addEventListener('phase', (ev) => {
         try {
           const d = JSON.parse(ev.data);
-          setPhase({ phase: d.phase, label: d.label || PHASE_COPY[d.phase] });
+          const p = { phase: d.phase, label: d.label || PHASE_COPY[d.phase] };
+          setPhase(p);
+          setPhaseHistory((h) => [...h.slice(-3), p]);
         } catch { /* */ }
       });
       es.addEventListener('memory', (ev) => {
@@ -355,9 +357,11 @@ const CommandCenter = () => {
                           { withCredentials: true });
         toast({ title: 'Plan dismissed',
                 description: "Cortex won't re-suggest this for 7 days." });
-        // Mark turn as stale + close visually.
-        setThread((t) => t.map((x) => x.id === turn.id ? { ...x, _stale: true } : x));
-        doneCb?.();
+        // Mark turn dismissed — card stays visible with grey/dismissed styling
+        // and disabled actions (per spec). Does NOT close (X) the card.
+        setThread((t) => t.map((x) => x.id === turn.id
+          ? { ...x, _stale: true, _dismissed: true } : x));
+        // Note: doneCb intentionally NOT called — we want the dismissed card to remain.
       } else if (action === 'email') {
         const r = await axios.post(`${API}/cortex/plan/email`,
                                      { recommendation: rec },
@@ -458,10 +462,24 @@ const CommandCenter = () => {
             ))}
             {sending && phase && (
               <div data-testid="cortex-phase-indicator"
-                   className="flex items-center gap-2 text-[12px] text-violet-300 italic mt-2">
-                <Loader2 size={11} className="animate-spin" />
-                <span className="font-medium">{phase.label}</span>
-                <span className="text-[10px] text-zinc-500 uppercase tracking-wider">· {phase.phase}</span>
+                   className="flex flex-col gap-1 mt-2">
+                <div className="flex items-center gap-2 text-[12px] text-violet-300 italic">
+                  <Loader2 size={11} className="animate-spin" />
+                  <span className="font-medium">{phase.label}</span>
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider">· {phase.phase}</span>
+                </div>
+                {phaseHistory.length > 1 && (
+                  <div className="flex items-center gap-1.5 ml-5 text-[10px] text-zinc-600">
+                    {phaseHistory.slice(0, -1).map((p, i) => (
+                      <React.Fragment key={i}>
+                        <span className="text-emerald-500/60">✓</span>
+                        <span>{p.phase}</span>
+                        <span>·</span>
+                      </React.Fragment>
+                    ))}
+                    <span className="text-violet-400">{phase.phase}…</span>
+                  </div>
+                )}
               </div>
             )}
           </div>

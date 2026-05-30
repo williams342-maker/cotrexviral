@@ -35,6 +35,17 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-25 (part 90) **🛠️ Cortex Command Center polish — UI affordances + SSE + Phase 3 memory**
+  - **Resizable + collapsible right rail** (`useResizableRail.js` hook): drag-handle resize (240–520px) + one-click collapse, both persisted via localStorage. Header buttons: rail-toggle + memory-search (⌘K).
+  - **PlanCard secondary actions**: Minimize (collapses to one-line title + confidence + cost + timeline), Close (×, hides card), Cancel (Ø, calls /api/cortex/plan/cancel — card stays visible with "DISMISSED PLAN" badge + greyed actions for 7d), Email (✉, sends HTML plan to user inbox via SendGrid→Mailgun fallback).
+  - **SSE streaming** (`routes/cortex_stream.py`): `GET /api/cortex/console/chat/stream` emits `phase(classifying) → phase(recalling) → memory → phase(planning) → ready` events. Frontend renders live `cortex-phase-indicator` with phase history (✓ classifying · ✓ recalling · planning…) so the user sees Cortex's executive thinking in real time.
+  - **Stale-plan UX fix**: Sending a 2nd message immediately marks all prior plan cards as `_stale` → "· superseded" label on the cortex turn + auto-minimize + dismissed styling.
+  - **Memory continuity hint**: When `memory.recalled_count > 1`, the new plan card renders a "Based on our prior conversation:" preamble (`plan-memory-hint` testid).
+  - **Phase 3 strategic memory** — daily cron (`cortex_strategy_daily_refresh`, 24h interval): scans last 500 conversation rows for distinct user_ids and re-distills each user's `cortex_strategy` via Claude Sonnet 4.5. Strategic Memory panel now populates with real distilled summary + Active Goals.
+  - **Cross-thread memory search**: Cmd/Ctrl+K opens `cortex-memory-search-modal`; semantic recall renders ranked hits with role + date + score.
+  - **iteration_13.json**: 7/7 backend tests pass, 100% frontend flows verified. Two minor code-review nits addressed post-test: (1) cancel now keeps card visible with Dismissed Plan badge (was closing); (2) phase indicator shows recent history so fast phases (classifying, recalling) are visible even when they pass in <500ms.
+
+
 - 2026-02-25 (part 89) **🧠 Cortex Conversational Command Center (Phase 1+2) — major architectural shift**
   - `/dashboard` is now the **Conversational Command Center** — Cortex (AI executive) chats with the user, plans missions with structured reasoning, and executes through the autonomy engine. The previous card dashboard is preserved at `/dashboard/legacy`; Mission Control moved to `/dashboard/missions`.
   - **LLM provider abstraction** (`/app/backend/cortex/llm_provider.py`): `cortex_chat()` routes through Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`) primary → GPT-5.2 (`gpt-5.2`) fallback via emergentintegrations + Emergent LLM key. Decoupled from any single model.
