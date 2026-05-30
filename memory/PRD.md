@@ -35,6 +35,15 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-25 (part 95) **🗂️ Multi-thread conversation history + Apply-recommendation one-click**
+  - **ConversationHistory panel** (per user screenshot annotation) — ChatGPT-style sidebar between the main app nav and the chat thread. `+ New conversation` button (mints uuid), search-by-title input, list grouped by Today / Yesterday / This week / This month / Older. Active thread highlighted violet. Click a thread → loads its messages into the chat area.
+  - **Backend `/api/cortex/console/conversations`** — list/get/new endpoints. `conversation_id` now flows through both `/chat` (POST) and `/chat/stream` (SSE); persisted on every `cortex_conversations` row. Pre-multi-thread rows bucket cleanly into `id='legacy'` so nothing is lost.
+  - **`POST /api/cortex/optimization/{finding_id}/apply`** — one-click action that takes a detected bottleneck and routes through the autonomy engine. `APPLY_ACTIONS` map covers all 5 detector kinds with concrete actions (broaden Scout sources, lower qualification threshold, throttle outreach + warm secondary, auto-attach audit + tighten CTA, onboarding nudge sequence). Idempotent via `applied_at` stamp.
+  - **Frontend Apply button** on the OptimizationStatus tile — `⚡ Apply Cortex's recommendation` (amber). On click shows "Applying…" → transitions to green "Applied — Cortex is acting on this." Hidden if already-applied.
+  - **iteration_18.json**: 8/8 backend pytest + 6/6 frontend (100%). No bugs. Three minor code-review nits noted (all non-blocking). Fixed the duplicate HTTPException import nit post-test.
+  - **Deferred** (per user message): LLM-augmented detector rules (current heuristics work well; LLM augmentation needs careful prompt design + cost analysis), Native LLM tool-calling (waits on emergentintegrations exposing it), Inline approval prompts in MissionEventStream (requires new event types from the mission loop — separate scope).
+
+
 - 2026-02-25 (part 94) **🛠️ Optimization-loop integration polish**
   - **Optimization findings now appear inline in the Opportunity feed** alongside curated opportunities — `_opps_from_optimization()` in `cortex_recommendations.py` pulls findings from the last 48h and tags them `detected_by_cortex: true`. OpportunityRail renders these tiles with amber border + AlertTriangle icon + `DETECTED` chip (vs the normal urgency-coded styling), so the user spots Cortex-detected bottlenecks at a glance whether they're looking at the dedicated panel OR the briefing feed.
   - **"Why this matters" expandable hypothesis** on every detection tile in `OptimizationStatus.jsx`. Click `optimization-why-toggle` (chevron) → reveals the LLM hypothesis text in a violet-tinted block with a Brain icon (`optimization-why-body`). Lets users understand Cortex's reasoning before deciding to discuss or act.
