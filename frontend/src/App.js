@@ -66,6 +66,8 @@ import AdminWebhookEvents from './pages/admin/AdminWebhookEvents';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminIntegrations from './pages/admin/AdminIntegrations';
 import AdminRoadmap from './pages/admin/AdminRoadmap';
+import AdminSellerOS from './pages/admin/AdminSellerOS';
+import AdminEmailLog from './pages/admin/AdminEmailLog';
 import Onboarding from './pages/Onboarding';
 import AuthClaim from './pages/AuthClaim';
 import { Toaster } from './components/ui/toaster';
@@ -154,6 +156,8 @@ function AppRouter() {
       <Route path="/admin/webhook-events" element={<ProtectedRoute admin><AdminWebhookEvents /></ProtectedRoute>} />
       <Route path="/admin/settings" element={<ProtectedRoute admin><AdminSettings /></ProtectedRoute>} />
       <Route path="/admin/integrations" element={<ProtectedRoute admin><AdminIntegrations /></ProtectedRoute>} />
+      <Route path="/admin/seller-os" element={<ProtectedRoute admin><AdminSellerOS /></ProtectedRoute>} />
+      <Route path="/admin/email-log" element={<ProtectedRoute admin><AdminEmailLog /></ProtectedRoute>} />
       <Route path="/admin/roadmap" element={<ProtectedRoute admin><AdminRoadmap /></ProtectedRoute>} />
     </Routes>
     </>

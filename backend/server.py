@@ -37,6 +37,7 @@ from routes import (  # noqa: F401
     onboarding,      # New-user onboarding profile capture
     magic_link,      # Admin-create user + passwordless claim flow
     admin_settings,  # Master signup toggle + per-platform on/off
+    admin_seller_os, # Admin · Seller-OS inspector + email-log viewer + test-send
     account,         # User self-serve account deletion (GDPR / Meta review)
     oauth_meta,      # Facebook + Instagram OAuth (shared Meta app)
     oauth_pinterest, # Pinterest API v5 OAuth + publish

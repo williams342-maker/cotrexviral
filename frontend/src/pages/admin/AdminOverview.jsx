@@ -74,6 +74,20 @@ const AdminOverview = () => {
     { label: 'Legacy (Pro/Scale)', value: stats?.users_legacy, color: 'bg-neutral-100 text-neutral-600' },
   ];
 
+  // Seller Acquisition OS — cross-user totals
+  const sellerOsTiles = [
+    { label: 'Total seller leads', value: stats?.seller_leads_total,     icon: Users,    color: 'bg-amber-50 text-amber-700' },
+    { label: 'Qualified',          value: stats?.seller_leads_qualified, icon: Sparkles, color: 'bg-violet-50 text-violet-700' },
+    { label: 'Outreached',         value: stats?.seller_leads_outreached,icon: Send,     color: 'bg-sky-50 text-sky-700' },
+    { label: 'Active sellers',     value: stats?.seller_leads_active,    icon: ShieldCheck, color: 'bg-emerald-50 text-emerald-700' },
+  ];
+  const sellerOsSecondary = [
+    { label: 'Churn workflows running',  value: stats?.seller_workflows_running,  color: 'bg-rose-50 text-rose-700' },
+    { label: 'Workflows complete',       value: stats?.seller_workflows_complete, color: 'bg-neutral-100 text-neutral-600' },
+    { label: 'Audit artifacts generated',value: stats?.seller_artifacts_total,    color: 'bg-violet-50 text-violet-700' },
+    { label: 'Active seller missions',   value: stats?.seller_missions_active,    color: 'bg-sky-50 text-sky-700' },
+  ];
+
   // AI-usage sparkline scaling
   const maxMonth = Math.max(1, ...(aiUsage?.global_by_month || []).map((m) => m.ai_generations));
 
@@ -94,6 +108,29 @@ const AdminOverview = () => {
               </div>
               <div className="text-3xl font-medium tracking-tight">{t.value || 0}</div>
               <div className="text-[13px] text-neutral-600 mt-1">{t.label}</div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section
+        title="Seller Acquisition OS"
+        action={
+          <Link to="/admin/seller-os" data-testid="admin-overview-seller-os-link"
+                className="text-[12.5px] font-semibold text-violet-700 hover:text-violet-900 inline-flex items-center gap-1">
+            Inspect <ArrowUpRight size={12} />
+          </Link>
+        }
+      >
+        <Grid items={sellerOsTiles} />
+        <div className="grid grid-cols-4 gap-4 mt-4">
+          {sellerOsSecondary.map((t) => (
+            <div key={t.label} className="bg-white rounded-2xl p-4 border border-neutral-200/70"
+                 data-testid={`admin-overview-seller-${t.label.toLowerCase().replace(/\s+/g, '-')}`}>
+              <div className={`inline-block text-[10.5px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ${t.color} mb-2`}>
+                {t.label}
+              </div>
+              <div className="text-2xl font-medium tracking-tight">{t.value || 0}</div>
             </div>
           ))}
         </div>
@@ -261,9 +298,12 @@ const AdminOverview = () => {
   );
 };
 
-const Section = ({ title, children }) => (
+const Section = ({ title, action, children }) => (
   <div className="mb-9">
-    <h2 className="text-[12px] uppercase tracking-wider text-neutral-500 font-semibold mb-3">{title}</h2>
+    <div className="flex items-center justify-between mb-3">
+      <h2 className="text-[12px] uppercase tracking-wider text-neutral-500 font-semibold">{title}</h2>
+      {action}
+    </div>
     {children}
   </div>
 );

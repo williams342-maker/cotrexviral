@@ -35,6 +35,41 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-30 (part 86) **🟢 Admin coverage for Seller OS + Email Log + SendGrid test-send**
+
+  Filled the 4 admin gaps flagged for the new Seller-OS + SendGrid features:
+
+  **A. AdminOverview — Seller-OS section**
+  - New `Section title="Seller Acquisition OS"` between Support Tickets and Subscription Distribution.
+  - 4 primary tiles (Total leads / Qualified / Outreached / Active sellers) + 4 secondary tiles (Workflows running / complete / Audit artifacts / Active seller missions).
+  - "Inspect →" link to `/admin/seller-os`. `Section` component upgraded to accept an `action` prop.
+  - Backend: `/admin/stats` now also returns 9 new keys (`seller_leads_total`, `seller_leads_qualified`, `seller_leads_outreached`, `seller_leads_active`, `seller_leads_churned`, `seller_workflows_running`, `seller_workflows_complete`, `seller_artifacts_total`, `seller_missions_active`).
+
+  **B. /admin/seller-os — cross-user inspector page (NEW)**
+  - Stage waterfall (8 stages, click any to filter the leads table).
+  - Seller-leads table (top 100, sorted by score desc) — shows business / stage / niche / score / email / user_id prefix. Admin-only.
+  - Retention-workflows list with 3-segment progress bars + per-workflow score + reasons.
+  - Powered by `routes/admin_seller_os.py` — `GET /admin/seller-os/{funnel|leads|workflows}` (all require admin).
+
+  **C. /admin/email-log — paginated email log viewer (NEW)**
+  - 4 KPI tiles (Total 72h / Sent / Delivery % / Skipped+Rejected).
+  - 2 breakdown cards (By Provider: sendgrid/mailtrap/mailgun · By Lifecycle: welcome/audit/nudge/churn-recovery).
+  - SendGrid test-send form — pick template (welcome/audit/nudge/recovery), enter recipient, hit Send → fires real email through the chain, toast shows the provider that delivered.
+  - 3-axis filter (tag · provider · status) → server-side query.
+  - Newest deliveries table with severity-tinted pills for provider + status.
+  - Backend: `/admin/email/logs` (filtered list), `/admin/email/test-send` (POST → fires welcome/audit/nudge/recovery email), `/admin/email/health` extended with `by_provider` + `by_lifecycle` breakdowns.
+
+  **D. Command Palette + routes**
+  - `Ctrl+K` admin group gains "Admin Seller OS" + "Admin Email Log" entries (with ShoppingBag and Mail icons).
+  - `App.js` routes wire `/admin/seller-os` and `/admin/email-log` behind `ProtectedRoute admin`.
+
+  **Tests**: `test_admin_seller_os.py` (11/11 in 4s) — `/admin/stats` includes seller counts, `/admin/seller-os/{funnel,leads,workflows}` filter correctly, `/admin/email/{logs,health}` return the new breakdowns, `/admin/email/test-send` fires all 4 templates + rejects bad emails via Pydantic EmailStr.
+
+  **Verified live**: smoke screenshot of `/admin/email-log` shows Total 150 / Sent 99 / 66% delivery / breakdowns populated (Mailtrap 132 · Mailgun 10 · SendGrid 8) — confirms the full chain is observable end-to-end.
+
+  **Backend total: 59/59 across all Seller-OS + admin tests.**
+
+
 - 2026-05-30 (part 85) **🟣 Seller Acquisition OS — SendGrid email lifecycle**
 
   **A. Provider chain upgraded**: `routes/email.py` `send_email()` now routes **SendGrid → Mailtrap → Mailgun**. SendGrid is the preferred provider (better cold-outreach deliverability than Mailtrap's transactional inbox), with the existing chain as fallback. Permanent 4xx errors stop the chain (other providers would reject the same payload); only `not_configured` + transient 5xx/network errors fall through. `send_email()` now also accepts an `attachments` parameter — SendGrid honors it natively, Mailtrap/Mailgun ignore silently.

@@ -7,7 +7,7 @@ import {
   Ticket as TicketIcon, History, Megaphone, Webhook, Settings as SettingsIcon,
   KeyRound, Map as MapIcon, Bot, Calendar, FileText, Inbox,
   Rocket, Brain, TrendingUp, CheckSquare, User as UserIcon, BarChart3,
-  ShoppingBag, MessageSquare,
+  ShoppingBag, MessageSquare, Mail,
 } from 'lucide-react';
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty,
@@ -113,6 +113,8 @@ const CommandPalette = () => {
       { to: '/admin/webhook-events',       label: 'Webhook Events',       icon: Webhook },
       { to: '/admin/settings',             label: 'System Settings',      icon: SettingsIcon },
       { to: '/admin/integrations',         label: 'Admin Integrations',   icon: KeyRound },
+      { to: '/admin/seller-os',            label: 'Admin Seller OS',      icon: ShoppingBag },
+      { to: '/admin/email-log',            label: 'Admin Email Log',      icon: Mail },
       { to: '/admin/roadmap',              label: 'Roadmap',              icon: MapIcon },
     ] : [];
 

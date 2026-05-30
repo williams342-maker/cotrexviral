@@ -837,7 +837,10 @@ async def admin_email_health(request: Request, hours: int = 24):
     """Email delivery health for the last `hours` (default 24).
 
     Returns per-status counts + the most recent error reason so a glance at
-    /admin/overview tells you if Mailgun has stopped delivering."""
+    /admin/overview tells you if Mailgun has stopped delivering. Now also
+    breaks down by PROVIDER (sendgrid / mailtrap / mailgun) and by
+    SELLER-OS LIFECYCLE TAG (welcome / audit / nudge / churn-recovery) so
+    the admin can see if SendGrid is delivering after pasting keys."""
     from deps import require_admin
     await require_admin(request)
     hours = max(1, min(hours, 24 * 30))
@@ -848,6 +851,24 @@ async def admin_email_health(request: Request, hours: int = 24):
         {"$group": {"_id": "$status", "n": {"$sum": 1}}},
     ]
     by_status = {row["_id"]: row["n"] async for row in db.email_log.aggregate(pipe)}
+
+    # Provider breakdown
+    by_provider = {}
+    async for row in db.email_log.aggregate([
+        {"$match": {"created_at": {"$gte": since}}},
+        {"$group": {"_id": "$provider", "n": {"$sum": 1}}},
+    ]):
+        by_provider[row["_id"] or "unknown"] = row["n"]
+
+    # Seller-OS lifecycle volume (welcome / audit / nudge / churn-recovery)
+    by_lifecycle = {}
+    async for row in db.email_log.aggregate([
+        {"$match": {"created_at": {"$gte": since}, "tags": "seller-lifecycle"}},
+        {"$unwind": "$tags"},
+        {"$match": {"tags": {"$in": ["welcome", "audit", "nudge", "churn-recovery"]}}},
+        {"$group": {"_id": "$tags", "n": {"$sum": 1}}},
+    ]):
+        by_lifecycle[row["_id"]] = row["n"]
 
     # Most recent non-success row (rejected / errored / skipped) for an at-a-glance reason.
     last_problem = await db.email_log.find_one(
@@ -869,4 +890,6 @@ async def admin_email_health(request: Request, hours: int = 24):
         "skipped": by_status.get("skipped", 0),
         "delivery_rate": round(sent / total, 4) if total else None,
         "last_problem": last_problem,
+        "by_provider": by_provider,
+        "by_lifecycle": by_lifecycle,
     }

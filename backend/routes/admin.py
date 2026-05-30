@@ -41,6 +41,17 @@ async def admin_stats(request: Request):
         "users_legacy": await db.users.count_documents({"plan": {"$in": ["pro", "scale"]}}),
         "trialing_subs": await db.users.count_documents({"subscription_status": "trialing"}),
         "past_due_subs": await db.users.count_documents({"subscription_status": "past_due"}),
+        # Seller Acquisition OS — cross-user totals (Phase 1-8).
+        "seller_leads_total":     await db.seller_leads.count_documents({}),
+        "seller_leads_qualified": await db.seller_leads.count_documents({"stage": "qualified"}),
+        "seller_leads_outreached":await db.seller_leads.count_documents({"stage": "outreached"}),
+        "seller_leads_active":    await db.seller_leads.count_documents({"stage": "active"}),
+        "seller_leads_churned":   await db.seller_leads.count_documents({"stage": "churned"}),
+        "seller_workflows_running":  await db.seller_retention_workflows.count_documents({"status": "running"}),
+        "seller_workflows_complete": await db.seller_retention_workflows.count_documents({"status": "complete"}),
+        "seller_artifacts_total":    await db.seller_offer_artifacts.count_documents({}),
+        "seller_missions_active":    await db.missions.count_documents(
+            {"mission_type": "seller_acquisition", "status": {"$nin": ["complete", "archived"]}}),
     }
 
 
