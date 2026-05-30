@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 STAGES = (
     "discovered",
     "qualified",
+    "review",
     "outreached",
     "interested",
     "onboarding",

@@ -1,0 +1,28 @@
+{
+  "summary": "iter28: End-to-end verification of Seller Acquisition Engine 4-item batch (Manual Review Queue + 3-band confidence routing + Prospect Intel Cards + Recommended-Action endpoint). All 14 backend pytest tests pass against the live preview backend; UI rendering verified via Playwright on /dashboard/seller-os/qualified with a seeded mission + 5 leads spanning all bands.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_seller_qualification_review.py",
+    "/app/test_reports/pytest/seller_qual_review_iter28.xml",
+    "/app/scripts/seed_seller_qual_ui.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "score_lead() composite is bounded by integer rounding/weights — the 'high-band' test fixture scores 93.5 with a perfect-looking lead; that's healthy headroom but means a threshold above ~95 is the only way to push everything into review/low (worth noting for future per-mission threshold UX).",
+    "recommended_action endpoint silently returns counts:{high,medium} but omits low — fine for the current UI, but the action='expand_discovery' branch could include a low_count to justify the 'expand discovery' decision in the reason copy.",
+    "decide_review endpoint accepts a free-form `note` string with no length cap — recommend a 1–2 KB Pydantic validator if this gets surfaced in UI input fields.",
+    "GET /seller-qualification/review-queue silently returns {count:0} for unknown mission_id (no 404). Behavior is acceptable since it mirrors a filter, but a 404 would be more consistent with other endpoints — kept the test as-is to match implementation."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_seller_qualification_review.py (new)",
+    "/app/scripts/seed_seller_qual_ui.py (new helper, cleaned up after run)"
+  ],
+  "success_rate": {"backend": "100% (14/14)", "frontend": "100% (all testids + flows verified)"},
+  "test_credentials": "test@automatex.dev / session_token=test_session_1779636592168 (user_id=user_test1779636592168)",
+  "seed_data_creation": "Seeded mission_id=ui_test_mission_241ea6c2 with 2 high / 2 medium / 1 low leads, ran qualification, exercised promote flow in UI. Cleaned up afterward (missions+leads+qualification_runs deleted).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Regression file is /app/backend/tests/test_seller_qualification_review.py — covers score_lead new fields, 3-band routing on /run, review-queue listing+isolation, decide-review promote/reject/409/400/404, recommended-action all 3 branches + 404, and preview using mission-specific threshold. Pytest is auto-cleanup via _wipe fixture (missions, seller_leads, qualification_runs for the test user). UI verified live at /dashboard/seller-os/qualified — note that the mission filter ONLY lists missions with mission_type='seller_acquisition', so seeders must set this field. Sample seed helper at /app/scripts/seed_seller_qual_ui.py.",
+  "rca of the issue": "N/A — no bugs found. One test assertion had to be tightened (mission threshold 90 → 99) because the 'high' test fixture scores 93.5, comfortably above 90; with threshold=99 the preview correctly routes it to medium/low, confirming the preview endpoint reads mission.qualification_threshold rather than DEFAULT_THRESHOLD."
+}
