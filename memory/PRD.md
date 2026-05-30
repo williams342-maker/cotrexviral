@@ -35,6 +35,15 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 114) **🧠 Auto-schedule on optimal times — `mode='optimal_times'`**
+  - **New mode** added to the existing `POST /api/cortex/campaigns/{cid}/push` endpoint. No new endpoint, no breaking change. Body: `{mode: 'optimal_times'}` — no `start_at` / `cadence_hours` needed.
+  - **Slot picker** `_compute_optimal_slot(platform, after, already_used)`: pulls the per-platform best-time matrix from `routes/channels.OPTIMAL_BASE` (Tue/Wed/Thu mornings for B2B; Mon/Tue/Wed late-morning + evenings for IG; Fri/Sat/Sun late evenings for Pinterest; Tue/Wed/Thu morning blocks for LinkedIn). Iterates 6 weeks forward and returns the soonest free slot strictly after `after` that's not already in `already_used`.
+  - **Per-platform round-robin** + **global slot dedup**: bulk push tracks `per_platform_after[platform]` (advances after each scheduled post on that platform) and a global `used_slots` set (prevents two distinct posts ever colliding on the same datetime even across platforms). Verified live: 12 posts → IG lands on Mon 11/14/19 + Tue 11/14, FB on Tue 9/13, Pinterest on Sat 22 + Sun 20/21 — all unique.
+  - **Status & shape**: every entry returns `status='scheduled'` + `scheduled_at` populated (ISO UTC). Skipped reasons unchanged (`already_pushed` / `platform_not_pushable`).
+  - **Frontend** (`Campaigns.jsx`): third mode pill `🧠 Optimal` (`testid: bulk-push-mode-optimal`) added beside Drafts/Schedule. Selecting it: hides datetime+cadence inputs, shows violet hint "Cortex picks the best time per channel from industry posting heuristics — no inputs needed", CTA label flips to `Auto-schedule N`, button turns violet. Result line: `Auto-scheduled N posts across M channels at AI-recommended slots.`
+  - **iter22 tests**: 13/13 new backend pytest pass (slot adherence to OPTIMAL_BASE per platform, round-robin, global dedup, idempotency, draft+scheduled regressions, single-push regression, 400 on invalid mode); frontend 100% (pill renders, hint shows, CTA label flips, mode-switch back restores inputs).
+  - **Known cosmetic**: mode pills are hidden `<input type=radio>` wrapped in `<label>` — testid is on the input so Playwright must click the parent label. Flagged by testing agent, not a UX defect.
+
 - 2026-02-26 (part 113) **🎯 Phase D refinement (P2) — Per-post 'Push as draft' button + P1 verifications**
   - **New endpoint** `POST /api/cortex/campaigns/{cid}/posts/{pid}/push` body `{mode:'draft'|'scheduled', scheduled_at?, creative_id?}` materialises a SINGLE cortex_social_post → /posts row with all the same cross-stamps as the bulk endpoint. Returns the documented shape `{ok, cortex_post_id, posts_id, platform, status, scheduled_at}` or the idempotent `{ok:true, already_pushed:true, posts_id, platform, pushed_at}` on retry.
   - **Refactor**: extracted `_materialize_push()` and `_resolve_default_media()` helpers so the single + bulk endpoints share one persistence path with no duplication. Creative override chain: `creative_id (override) → campaign creatives → brief creatives → null`.
