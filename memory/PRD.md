@@ -35,6 +35,16 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-25 (part 92) **🛠️ Iter15 polish — larger chat, Cancel button, subcomponent extraction, dismissed-plan filter, AUTONOMY chip**
+  - **Bigger Command Center chat**: chat thread now `min-h-[68vh] max-h-[80vh]` and the conversation column `min-h-[85vh]` — measured 864px tall on a 1080p viewport (was ~600px). The chat is now the dominant surface as the user requested.
+  - **Mission Cancel** (backend + 2 frontends): NEW `POST /api/missions/{id}/cancel` sets status='cancelled' + writes a `mission_events` audit row. UI buttons added on `/dashboard/cortex/{id}` (next to Pause) and on `/dashboard/missions` list cards (mini X next to Pause/Resume). Hidden for terminal statuses (cancelled/completed/failed). Confirmation modal before action.
+  - **Dismissed-plan filter**: `cortex_recommendations.build_briefing()` now skips opportunities whose `type` OR `intent` matches a row in `cortex_dismissed_plans` within the last 7 days — so plans the user dismissed via the Cancel (Ø) button on PlanCard stop re-surfacing.
+  - **AUTONOMY L# chip**: `ActiveMissionRail.jsx` tiles now show a dedicated violet-bordered `AUTONOMY L3` chip (instead of the ambiguous `· L3` inline form that visually collided with the `0/9` progress ratio).
+  - **Subcomponent extraction**: `CommandCenter.jsx` dropped from ~700 LOC to ~390 LOC by extracting `ChatMessage.jsx`, `Composer.jsx`, `PhaseIndicator.jsx`, `MemorySearch.jsx` into `/pages/dashboard/cortex/`. Behavior identical; cleanly testable in isolation.
+  - **Cmd+K collision fix**: memory search now bound to **Cmd/Ctrl+Shift+K** so it no longer collides with the global Quick-find palette.
+  - **iteration_15.json**: 8/8 backend tests + 100% (4/4) frontend spec items pass.
+
+
 - 2026-02-25 (part 91) **⚡ Conversational Execution Architecture — Cortex works WHILE you chat**
   - **The architecture shift**: Plan card execution is now a side-effect of conversation, not a separate workflow. User stays on `/dashboard` after Launch — no nav-away, ever.
   - **`/api/cortex/missions/active`** (new): real-time list of running/queued/paused missions with rich status — `progress {current, target, pct, eta_days, confidence}`, `phase {key, label, next_label, stages, leads_total}` (inferred from seller_leads stage distribution), `last_action`, `next_action`. Updates poll every 5s on the frontend.

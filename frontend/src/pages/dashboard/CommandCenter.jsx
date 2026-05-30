@@ -177,10 +177,11 @@ const CommandCenter = () => {
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [thread, phase]);
 
-  // Cmd/Ctrl+K → memory search.
+  // Cmd/Ctrl+K → memory search. Use Cmd+Shift+K to avoid colliding with
+  // the global QuickFind palette (which already owns Cmd+K).
   useEffect(() => {
     const onKey = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k' && !e.shiftKey) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k' && e.shiftKey) {
         e.preventDefault();
         setSearchOpen((o) => !o);
       } else if (e.key === 'Escape') {
@@ -350,7 +351,7 @@ const CommandCenter = () => {
       headerExtra={
         <div className="flex items-center gap-2">
           <button onClick={() => setSearchOpen(true)} data-testid="memory-search-btn"
-                  title="Search past conversations (⌘K)"
+                  title="Search past conversations (⌘⇧K)"
                   className="text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/5 transition flex items-center gap-1.5">
             <Search size={11} /> Search memory
           </button>
