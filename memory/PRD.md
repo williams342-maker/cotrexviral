@@ -35,6 +35,17 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-25 (part 88) **✅ Conversations UI verified end-to-end (iteration_11)**
+  - `_shared.js` EVENT_TONE map extended with `clicked → text-violet-300` so SendGrid click webhooks now render with a distinct tone (previously fell through to default).
+  - Testing agent seeded 1 mission + 1 outreached lead + 5 outreach events (sent/delivered/opened/clicked/sent+artifact) + 1 PDF artifact, validated 8/8 review checks (100%):
+    • Page loads at `/dashboard/seller-os/conversations` with no JS errors
+    • Mission dropdown populated; threads sidebar + thread detail render correctly
+    • Event timeline shows correct tone per event (blue=sent/delivered, amber=opened, violet=clicked, emerald=replied/interested, rose=bounced/unsubscribed)
+    • "Send offer" + "Send + audit" buttons enabled for stage ∈ {qualified, discovered, outreached, interested}
+    • PDF artifact link renders as real `<a target=_blank>` (middle-click + copy-link works), curl GET → 200 application/pdf 15215 bytes valid %PDF-1.4
+  - Doc-only note: actual sidebar route is `/dashboard/seller-os/conversations` (not `/seller/conversations`).
+
+
 - 2026-05-30 (part 87) **🟣 PDF audits + SendGrid Event Webhook + Dynamic Templates**
 
   Three feature blocks delivered together because they all touch `routes/seller_emails.py`:
