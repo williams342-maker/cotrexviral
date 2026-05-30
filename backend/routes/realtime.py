@@ -116,10 +116,15 @@ async def _auth_websocket(ws: WebSocket) -> dict | None:
         return None
 
     session = await db.user_sessions.find_one(
-        {"session_token": token}, {"_id": 0, "user_id": 1, "expires_at": 1},
+        {"session_token": token}, {"_id": 0, "user_id": 1,
+                                       "expires_at": 1, "single_use": 1},
     )
     if not session:
         return None
+    # WS tickets are single-use — consume on first auth so a replay
+    # over an expired ticket fails cleanly.
+    if session.get("single_use"):
+        await db.user_sessions.delete_one({"session_token": token})
 
     expires_at = session.get("expires_at")
     if isinstance(expires_at, str):

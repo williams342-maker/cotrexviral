@@ -29,6 +29,22 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+# Track in-flight pipeline tasks so DELETE on a building campaign can
+# cancel them instead of letting them run to completion (which hammers
+# the LLM credits and races with the DELETE row update at ingress).
+_RUNNING_PIPELINES: dict[str, asyncio.Task] = {}
+
+
+def cancel_pipeline(campaign_id: str) -> bool:
+    """Cancel the in-flight build task for `campaign_id` if any.
+    Returns True if a task existed and was cancelled."""
+    task = _RUNNING_PIPELINES.pop(campaign_id, None)
+    if task and not task.done():
+        task.cancel()
+        return True
+    return False
+
+
 def _coerce_nested(args: dict) -> dict:
     """Some LLM providers occasionally encode nested arrays/objects as
     JSON strings inside tool-call args. Parse those back into dict/list
@@ -190,14 +206,31 @@ async def build_campaign(*, brief: dict, asset_intel: Optional[dict],
     }
     await db.cortex_campaigns.insert_one(base_row)
 
-    asyncio.create_task(_run_pipeline(campaign_id, brief, asset_intel, user_id))
+    task = asyncio.create_task(_run_pipeline(campaign_id, brief, asset_intel, user_id))
+    _RUNNING_PIPELINES[campaign_id] = task
+    task.add_done_callback(lambda _t, cid=campaign_id: _RUNNING_PIPELINES.pop(cid, None))
     return base_row
 
 
 async def _run_pipeline(campaign_id: str, brief: dict,
                           asset_intel: Optional[dict], user_id: str) -> None:
     """Background pipeline. Best-effort — errors flip status to failed
-    with a reason; partial successes still land what they can."""
+    with a reason; partial successes still land what they can.
+    Cancellation by an external `cancel_pipeline()` call exits cleanly
+    without flipping status (the DELETE handler already set it to 'deleted')."""
+    from core import db
+    try:
+        await _run_pipeline_inner(campaign_id, brief, asset_intel, user_id)
+    except asyncio.CancelledError:
+        logger.info("campaign pipeline cancelled for %s", campaign_id)
+        # Don't overwrite the row — caller (DELETE handler) already
+        # updated status/deleted_at. Re-raise so the task ends as
+        # cancelled (Python convention).
+        raise
+
+
+async def _run_pipeline_inner(campaign_id: str, brief: dict,
+                                 asset_intel: Optional[dict], user_id: str) -> None:
     from core import db
 
     steps: list[dict] = []

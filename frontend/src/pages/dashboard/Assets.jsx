@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import axios from 'axios';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload, Link as LinkIcon, FileText, Image as ImageIcon, Globe, Loader2,
   Presentation, Film,
   Sparkles, RefreshCw, Trash2, ArrowLeft, Target, TrendingUp, AlertCircle,
   Lightbulb, Users, Tag, Megaphone, X, ChevronRight, AlertTriangle, CheckCircle2,
+  Rocket,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import CreativeBriefPanel from './cortex/CreativeBriefPanel';
@@ -277,6 +278,24 @@ function AssetCard({ asset, onOpen, onChanged }) {
             · {asset.intelligence.products.length} products
           </span>
         )}
+        {asset.extraction_meta?.duration_s && (
+          <span data-testid={`asset-video-duration-${asset.id}`}
+                className="text-[10px] text-zinc-500">
+            · {Math.round(asset.extraction_meta.duration_s)}s
+          </span>
+        )}
+        {asset.extraction_meta?.transcription_cost_usd > 0 && (
+          <span data-testid={`asset-whisper-cost-${asset.id}`}
+                title={`Whisper ${asset.extraction_meta.transcription_provider} transcription`}
+                className="text-[10px] font-bold text-violet-300/80 tabular-nums">
+            ·  ${asset.extraction_meta.transcription_cost_usd.toFixed(3)}
+          </span>
+        )}
+        {asset.extraction_meta?.slide_count && (
+          <span className="text-[10px] text-zinc-500">
+            · {asset.extraction_meta.slide_count} slides
+          </span>
+        )}
         <div className="flex-1" />
         <button onClick={(e) => { e.stopPropagation(); onOpen(); }}
                 className="text-[10px] text-zinc-400 hover:text-white transition flex items-center gap-0.5">
@@ -304,6 +323,25 @@ function AssetDetail({ asset, onBack, onChanged }) {
                          {}, { withCredentials: true });
       onChanged();
     } catch (_e) { /* */ }
+  };
+
+  const [building, setBuilding] = useState(false);
+  const [buildErr, setBuildErr] = useState('');
+  const navigate = useNavigate();
+  const canBuildCampaign = asset.status === 'complete' &&
+    ['pdf', 'pptx', 'url', 'image', 'video'].includes(asset.kind);
+
+  const buildCampaign = async () => {
+    setBuilding(true);
+    setBuildErr('');
+    try {
+      const r = await axios.post(
+        `${API}/cortex/assets/${asset.id}/build-campaign`,
+        {}, { withCredentials: true });
+      navigate(`/dashboard/campaigns?id=${r.data.campaign_id}`);
+    } catch (e) {
+      setBuildErr(e?.response?.data?.detail || 'Build failed');
+    } finally { setBuilding(false); }
   };
 
   const remove = async () => {
@@ -348,12 +386,27 @@ function AssetDetail({ asset, onBack, onChanged }) {
                   className="text-[11px] font-semibold px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-zinc-300 transition flex items-center gap-1">
             <RefreshCw size={10} /> Re-analyze
           </button>
+          {canBuildCampaign && (
+            <button onClick={buildCampaign}
+                    disabled={building}
+                    data-testid="asset-build-campaign"
+                    className="text-[11px] font-bold px-2 py-1 rounded-md bg-violet-500/15 hover:bg-violet-500/25 text-violet-200 border border-violet-500/30 transition flex items-center gap-1 disabled:opacity-50">
+              {building
+                ? <><Loader2 size={10} className="animate-spin" /> Building…</>
+                : <><Rocket size={10} /> Build Campaign</>}
+            </button>
+          )}
           <button onClick={remove}
                   data-testid="asset-detail-delete"
                   className="text-[11px] font-semibold px-2 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 transition flex items-center gap-1">
             <Trash2 size={10} /> Delete
           </button>
         </div>
+        {buildErr && (
+          <div className="mt-2 text-[11px] text-rose-300 flex items-center gap-1">
+            <AlertTriangle size={10} /> {buildErr}
+          </div>
+        )}
         {asset.thumb_b64 && (
           <img src={`data:image/${asset.extraction_meta?.thumb_format || 'jpeg'};base64,${asset.thumb_b64}`}
                 alt={asset.name}

@@ -15,6 +15,7 @@
      }
 */
 import { useEffect, useRef, useState, useCallback } from 'react';
+import axios from 'axios';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -58,10 +59,21 @@ export default function useHitlInbox() {
     }
   }, []);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     const base = wsBaseUrl();
     if (!base) return;
-    const token = readCookie('session_token');
+    // Cookie may be HttpOnly (can't read via document.cookie), so ask
+    // the backend for a single-use 90 s ws-ticket and pass that as the
+    // ?token= query param. Falls back to anonymous if the user isn't
+    // logged in (handshake will reject and we'll retry).
+    let token = readCookie('session_token');
+    if (!token) {
+      try {
+        const r = await axios.post(`${BACKEND_URL}/api/auth/ws-ticket`, {},
+                                       { withCredentials: true });
+        token = r?.data?.ticket || null;
+      } catch (_e) { token = null; }
+    }
     const url = token
       ? `${base}/api/ws/hitl-inbox?token=${encodeURIComponent(token)}`
       : `${base}/api/ws/hitl-inbox`;

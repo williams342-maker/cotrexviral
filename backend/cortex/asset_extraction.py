@@ -145,16 +145,28 @@ async def _extract_url(url: str) -> dict:
 
 # --------------------------------------------------------------- PPTX
 async def _extract_pptx(data: bytes) -> dict:
-    """Pull slide titles, bullet text, and speaker notes from a PPTX
-    deck using python-pptx (offline, no API calls)."""
+    """Pull slide titles, bullet text, speaker notes, and a 'hero
+    slide' rendering from a PPTX deck (offline, no API calls).
+
+    The hero slide picker scores every slide on (a) slide-1 bias,
+    (b) total image area, (c) presence of a title. The winning slide
+    is rendered to a base64 PNG that downstream consumers (Phase B
+    image gen, Assets card thumbnail) can use as a visual brand
+    reference."""
     def _run():
         from pptx import Presentation
+        from pptx.util import Emu
+        from PIL import Image, ImageDraw, ImageFont
         prs = Presentation(io.BytesIO(data))
         slides: list[str] = []
         total_shapes = 0
+        slide_meta: list[dict] = []
+        # Map slide index → list of (image_bytes, ext) tuples so we can
+        # surface the largest embedded picture too.
+        slide_images: dict[int, list[tuple[bytes, str]]] = {}
+
         for i, slide in enumerate(prs.slides):
             chunks: list[str] = []
-            # Title is a property; fall back to scanning shapes.
             title = ""
             try:
                 if slide.shapes.title and slide.shapes.title.has_text_frame:
@@ -165,15 +177,28 @@ async def _extract_pptx(data: bytes) -> dict:
                 chunks.append(f"# Slide {i+1}: {title}")
             else:
                 chunks.append(f"# Slide {i+1}")
+
+            image_area = 0
             for shape in slide.shapes:
                 total_shapes += 1
+                # Collect embedded pictures (shape_type=13 = PICTURE).
+                if getattr(shape, "shape_type", None) == 13:
+                    try:
+                        blob = shape.image.blob
+                        ext = (shape.image.ext or "png").lower()
+                        slide_images.setdefault(i, []).append((blob, ext))
+                        # rough rendered area in EMU² for hero-pick
+                        w = int(getattr(shape, "width", 0) or 0)
+                        h = int(getattr(shape, "height", 0) or 0)
+                        image_area += max(w * h, 0)
+                    except Exception:
+                        pass
                 if not getattr(shape, "has_text_frame", False):
                     continue
                 txt = (shape.text_frame.text or "").strip()
                 if not txt or txt == title:
                     continue
                 chunks.append(txt)
-            # Speaker notes — often where the real narrative lives.
             try:
                 notes = slide.notes_slide.notes_text_frame.text \
                     if slide.has_notes_slide else ""
@@ -182,15 +207,83 @@ async def _extract_pptx(data: bytes) -> dict:
                     chunks.append(f"[Speaker notes] {notes}")
             except Exception:
                 pass
+
+            slide_meta.append({
+                "index":       i,
+                "has_title":   bool(title),
+                "image_area":  image_area,
+                "image_count": len(slide_images.get(i, [])),
+                "text_chars":  sum(len(c) for c in chunks),
+            })
             slides.append("\n".join(chunks))
+
         text = "\n\n".join(slides).strip()
+
+        # Hero-slide pick: slide-1 bias (×3) + normalized image area + title bonus.
+        # Result is a deterministic 'most visually-loaded' slide.
+        max_area = max((m["image_area"] for m in slide_meta), default=1) or 1
+        for m in slide_meta:
+            m["hero_score"] = (
+                (3.0 if m["index"] == 0 else 0.0)
+                + (m["image_area"] / max_area) * 2.0
+                + (0.5 if m["has_title"] else 0.0)
+                + min(m["image_count"], 3) * 0.3
+            )
+        hero = max(slide_meta, key=lambda m: m["hero_score"], default=None) \
+            if slide_meta else None
+
+        # Render the hero slide: prefer the largest embedded image
+        # (highest resolution brand reference). Fall back to a text-
+        # rendered placeholder card so the asset card still has a thumb.
+        hero_b64 = ""
+        hero_format = "png"
+        if hero is not None:
+            imgs = slide_images.get(hero["index"]) or []
+            if imgs:
+                imgs.sort(key=lambda x: len(x[0]), reverse=True)
+                blob, ext = imgs[0]
+                try:
+                    img = Image.open(io.BytesIO(blob))
+                    img.load()
+                    img.thumbnail((480, 480), Image.LANCZOS)
+                    buf = io.BytesIO()
+                    img.convert("RGB").save(buf, format="JPEG",
+                                              quality=82, optimize=True)
+                    hero_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+                    hero_format = "jpeg"
+                except Exception:
+                    logger.exception("pptx hero image render failed")
+            if not hero_b64:
+                # Synthesize a card-style PNG from the slide title +
+                # bullets so the Asset gallery still has a thumb.
+                try:
+                    card = Image.new("RGB", (480, 270), (16, 18, 24))
+                    drw = ImageDraw.Draw(card)
+                    raw = (slides[hero["index"]] or "").splitlines()
+                    lines = [ln.lstrip("# ").strip() for ln in raw if ln.strip()][:5]
+                    y = 30
+                    for ln in lines:
+                        drw.text((28, y), ln[:55], fill=(230, 232, 240))
+                        y += 22
+                    buf = io.BytesIO()
+                    card.save(buf, format="PNG", optimize=True)
+                    hero_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+                    hero_format = "png"
+                except Exception:
+                    logger.exception("pptx hero placeholder render failed")
+
         return {
             "text": text[:TEXT_CAP],
             "meta": {
                 "slide_count":   len(prs.slides),
                 "shape_count":   total_shapes,
                 "char_count":    len(text),
+                "hero_slide_index":  (hero or {}).get("index"),
+                "hero_slide_score":  round((hero or {}).get("hero_score", 0), 3),
+                "hero_image_count":  sum(len(v) for v in slide_images.values()),
+                "thumb_format":      hero_format if hero_b64 else None,
             },
+            "thumb_b64": hero_b64,
         }
     return await asyncio.to_thread(_run)
 
@@ -330,10 +423,18 @@ async def _extract_video(data: bytes) -> dict:
     return {
         "text": transcript[:TEXT_CAP],
         "meta": {
-            "duration_s":  extracted.get("duration_s"),
-            "audio_bytes": extracted.get("audio_size"),
-            "char_count":  len(transcript),
+            "duration_s":   extracted.get("duration_s"),
+            "audio_bytes":  extracted.get("audio_size"),
+            "char_count":   len(transcript),
             "thumb_format": "png" if extracted.get("thumb_b64") else None,
+            # Whisper-1 list price is $0.006 / audio minute. We bill
+            # the duration we transcribed (capped at 5 min), not the
+            # original clip length, so the number matches reality.
+            "transcription_cost_usd": (
+                round(min(extracted.get("duration_s") or 0, 300) / 60 * 0.006, 4)
+                if transcript else 0.0
+            ),
+            "transcription_provider": "whisper-1" if transcript else None,
         },
         "thumb_b64": extracted.get("thumb_b64") or "",
     }

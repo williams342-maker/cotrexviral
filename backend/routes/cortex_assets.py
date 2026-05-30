@@ -320,14 +320,29 @@ async def reanalyze_asset(asset_id: str, request: Request):
 
 
 @api.get("/cortex/assets/file/{key:path}")
-async def stream_asset_file(key: str, request: Request):
-    """Stream a stored asset's bytes. Auth-scoped: the leading path
-    segment must match the requesting user_id so other users can't
-    enumerate files."""
-    user = await get_current_user(request)
-    parts = key.split("/", 1)
-    if len(parts) < 2 or parts[0] != user.user_id:
-        raise HTTPException(403, "Not your asset.")
+async def stream_asset_file(key: str, request: Request,
+                              token: Optional[str] = None,
+                              exp: Optional[int] = None):
+    """Stream a stored asset's bytes. Two auth modes:
+
+    1. Cookie-authenticated (default) — leading path segment must match
+       the requesting user_id so other users can't enumerate files.
+    2. Signed URL (`?token=<HMAC>&exp=<unix_ts>`) — short-lived bearer
+       token that lets third-party social dispatchers (Meta/IG/LinkedIn/
+       Pinterest fetchers) pull the image at publish time without the
+       user's session cookie. Use `make_signed_asset_url(key, ttl=…)`
+       to mint these.
+    """
+    # Signed-URL path takes precedence — lets unauthenticated fetchers
+    # access the file without ever entering the user-auth code path.
+    if token is not None:
+        if not _verify_signed_asset_token(key, token, exp):
+            raise HTTPException(403, "Invalid or expired token.")
+    else:
+        user = await get_current_user(request)
+        parts = key.split("/", 1)
+        if len(parts) < 2 or parts[0] != user.user_id:
+            raise HTTPException(403, "Not your asset.")
     try:
         data = await storage.read(key)
     except FileNotFoundError:
@@ -336,6 +351,59 @@ async def stream_asset_file(key: str, request: Request):
     ext = "." + key.rsplit(".", 1)[-1].lower() if "." in key else ""
     mime = {"."+v.lstrip("."): k for k, v in ALLOWED_MIME.items()}.get(ext, "application/octet-stream")
     return StreamingResponse(iter([data]), media_type=mime)
+
+
+# ------------------------------------------------- signed URL helpers
+_SIGNING_SECRET: Optional[str] = None
+
+
+def _signing_secret() -> str:
+    """Lazy-load and cache the signing secret. Derived from
+    EMERGENT_LLM_KEY (which is always present in this environment) so
+    we don't need a separate env var — and it's still stable across
+    deploys."""
+    global _SIGNING_SECRET
+    if _SIGNING_SECRET is None:
+        import os
+        seed = (os.environ.get("ASSET_SIGNING_SECRET")
+                or os.environ.get("EMERGENT_LLM_KEY")
+                or "cortex-default-signing")
+        _SIGNING_SECRET = seed
+    return _SIGNING_SECRET
+
+
+def make_signed_asset_url(key: str, *, ttl_seconds: int = 86400) -> str:
+    """Return an absolute URL that anyone (no auth) can use to fetch
+    the asset for `ttl_seconds`. Token is HMAC-SHA256(secret, key|exp)."""
+    import hmac
+    import hashlib
+    import os
+    import time
+
+    exp = int(time.time()) + max(60, min(ttl_seconds, 7 * 86400))
+    msg = f"{key}|{exp}".encode("utf-8")
+    sig = hmac.new(_signing_secret().encode("utf-8"), msg, hashlib.sha256) \
+              .hexdigest()
+    base = (os.environ.get("BACKEND_PUBLIC_URL")
+            or os.environ.get("REACT_APP_BACKEND_URL") or "").rstrip("/")
+    rel = storage.public_url(key)
+    sep = "&" if "?" in rel else "?"
+    return f"{base}{rel}{sep}token={sig}&exp={exp}"
+
+
+def _verify_signed_asset_token(key: str, token: str,
+                                  exp: Optional[int]) -> bool:
+    import hmac
+    import hashlib
+    import time
+    if not exp or not token:
+        return False
+    if int(exp) < int(time.time()):
+        return False
+    msg = f"{key}|{int(exp)}".encode("utf-8")
+    expected = hmac.new(_signing_secret().encode("utf-8"), msg,
+                          hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, token)
 
 
 # ---------------------------------------------------------- briefs (A2)
@@ -417,3 +485,68 @@ async def list_briefs(request: Request, limit: int = 30):
         if isinstance(v, datetime):
             r["created_at"] = v.isoformat()
     return {"briefs": rows, "count": len(rows)}
+
+
+@api.post("/cortex/assets/{asset_id}/build-campaign")
+async def build_campaign_from_asset(asset_id: str, request: Request):
+    """One-click: asset → ensure brief → kick off Phase C campaign build.
+    Used by the 'Build Campaign' button on Asset cards. Idempotent on
+    the brief side (re-uses an existing brief); always creates a fresh
+    campaign row. Returns {brief_id, campaign_id, hero_image_url?}."""
+    user = await get_current_user(request)
+    asset = await db.cortex_assets.find_one(
+        {"id": asset_id, "user_id": user.user_id}, {"_id": 0})
+    if not asset or asset.get("deleted_at"):
+        raise HTTPException(404, "Asset not found.")
+    if asset.get("status") != "complete":
+        raise HTTPException(409,
+            f"Asset must be fully analyzed first (status={asset.get('status')}).")
+
+    # 1) Ensure a brief exists (reuse > backfill).
+    brief = await db.cortex_creative_briefs.find_one(
+        {"asset_id": asset_id, "user_id": user.user_id}, {"_id": 0})
+    if not brief:
+        intel = await db.cortex_asset_intelligence.find_one(
+            {"asset_id": asset_id}, {"_id": 0})
+        review = await db.cortex_asset_reviews.find_one(
+            {"asset_id": asset_id}, {"_id": 0})
+        brief = await generate_brief(asset, intel, review)
+        if not brief:
+            raise HTTPException(500, "Brief synthesis failed.")
+        await db.cortex_creative_briefs.update_one(
+            {"asset_id": asset_id},
+            {"$set": {**brief, "asset_id": asset_id,
+                       "user_id": user.user_id}},
+            upsert=True,
+        )
+        brief = await db.cortex_creative_briefs.find_one(
+            {"asset_id": asset_id, "user_id": user.user_id}, {"_id": 0})
+
+    # 2) Resolve a hero image — PPTX assets store one in thumb_b64
+    # (the deck's most visually-loaded slide). For other kinds the
+    # campaign creative pipeline picks its own.
+    hero_image_url = None
+    if asset.get("kind") == "pptx" and asset.get("storage_key"):
+        # The thumb_b64 is the hero slide — expose it as a signed
+        # public URL so Phase B generation prompts can reference it.
+        # Hero slide is stored as part of the asset, not as a separate
+        # file, so we serialize it via a one-off signed asset URL using
+        # the deck's storage_key + a hero_b64 inline reference. For now
+        # we just pass the deck URL (the brand reference at slide level
+        # remains a future Phase B enhancement).
+        hero_image_url = make_signed_asset_url(asset["storage_key"],
+                                                  ttl_seconds=7 * 86400)
+
+    # 3) Kick off the campaign build.
+    intel = await db.cortex_asset_intelligence.find_one(
+        {"asset_id": asset_id}, {"_id": 0})
+    from cortex.campaign_builder import build_campaign
+    campaign = await build_campaign(
+        brief=brief, asset_intel=intel, user_id=user.user_id)
+    return {
+        "ok":             True,
+        "brief_id":       brief.get("id"),
+        "campaign_id":    campaign.get("id"),
+        "hero_image_url": hero_image_url,
+        "kind":           asset.get("kind"),
+    }

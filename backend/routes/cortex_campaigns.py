@@ -148,11 +148,17 @@ async def delete_campaign(campaign_id: str, request: Request):
         {"id": campaign_id, "user_id": user.user_id}, {"_id": 0})
     if not row:
         raise HTTPException(404, "Campaign not found.")
+    # Cancel any in-flight build pipeline so the LLM/credit spend stops
+    # immediately and we don't race the build's update_one() calls with
+    # this soft-delete write.
+    from cortex.campaign_builder import cancel_pipeline
+    cancelled = cancel_pipeline(campaign_id)
     await db.cortex_campaigns.update_one(
         {"id": campaign_id},
         {"$set": {"deleted_at": datetime.now(timezone.utc),
                    "status":     "deleted"}})
-    return {"ok": True, "id": campaign_id}
+    return {"ok": True, "id": campaign_id,
+              "pipeline_cancelled": cancelled}
 
 
 # ---------------------------------------------------------------- push to calendar
@@ -174,17 +180,15 @@ _PLATFORM_ALIASES = {
 
 
 def _abs_media_url(storage_key: Optional[str]) -> Optional[str]:
-    """Resolve a campaign creative's storage_key → absolute backend URL.
-    Drafts only — third-party platforms only fetch the URL when the post
-    is actually published (which the user does after review)."""
+    """Resolve a campaign creative's storage_key → absolute, signed,
+    publicly fetchable URL. Token TTL is 7 days — comfortably covers
+    drafts that sit unscheduled for a week before publishing. Social
+    dispatchers (Meta/IG/LinkedIn/Pinterest) fetch this URL at publish
+    time without needing the user's session cookie."""
     if not storage_key:
         return None
-    import os
-    rel = storage.public_url(storage_key)
-    base = (os.environ.get("BACKEND_PUBLIC_URL")
-            or os.environ.get("REACT_APP_BACKEND_URL")
-            or "").rstrip("/")
-    return f"{base}{rel}" if base else rel
+    from routes.cortex_assets import make_signed_asset_url
+    return make_signed_asset_url(storage_key, ttl_seconds=7 * 86400)
 
 
 def _compose_content(post: dict) -> str:

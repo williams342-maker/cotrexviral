@@ -132,3 +132,28 @@ async def logout(request: Request, response: Response):
         await db.user_sessions.delete_one({"session_token": token})
     response.delete_cookie(key="session_token", path="/")
     return {"ok": True}
+
+
+@api.post("/auth/ws-ticket")
+async def ws_ticket(request: Request):
+    """Mint a short-lived (90 s) one-time ticket the frontend can pass
+    as `?token=` on a WebSocket URL. Solves the HttpOnly-cookie problem:
+    `document.cookie` can't read session_token, so the frontend asks for
+    a ticket via a normal HTTP POST (which sends the cookie), and uses
+    that ticket as the WS query param. The WS auth treats it like a
+    regular session token. Tickets are stored in user_sessions with a
+    90-second TTL and are deleted on first use."""
+    user = await get_current_user(request)
+    import secrets
+    from datetime import datetime, timezone, timedelta
+    ticket = "wst_" + secrets.token_urlsafe(24)
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=90)
+    await db.user_sessions.insert_one({
+        "session_token": ticket,
+        "user_id":       user.user_id,
+        "expires_at":    expires_at,
+        "kind":          "ws_ticket",
+        "single_use":    True,
+        "created_at":    datetime.now(timezone.utc),
+    })
+    return {"ticket": ticket, "expires_at": expires_at.isoformat()}

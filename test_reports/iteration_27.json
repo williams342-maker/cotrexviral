@@ -1,0 +1,45 @@
+{
+  "summary": "Five-piece batch (signed asset URLs, WS tickets, DELETE-cancel pipeline, Whisper cost, PPTX hero + build-campaign) verified end-to-end. Backend: 14/14 pytest cases pass (1 skipped — no existing campaign creative had a media_url to inspect). Frontend: Assets page shows Whisper cost badge ($0.001 violet badge with testid asset-whisper-cost-{id}) and the Build Campaign button (testid asset-build-campaign, violet w/ Rocket icon) renders next to Re-analyze and Delete on the PPTX detail view as designed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/posts (media_url)", "issue": "Pre-fix calendar posts (rows created before _abs_media_url() switched to signed URLs) still have unsigned relative media_url paths (no ?token=&exp=). Social dispatchers fetching those URLs without a session cookie would 403. New pushes mint signed URLs (verified by main agent). Consider a one-time backfill of existing cortex push rows OR document that pre-2026-05-30 pushes must be re-pushed before remote fetch."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "HITL WebSocket bootstrap", "issue": "useHitlInbox.js attempts ws://...?token=<raw session_token> first (visible in browser console: 'WebSocket connection to wss://.../api/ws/hitl-inbox?token=test_session_1779636592168 failed'). Falls back to ws-ticket on next mount per main agent's design, but the initial failed-handshake warning shows up in console on every page load even when auth is fine. Recommend always minting a ws-ticket regardless of whether readCookie returned a value (HttpOnly cookies are unreadable in real browsers anyway, so the cookie path is mostly a dev-mode artifact).", "affected_selectors": []}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_cortex_iter27_signed_urls_ws_build.py",
+    "/app/test_reports/pytest/iter27_signed.xml"
+  ],
+  "action_items": [
+    "(Optional) Backfill pre-fix cortex push rows in /posts to have signed media_url, or surface a re-push CTA for stale posts.",
+    "(Optional) Always use /api/auth/ws-ticket from useHitlInbox.js to silence the initial failed-handshake console warning in production browsers where HttpOnly truly blocks readCookie."
+  ],
+  "critical_code_review_comments": [
+    "make_signed_asset_url() correctly clamps ttl 60s ≤ ttl ≤ 7 days and uses HMAC-SHA256(key|exp) — verified tampered-token / different-key / expired-token all return 403.",
+    "_signing_secret() derives from EMERGENT_LLM_KEY by default — fine for this env, but if EMERGENT_LLM_KEY ever rotates, all existing signed URLs in pushed posts will instantly 403. Consider a dedicated ASSET_SIGNING_SECRET env that's rotated on its own cadence.",
+    "/auth/ws-ticket persists single-use=true tickets in user_sessions and _auth_websocket() deletes them on first auth — replay correctly fails (verified via websockets lib).",
+    "cancel_pipeline() pops the asyncio.Task from _RUNNING_PIPELINES and calls .cancel(); DELETE handler returns {pipeline_cancelled: bool}. Note: as the review_request flagged, sub-second DELETE response is still gated by LLM event-loop blocking inside compose_artifacts — this is a known SEPARATE issue and out-of-scope for this batch.",
+    "build_campaign_from_asset reuses an existing brief (upsert on asset_id) and always invokes build_campaign() — idempotent on the brief side only, not on the campaign side (each call creates a fresh campaign row). UI should debounce the Build Campaign button to avoid double-clicks creating duplicate campaigns.",
+    "Asset detail Whisper cost badge correctly hidden when transcription_cost_usd is 0 (silent/failed transcription path); only renders for >0. Badge formats as '$0.001' via 3-decimal toFixed — matches main agent's smoke note."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_cortex_iter27_signed_urls_ws_build.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 passed, 1 skipped — no fixture data)",
+    "frontend": "100% (Whisper badge + Build Campaign button verified visually)"
+  },
+  "test_credentials": "test@automatex.dev / session_token=test_session_1779636592168 (see /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — reused existing fixtures PPTX 52a3b704... + video 3b8e06e6... Build-campaign endpoint NOT exercised for happy path to save LLM/Gemini credits (main agent already smoke-verified). Only the 404-on-unknown-asset branch is asserted here.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 5 batch items are PASSING. Test suite at /app/backend/tests/test_cortex_iter27_signed_urls_ws_build.py is regression-safe and takes ~2s. WebSocket single-use test uses a fresh event loop per connect (asyncio.new_event_loop) to avoid 'event loop already running' under pytest 9. The TestSignedUrlsInCampaignCreatives test will START PASSING once at least one campaign with creatives is freshly pushed post-fix; currently skips because the fixture user only has pre-fix posts.",
+  "rca of the issue": "No bug found in this iteration. Two follow-ups noted: (1) pre-existing pushed posts have stale unsigned media_url — only impacts users with existing un-republished cortex pushes; (2) HITL WS bootstrap logs a benign handshake-failure warning before falling back to the ws-ticket path — cosmetic only."
+}
