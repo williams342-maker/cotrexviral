@@ -88,7 +88,7 @@ export default function ExecutiveInsights() {
       const r = await axios.post(
         `${API}/cortex/analysis-jobs/${jobId}/create-mission`,
         {}, { withCredentials: true });
-      window.location.href = `/dashboard/missions?id=${r.data.mission_id}`;
+      window.location.href = `/dashboard/cortex/${r.data.mission_id}`;
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('exec-insights create mission failed', e?.response?.data);

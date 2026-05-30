@@ -35,6 +35,17 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 106) **🛠️ Bug fix — "View Report" & "Create Mission" blank-screen navigation**
+  - **User-reported bug**: Clicking View Report or Create Mission from any analysis card opened a blank screen on production.
+  - **Root cause #1**: No React route for `/dashboard/reports`. The View Report buttons on AnalysisCompleteCard / RecommendationBridgeCard / ActiveWorkRail / ExecutiveInsights all called `window.open('/dashboard/reports', '_self')` but App.js never registered the route → blank screen.
+  - **Root cause #2**: Create Mission buttons navigated to `/dashboard/missions?id=<mid>` but the actual mission detail route is `/dashboard/cortex/:id` (CortexWorkspace). The `?id=` query param was silently ignored on the Missions list page → blank-looking content.
+  - **Fixes**:
+    1. New `pages/dashboard/Reports.jsx` (~230 LOC) — full list + detail view backed by existing `GET /api/reports`. Supports `?id=<report_id>` deep-link for "View Report" CTAs. Renders Summary + Improvements + Issues (severity-coded) + Notable Items + Recommendations (with effort badge + rationale) + Post Ideas (platform tag + caption). Empty state nudges first scan.
+    2. New route in `App.js`: `<Route path="/dashboard/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />`.
+    3. Repointed all 4 Create Mission navigation calls (RecommendationBridgeCard, ChatMessage, ActiveWorkRail, ExecutiveInsights) and 2 Optimize Automatically navigation calls (ChatMessage, ActiveWorkRail) from `/dashboard/missions?id=` → `/dashboard/cortex/${mission_id}` (the actual CortexWorkspace detail route).
+  - **Live verified**: `/dashboard/reports` now renders a grid of 12+ historical scans (cortexviral.com, craftersmarket.org, example.com mixed SEO+site_scan). Clicking a card deep-links to `?id=<report_id>` and renders the full report detail with 22 SEO improvements visible inline. URL is back-navigable.
+  - **Production note**: Both fixes need to be deployed via "Save to Github" + redeploy on cortexviral.com — the user's screenshots showed production hitting these routes directly.
+
 - 2026-02-26 (part 105) **🔧 Bridge LLM bug fix + cross-feature verification (Action-First × Apply-Recommendation × Bridge)**
   - **Bug fix**: `cortex_chat()` was being called with `user=user_text` but the function signature expects positional `user_text` as the 2nd arg → every bridge synthesis was raising `TypeError: cortex_chat() got an unexpected keyword argument 'user'` and silently falling back to the heuristic. The function also returns `Tuple[str, str]` (text, label), but the caller was assigning the tuple to `raw` and trying to parse the tuple as JSON. Both bugs fixed: `raw, _label = await cortex_chat(user_text=user_text, ...)`. **Live confirmed**: bridge for `news.ycombinator.com` now returns `source: "llm:claude"`, confidence 92%, with rich HN-specific findings (JSON-LD ItemList + dynamic title tags recommendation). Heuristic fallback is now reserved for genuine LLM failures, not signature mismatches.
   - **Source labels** are now richer: `llm:claude`, `llm:gpt`, `heuristic` instead of just `llm/heuristic` — surfaces which provider produced the bridge so we can monitor failover patterns in the Executive Insights panel and dashboards.

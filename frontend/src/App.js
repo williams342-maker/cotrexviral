@@ -33,6 +33,7 @@ import LegacyCommandCenter from './pages/dashboard/LegacyCommandCenter';
 import CampaignDetail from './pages/dashboard/CampaignDetail';
 import ActiveCampaigns from './pages/dashboard/ActiveCampaigns';
 import Missions from './pages/dashboard/Missions';
+import Reports from './pages/dashboard/Reports';
 import CortexWorkspace from './pages/dashboard/CortexWorkspace';
 import TeamDetail from './pages/dashboard/TeamDetail';
 import AutonomyControl from './pages/dashboard/AutonomyControl';
@@ -108,6 +109,7 @@ function AppRouter() {
       <Route path="/dashboard/missions" element={<ProtectedRoute><Missions /></ProtectedRoute>} />
       <Route path="/dashboard/cortex" element={<ProtectedRoute><Missions /></ProtectedRoute>} />
       <Route path="/dashboard/cortex/:id" element={<ProtectedRoute><CortexWorkspace /></ProtectedRoute>} />
+      <Route path="/dashboard/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
       <Route path="/dashboard/teams/:teamId" element={<ProtectedRoute><TeamDetail /></ProtectedRoute>} />
       <Route path="/dashboard/campaigns/active" element={<ProtectedRoute><ActiveCampaigns /></ProtectedRoute>} />
       <Route path="/dashboard/campaigns/:id" element={<ProtectedRoute><CampaignDetail /></ProtectedRoute>} />

@@ -196,7 +196,7 @@ function JobCard({ job, onChange }) {
       const r = await axios.post(
         `${API}/cortex/analysis-jobs/${job.id}/create-mission`,
         {}, { withCredentials: true });
-      window.location.href = `/dashboard/missions?id=${r.data.mission_id}`;
+      window.location.href = `/dashboard/cortex/${r.data.mission_id}`;
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('create mission failed', e?.response?.data);
@@ -207,7 +207,7 @@ function JobCard({ job, onChange }) {
       const r = await axios.post(
         `${API}/cortex/analysis-jobs/${job.id}/optimize`,
         {}, { withCredentials: true });
-      window.location.href = `/dashboard/missions?id=${r.data.mission_id}&tab=changes`;
+      window.location.href = `/dashboard/cortex/${r.data.mission_id}?tab=changes`;
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('optimize auto failed', e?.response?.data);

@@ -105,7 +105,7 @@ export default function RecommendationBridgeCard({ turn }) {
       const r = await axios.post(
         `${API}/cortex/analysis-jobs/${turn.job_id}/create-mission`,
         {}, { withCredentials: true });
-      window.location.href = `/dashboard/missions?id=${r.data.mission_id}`;
+      window.location.href = `/dashboard/cortex/${r.data.mission_id}`;
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('create mission failed', e?.response?.data);
