@@ -62,21 +62,18 @@ export default function useHitlInbox() {
   const connect = useCallback(async () => {
     const base = wsBaseUrl();
     if (!base) return;
-    // Cookie may be HttpOnly (can't read via document.cookie), so ask
-    // the backend for a single-use 90 s ws-ticket and pass that as the
-    // ?token= query param. Falls back to anonymous if the user isn't
-    // logged in (handshake will reject and we'll retry).
-    let token = readCookie('session_token');
-    if (!token) {
-      try {
-        const r = await axios.post(`${BACKEND_URL}/api/auth/ws-ticket`, {},
-                                       { withCredentials: true });
-        token = r?.data?.ticket || null;
-      } catch (_e) { token = null; }
-    }
-    const url = token
-      ? `${base}/api/ws/hitl-inbox?token=${encodeURIComponent(token)}`
-      : `${base}/api/ws/hitl-inbox`;
+    // HttpOnly session cookies are unreadable via document.cookie in
+    // production browsers, so always mint a single-use 90 s ws-ticket
+    // via the authenticated /auth/ws-ticket endpoint. This avoids a
+    // failed-handshake warning that the cookie-first path emitted.
+    let token = null;
+    try {
+      const r = await axios.post(`${BACKEND_URL}/api/auth/ws-ticket`, {},
+                                     { withCredentials: true });
+      token = r?.data?.ticket || null;
+    } catch (_e) { token = null; }
+    if (!token) return;   // unauthenticated — don't even attempt
+    const url = `${base}/api/ws/hitl-inbox?token=${encodeURIComponent(token)}`;
 
     closedByUs.current = false;
     let ws;
