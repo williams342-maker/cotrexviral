@@ -123,7 +123,8 @@ asyncio.run(main())
     assert r["has_reasoning"], "missing reasoning paragraph"
     assert r["has_mission_intent"], "missing mission_intent"
     assert r["mission_params_is_dict"], "mission_params not dict"
-    assert r["source"] in ("llm", "heuristic"), "unexpected source"
+    assert r["source"] in ("llm", "heuristic") or r["source"].startswith("llm:"), \
+        f"unexpected source: {r['source']}"
 
 
 def test_bridge_synthesis_is_idempotent():

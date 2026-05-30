@@ -201,9 +201,9 @@ async def _synthesize_bridge(job: dict, *, pushback: Optional[str] = None) -> di
         from core import EMERGENT_LLM_KEY
         if not EMERGENT_LLM_KEY:
             raise RuntimeError("no LLM key")
-        raw = await cortex_chat(
+        raw, _label = await cortex_chat(
             system=sys_prompt,
-            user=user_text,
+            user_text=user_text,
             session_id=f"recbridge-{job.get('id')}",
             user_id=job.get("user_id") or "anonymous",
             prefer="claude",
@@ -211,7 +211,13 @@ async def _synthesize_bridge(job: dict, *, pushback: Optional[str] = None) -> di
         )
         parsed = _parse_strict_json(raw)
         if parsed:
-            return _normalize_bridge(parsed, job_type)
+            normalized = _normalize_bridge(parsed, job_type)
+            # Source label so dashboards can distinguish LLM vs heuristic.
+            normalized["source"] = f"llm:{_label}"
+            return normalized
+        logger.warning("recommendation_bridge: LLM returned unparseable JSON "
+                        "for job %s — falling back to heuristic. raw=%r",
+                        job.get("id"), (raw or "")[:200])
     except Exception:
         logger.exception("recommendation_bridge: LLM call failed for job %s",
                           job.get("id"))
