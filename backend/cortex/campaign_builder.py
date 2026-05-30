@@ -35,8 +35,11 @@ def _coerce_nested(args: dict) -> dict:
     so downstream persisters see the expected shapes."""
     if not isinstance(args, dict):
         return args
-    import ast
     import json
+    try:
+        import json_repair  # type: ignore
+    except Exception:
+        json_repair = None  # type: ignore
     for k in ("social_posts", "email_sequence", "landing_page"):
         v = args.get(k)
         if not isinstance(v, str):
@@ -45,19 +48,29 @@ def _coerce_nested(args: dict) -> dict:
         if not s or s[0] not in "[{":
             continue
         parsed = None
+        # First try strict json (cheap path).
         try:
-            parsed = json.loads(s)
+            parsed = json.loads(s, strict=False)
         except Exception:
-            try:
-                parsed = ast.literal_eval(s)
-            except Exception:
-                logger.warning(
-                    "campaign_builder._coerce_nested: failed to parse %s string (len=%d, head=%r)",
-                    k, len(s), s[:160])
+            # Fall back to json_repair, which fixes most LLM-emitted
+            # malformed JSON (unescaped quotes inside body strings,
+            # trailing commas, missing commas, etc.).
+            if json_repair is not None:
+                try:
+                    parsed = json_repair.loads(s)
+                    # json_repair returns "" when totally unrecoverable.
+                    if parsed == "" or parsed is None:
+                        parsed = None
+                except Exception:
+                    parsed = None
         if parsed is not None:
             args[k] = parsed
             logger.info(
                 "campaign_builder._coerce_nested: parsed %s from string (len=%d)",
+                k, len(s))
+        else:
+            logger.warning(
+                "campaign_builder._coerce_nested: could not recover %s string (len=%d)",
                 k, len(s))
     return args
 
@@ -264,7 +277,16 @@ async def _compose_artifacts(brief: dict, asset_intel: Optional[dict],
         "per channel, a 3-touch email nurture sequence, and a landing "
         "page outline. Maintain the same headline hook across surfaces. "
         "Write with the brand's tone; no generic 'engaging content' "
-        "filler. Every element must be executable as-is."
+        "filler. Every element must be executable as-is.\n\n"
+        "STRICT OUTPUT RULES:\n"
+        "1. social_posts, email_sequence, and landing_page MUST be "
+        "returned as native JSON arrays/objects in the tool call args. "
+        "NEVER serialize them as JSON-encoded strings — provide the "
+        "structured shape directly.\n"
+        "2. Inside any body/caption text, use typographic curly quotes "
+        "(\u201c\u201d) or single quotes for emphasis or quoted phrases. "
+        "Do NOT use straight double-quote characters inside string "
+        "values — they break downstream JSON parsing."
     )
 
     ta = brief.get("target_audience") or {}

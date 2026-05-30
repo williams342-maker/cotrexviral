@@ -1,0 +1,51 @@
+{
+  "summary": "Phase D — Direct Social Media Bulk Push: backend tests 13/13 PASS (fresh-draft push, scheduled push with cadence, idempotency, instagram_story space→underscore normalization, /posts row shape, cortex_social_posts stamps, campaign last_pushed_*, 400/404/cross-user error paths). Frontend bulk-push-bar renders correctly with all required data-testids; Drafts/Schedule toggle works; Schedule mode reveals datetime-local + cadence-hours input; Push button correctly disabled when 0 eligible; per-post Pushed badges render (12/12 on smoke-tested campaign and persist after reload). Found ONE minor FE counter bug: pushable-set membership check doesn't normalize 'instagram story' (with space) so the counter reads 9/9 even when 12 posts were actually pushed (badges correctly show 12). Phase C regression spot-checked via already-built complete campaigns hydrating posts/emails/landing/creatives normally.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "BulkPushBar (Campaigns.jsx:297-310)",
+        "issue": "PUSHABLE set check uses raw p.platform; rows stored as 'instagram story' (with space) are excluded from pushable & alreadyPushed counters. On the smoke-tested campaign (3d579a6...a13cb) the bar reads '0 of 9 pushable… 9 already pushed' while 12 posts were actually pushed and 12 Pushed badges render. Backend normalizes whitespace→underscore so the push itself is correct — this is a display-only inconsistency. Fix: normalize before set lookup, e.g. PUSHABLE.has((p.platform||'').trim().toLowerCase().replace(/\\s+/g,'_')).",
+        "selector": "[data-testid=\"bulk-push-bar\"]",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Campaigns > Posts > Bulk push bar (Schedule mode)",
+        "issues": ["Schedule mode uses browser's native input[type=datetime-local] rather than the shadcn calendar component used elsewhere — inconsistent picker UX but functional."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_cortex_phase_d_push.py",
+    "/app/test_reports/pytest/cortex_phase_d.xml"
+  ],
+  "action_items": [
+    "Fix BulkPushBar counter normalization at /app/frontend/src/pages/dashboard/Campaigns.jsx:308 — use a normalize helper (trim → lower → spaces→underscores) before PUSHABLE.has() so 'instagram story' rows count as pushable. Match backend _PLATFORM_ALIASES.",
+    "Optional: replace native datetime-local input in BulkPushBar with the shadcn calendar component used elsewhere for consistency."
+  ],
+  "critical_code_review_comments": [
+    "Backend cortex_campaigns.push_campaign_to_calendar() correctly normalizes platform via space→underscore and alias map, returns ok/counts/pushed/skipped contract, stamps both child cortex_social_posts and parent campaign — clean.",
+    "Idempotency is enforced at the cortex_post level (skipped reason=already_pushed) rather than via a unique index on /posts — fine for current flow; consider adding a defensive index on (cortex_post_id, user_id) in posts if duplicate prevention becomes critical.",
+    "Frontend BulkPushBar duplicates platform-pushable knowledge that lives in backend (_PUSHABLE_PLATFORMS + _PLATFORM_ALIASES). Consider exposing the alias list via an API or shipping a shared constants module — current divergence already caused the counter bug above.",
+    "/app/frontend/src/pages/dashboard/Campaigns.jsx is 578 lines and contains multiple sub-components (BulkPushBar, PostsTab, etc.) — exceeds the 700-line guideline soft cap but trending there; consider splitting BulkPushBar into its own file."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_cortex_phase_d_push.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13)",
+    "frontend": "92% (one minor counter bug; all required testids and flows verified)"
+  },
+  "test_credentials": "test@automatex.dev with session_token=test_session_1779636592168 (user_test1779636592168) — works correctly; pulled from /app/memory/test_credentials.md.",
+  "seed_data_creation": "No new campaigns created. Re-used existing complete campaigns: 3d579a6bd5f04df39261d8a2779a13cb (already pushed — idempotency target), f4fb952252934d5383ae1168157d73c6 (fresh draft push target, 13 posts → 10 pushed + 3 google_ads skipped), 2d546710e31b47819883100eb87d52fc (fresh scheduled-mode target, 13 posts → 10 scheduled across cadence). After this run all three have pushed_at set on their pushable posts.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Phase D is functionally green. Three campaigns now have pushed cortex_social_posts (3d579a6..., f4fb9522..., 2d546710...). A 4th unpushed complete campaign with posts may not exist — if you need a fresh-push scenario, build a new one via POST /api/cortex/campaigns from brief 54a01a852db740108ff7b7a60897433c (~2-3 min). The FE counter bug above is cosmetic and does NOT block the push flow — backend pushes all 12 correctly, badges render correctly, only the 'X of Y pushable' label is off when instagram_story posts are present.",
+  "rca of the issue": "Frontend BulkPushBar counter mismatch RCA: backend stores social-post platforms as free-form strings (e.g. 'instagram story', 'instagram_story', 'instagram'). Backend push endpoint normalizes via `_PLATFORM_ALIASES` + space→underscore before set membership. Frontend (Campaigns.jsx:308) does `posts.filter((p) => PUSHABLE.has(p.platform))` with no normalization, so any 'instagram story' (3 rows in the smoke-tested campaign) is dropped from both `pushable` count and `alreadyPushed` count, even though the backend already pushed them and stamped pushed_at. The per-PostCard 'Pushed' badge uses a simpler `p.pushed_at` check (no platform filter), which is why badges show 12 while the bar text says 9. Mitigation: add `const _norm = (s) => (s||'').trim().toLowerCase().replace(/\\s+/g,'_');` and use `PUSHABLE.has(_norm(p.platform))` at line 308."
+}

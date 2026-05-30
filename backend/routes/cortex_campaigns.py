@@ -153,3 +153,198 @@ async def delete_campaign(campaign_id: str, request: Request):
         {"$set": {"deleted_at": datetime.now(timezone.utc),
                    "status":     "deleted"}})
     return {"ok": True, "id": campaign_id}
+
+
+# ---------------------------------------------------------------- push to calendar
+# Platforms whose `publish_to_*` helpers are wired up in routes/oauth_*
+# AND which accept image+text social posts. Other platforms in a brief
+# (email/blog/google_ads/x) are skipped during bulk push because they
+# need different surfaces (SendGrid / WordPress / Ads Manager / Twitter API).
+_PUSHABLE_PLATFORMS = {
+    "facebook", "instagram", "instagram_story",
+    "linkedin", "pinterest",
+}
+
+
+# Map cortex_social_post.platform → canonical channels.SUPPORTED_PLATFORMS value.
+_PLATFORM_ALIASES = {
+    "instagram_story": "instagram",
+    "youtube_shorts":  "youtube",
+}
+
+
+def _abs_media_url(storage_key: Optional[str]) -> Optional[str]:
+    """Resolve a campaign creative's storage_key → absolute backend URL.
+    Drafts only — third-party platforms only fetch the URL when the post
+    is actually published (which the user does after review)."""
+    if not storage_key:
+        return None
+    import os
+    rel = storage.public_url(storage_key)
+    base = (os.environ.get("BACKEND_PUBLIC_URL")
+            or os.environ.get("REACT_APP_BACKEND_URL")
+            or "").rstrip("/")
+    return f"{base}{rel}" if base else rel
+
+
+def _compose_content(post: dict) -> str:
+    """Compose the published content body from a cortex_social_post row.
+    Order: optional headline → body → hashtags. CTA stays out of the
+    body — the user generally moves it into the post manually since
+    each platform's CTA conventions differ (link in bio / first comment / etc)."""
+    parts: list[str] = []
+    h = (post.get("headline") or "").strip()
+    body = (post.get("body") or "").strip()
+    if h and h.lower() not in body.lower()[:160]:
+        parts.append(h)
+    if body:
+        parts.append(body)
+    tags = post.get("hashtags") or []
+    if tags:
+        parts.append(" ".join("#" + str(t).lstrip("#") for t in tags))
+    return "\n\n".join(parts).strip()
+
+
+class CampaignPushPayload(BaseModel):
+    mode: str = "draft"             # draft | scheduled
+    # When mode=scheduled, posts are spread starting at start_at with
+    # cadence_hours between consecutive items. UTC ISO string accepted.
+    start_at: Optional[datetime] = None
+    cadence_hours: int = 24
+
+
+@api.post("/cortex/campaigns/{campaign_id}/push")
+async def push_campaign_to_calendar(campaign_id: str,
+                                       payload: CampaignPushPayload,
+                                       request: Request):
+    """Bulk-push every social post in a campaign to /posts as drafts
+    (or scheduled rows). Each cortex_social_post gets at most one
+    `posts` row — re-running the endpoint is a no-op for already-pushed
+    posts (the cortex_social_post.pushed_at stamp gates this)."""
+    user = await get_current_user(request)
+
+    campaign = await db.cortex_campaigns.find_one(
+        {"id": campaign_id, "user_id": user.user_id}, {"_id": 0})
+    if not campaign or campaign.get("deleted_at"):
+        raise HTTPException(404, "Campaign not found.")
+    if campaign.get("status") != "complete":
+        raise HTTPException(409, "Campaign is not complete yet.")
+
+    if payload.mode not in ("draft", "scheduled"):
+        raise HTTPException(400, "mode must be 'draft' or 'scheduled'.")
+    if payload.mode == "scheduled" and not payload.start_at:
+        raise HTTPException(400, "start_at is required when mode='scheduled'.")
+    cadence_hours = max(1, min(int(payload.cadence_hours or 24), 24 * 14))
+
+    # Load posts + creatives once.
+    cortex_posts: list[dict] = []
+    async for p in db.cortex_social_posts.find(
+            {"campaign_id": campaign_id, "user_id": user.user_id},
+            {"_id": 0}).sort("platform", 1):
+        cortex_posts.append(p)
+
+    creatives: list[dict] = []
+    async for c in db.cortex_creatives.find(
+            {"campaign_id": campaign_id, "user_id": user.user_id,
+              "status": "complete", "deleted_at": {"$exists": False}},
+            {"_id": 0}):
+        creatives.append(c)
+    # Fallback to brief-level creatives (Phase B output) when the
+    # campaign hasn't generated its own (matches GET behaviour).
+    if not creatives and campaign.get("brief_id"):
+        async for c in db.cortex_creatives.find(
+                {"brief_id": campaign["brief_id"], "user_id": user.user_id,
+                  "status": "complete", "deleted_at": {"$exists": False}},
+                {"_id": 0}):
+            creatives.append(c)
+    default_media = _abs_media_url(creatives[0]["storage_key"]) if creatives else None
+
+    # Materialise rows.
+    import uuid
+    from routes.content_layer import mirror_post_to_normalized
+    now = datetime.now(timezone.utc)
+    cursor_at = payload.start_at
+    pushed: list[dict] = []
+    skipped: list[dict] = []
+
+    for cp in cortex_posts:
+        platform_raw = (cp.get("platform") or "").strip().lower()
+        # Normalize whitespace → underscore so "instagram story" matches
+        # the canonical "instagram_story" alias key.
+        platform_norm = "_".join(platform_raw.split())
+        platform = _PLATFORM_ALIASES.get(platform_norm, platform_norm)
+        if platform not in _PUSHABLE_PLATFORMS:
+            skipped.append({"id": cp.get("id"),
+                              "platform": platform_raw,
+                              "reason": "platform_not_pushable"})
+            continue
+        if cp.get("pushed_at") and cp.get("posts_id"):
+            skipped.append({"id": cp.get("id"),
+                              "platform": platform_raw,
+                              "reason": "already_pushed",
+                              "posts_id": cp.get("posts_id")})
+            continue
+
+        post_id = str(uuid.uuid4())
+        sched_at = None
+        if payload.mode == "scheduled":
+            sched_at = cursor_at
+            from datetime import timedelta
+            cursor_at = (cursor_at or now) + timedelta(hours=cadence_hours)
+
+        post_row = {
+            "id":           post_id,
+            "user_id":      user.user_id,
+            "content":      _compose_content(cp),
+            "platforms":    [platform],
+            "media_url":    default_media,
+            "status":       "scheduled" if payload.mode == "scheduled" else "draft",
+            "scheduled_at": sched_at,
+            "campaign_id":  campaign_id,
+            "cortex_post_id":     cp.get("id"),
+            "cortex_campaign_id": campaign_id,
+            "source":       "cortex_campaign_push",
+            "created_at":   now,
+        }
+        if platform == "pinterest":
+            post_row["pinterest_title"] = (cp.get("headline") or "")[:100] or None
+            post_row["pinterest_link"] = None
+            post_row["pinterest_board_id"] = None
+
+        await db.posts.insert_one(post_row)
+        try:
+            await mirror_post_to_normalized(post_row)
+        except Exception:
+            logger.exception("mirror_post_to_normalized failed for %s", post_id)
+
+        await db.cortex_social_posts.update_one(
+            {"id": cp.get("id"), "user_id": user.user_id},
+            {"$set": {
+                "pushed_at":  now,
+                "posts_id":   post_id,
+                "pushed_mode": payload.mode,
+                "pushed_platform": platform,
+            }})
+
+        pushed.append({"cortex_post_id": cp.get("id"),
+                        "posts_id":       post_id,
+                        "platform":       platform,
+                        "status":         post_row["status"],
+                        "scheduled_at":   sched_at.isoformat() if sched_at else None})
+
+    # Stamp summary on the campaign for the UI.
+    await db.cortex_campaigns.update_one(
+        {"id": campaign_id, "user_id": user.user_id},
+        {"$set": {
+            "last_pushed_at":   now,
+            "last_pushed_mode": payload.mode,
+            "last_pushed_count": len(pushed),
+            "updated_at":       now,
+        }})
+
+    return {
+        "ok":       True,
+        "pushed":   pushed,
+        "skipped":  skipped,
+        "counts":   {"pushed": len(pushed), "skipped": len(skipped)},
+    }

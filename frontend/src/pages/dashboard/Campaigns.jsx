@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Rocket, Sparkles, ArrowLeft, Mail, MessageCircle, FileText,
   Loader2, CheckCircle2, AlertTriangle, ImageIcon, Calendar, Target,
-  ChevronRight, Globe,
+  ChevronRight, Globe, Send, Upload,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { API } from '../../context/AuthContext';
@@ -218,7 +218,7 @@ function CampaignDetail({ campaign, onBack, onChanged }) {
       </div>
 
       {tab === 'overview'  && <OverviewTab campaign={campaign} />}
-      {tab === 'posts'     && <PostsTab posts={posts} />}
+      {tab === 'posts'     && <PostsTab posts={posts} campaign={campaign} onChanged={onChanged} />}
       {tab === 'emails'    && <EmailsTab emails={emails} />}
       {tab === 'landing'   && <LandingTab lp={lp} />}
       {tab === 'creatives' && <CreativesTab creatives={creatives} />}
@@ -263,7 +263,7 @@ function OverviewTab({ campaign }) {
 }
 
 
-function PostsTab({ posts }) {
+function PostsTab({ posts, campaign, onChanged }) {
   if (posts.length === 0) {
     return <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4 text-sm text-zinc-500">No posts yet.</div>;
   }
@@ -273,6 +273,7 @@ function PostsTab({ posts }) {
   }, {});
   return (
     <div data-testid="campaign-posts" className="space-y-3">
+      <BulkPushBar campaign={campaign} posts={posts} onChanged={onChanged} />
       {Object.entries(grouped).map(([platform, items]) => {
         const tone = PLATFORM_TONE[platform] || 'text-zinc-300 border-white/15 bg-white/[0.04]';
         return (
@@ -288,6 +289,115 @@ function PostsTab({ posts }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+
+const PUSHABLE = new Set(['facebook', 'instagram', 'instagram_story', 'linkedin', 'pinterest']);
+
+
+function BulkPushBar({ campaign, posts, onChanged }) {
+  const [mode, setMode] = useState('draft');           // draft | scheduled
+  const [startAt, setStartAt] = useState('');
+  const [cadenceHours, setCadenceHours] = useState(24);
+  const [pushing, setPushing] = useState(false);
+  const [result, setResult] = useState(null);
+  const [err, setErr] = useState('');
+
+  const pushable = posts.filter((p) => PUSHABLE.has(p.platform));
+  const alreadyPushed = pushable.filter((p) => p.pushed_at).length;
+  const eligible = pushable.length - alreadyPushed;
+  const status = campaign?.status || 'building';
+  const disabled = pushing || eligible === 0 || status !== 'complete';
+
+  const push = async () => {
+    setPushing(true);
+    setErr('');
+    setResult(null);
+    try {
+      const body = { mode };
+      if (mode === 'scheduled') {
+        if (!startAt) { setErr('Pick a start time'); setPushing(false); return; }
+        body.start_at = new Date(startAt).toISOString();
+        body.cadence_hours = Number(cadenceHours) || 24;
+      }
+      const r = await axios.post(
+        `${API}/cortex/campaigns/${campaign.id}/push`,
+        body, { withCredentials: true });
+      setResult(r.data);
+      onChanged?.();
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'Push failed');
+    } finally { setPushing(false); }
+  };
+
+  return (
+    <div data-testid="bulk-push-bar"
+         className="rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.05] to-emerald-500/[0.01] p-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="w-7 h-7 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 flex items-center justify-center">
+          <Send size={12} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="text-[12.5px] text-white font-semibold">Push to social calendar</div>
+          <div className="text-[11px] text-zinc-400">
+            {eligible} of {pushable.length} pushable posts ready (Facebook · Instagram · LinkedIn · Pinterest).
+            {alreadyPushed > 0 && <span className="text-emerald-300 ml-1">{alreadyPushed} already pushed.</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <label className={`text-[11px] px-2 py-1 rounded border cursor-pointer transition ${mode === 'draft' ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200' : 'border-white/10 text-zinc-400 hover:text-white'}`}>
+            <input type="radio" name="bulk-push-mode" value="draft" checked={mode === 'draft'} onChange={() => setMode('draft')} className="hidden"
+                   data-testid="bulk-push-mode-draft" /> Drafts
+          </label>
+          <label className={`text-[11px] px-2 py-1 rounded border cursor-pointer transition ${mode === 'scheduled' ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200' : 'border-white/10 text-zinc-400 hover:text-white'}`}>
+            <input type="radio" name="bulk-push-mode" value="scheduled" checked={mode === 'scheduled'} onChange={() => setMode('scheduled')} className="hidden"
+                   data-testid="bulk-push-mode-scheduled" /> Schedule
+          </label>
+          <button onClick={push}
+                  disabled={disabled}
+                  data-testid="bulk-push-submit"
+                  className="text-[11.5px] font-bold px-3 py-1.5 rounded-md bg-emerald-500 hover:bg-emerald-400 text-emerald-950 disabled:bg-zinc-700 disabled:text-zinc-500 transition flex items-center gap-1.5">
+            {pushing
+              ? <><Loader2 size={11} className="animate-spin" /> Pushing…</>
+              : <><Upload size={11} /> Push {eligible}</>}
+          </button>
+        </div>
+      </div>
+      {mode === 'scheduled' && (
+        <div className="mt-2 pt-2 border-t border-emerald-500/15 flex items-center gap-2 flex-wrap">
+          <label className="text-[11px] text-zinc-400">
+            Start at <input type="datetime-local"
+                            value={startAt}
+                            onChange={(e) => setStartAt(e.target.value)}
+                            data-testid="bulk-push-start-at"
+                            className="ml-1.5 bg-white/[0.04] border border-white/10 rounded px-2 py-1 text-[11.5px] text-white" />
+          </label>
+          <label className="text-[11px] text-zinc-400">
+            every <input type="number" min={1} max={336}
+                          value={cadenceHours}
+                          onChange={(e) => setCadenceHours(e.target.value)}
+                          data-testid="bulk-push-cadence"
+                          className="mx-1.5 w-14 bg-white/[0.04] border border-white/10 rounded px-2 py-1 text-[11.5px] text-white" /> hours
+          </label>
+        </div>
+      )}
+      {err && (
+        <div className="mt-2 text-[11.5px] text-rose-300 flex items-center gap-1">
+          <AlertTriangle size={11} /> {err}
+        </div>
+      )}
+      {result && (
+        <div data-testid="bulk-push-result"
+             className="mt-2 text-[11.5px] text-emerald-300 flex items-center gap-2">
+          <CheckCircle2 size={11} />
+          Pushed {result.counts?.pushed || 0} post{(result.counts?.pushed || 0) === 1 ? '' : 's'}.
+          {result.counts?.skipped > 0 && <span className="text-zinc-500">({result.counts.skipped} skipped)</span>}
+          <a href="/dashboard/marketing-calendar" target="_blank" rel="noreferrer"
+             className="text-emerald-200 underline ml-1">Open calendar →</a>
+        </div>
+      )}
     </div>
   );
 }
@@ -323,6 +433,12 @@ function PostCard({ post }) {
           </span>
         )}
         <div className="flex-1" />
+        {post.pushed_at && (
+          <span data-testid={`post-pushed-${post.id}`}
+                className="text-[10.5px] font-bold text-emerald-300 flex items-center gap-1">
+            <CheckCircle2 size={10} /> Pushed
+          </span>
+        )}
         <button onClick={copy}
                 data-testid={`post-copy-${post.id}`}
                 className="text-[10.5px] font-semibold text-zinc-400 hover:text-white transition">
