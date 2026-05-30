@@ -35,6 +35,11 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-25 (part 94) **🛠️ Optimization-loop integration polish**
+  - **Optimization findings now appear inline in the Opportunity feed** alongside curated opportunities — `_opps_from_optimization()` in `cortex_recommendations.py` pulls findings from the last 48h and tags them `detected_by_cortex: true`. OpportunityRail renders these tiles with amber border + AlertTriangle icon + `DETECTED` chip (vs the normal urgency-coded styling), so the user spots Cortex-detected bottlenecks at a glance whether they're looking at the dedicated panel OR the briefing feed.
+  - **"Why this matters" expandable hypothesis** on every detection tile in `OptimizationStatus.jsx`. Click `optimization-why-toggle` (chevron) → reveals the LLM hypothesis text in a violet-tinted block with a Brain icon (`optimization-why-body`). Lets users understand Cortex's reasoning before deciding to discuss or act.
+
+
 - 2026-02-25 (part 93) **🧠 Cortex Autonomous Optimization Loop — OODA cycle live (Executive Consultant + CGO mode)**
   - **The shift**: Cortex no longer waits to be asked. A background OODA loop (Observe → Analyze → Recommend → Execute → Measure → Learn → Repeat) runs every 30 minutes per user with recent mission activity, detects bottlenecks, and surfaces them in real time. This makes Cortex feel like a Chief Growth Officer actively improving the business rather than a chat companion.
   - **`/app/backend/cortex/optimization_loop.py`** (NEW) — deterministic rule-based detector with 5 production rules covering: `discovery_stall`, `qualification_bottleneck`, `deliverability_risk`, `copy_conversion_gap`, `onboarding_stall`. Each rule emits `{bottleneck, hypothesis, recommendation, confidence (0-1)}`. `run_for_user()` runs one tick and persists to `cortex_optimization_log`. 12h per-kind dedupe prevents spam. `_measure_prior()` writes `learning: improved|regressed|neutral` back into 24-72h-old detections so the loop *learns* from outcomes — also runs on quiet (no-detection) ticks so learning accrues continuously.

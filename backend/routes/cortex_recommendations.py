@@ -192,6 +192,37 @@ async def _opps_seasonal(user_id: str) -> list[dict]:
     ]
 
 
+async def _opps_from_optimization(user_id: str, *, limit: int = 3) -> list[dict]:
+    """Surface the OODA loop's recent detections as Opportunity cards.
+    These are gated to the last 48h and tagged 'detected_by_cortex' so
+    the UI can render them with the right visual treatment."""
+    out: list[dict] = []
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+        cur = db.cortex_optimization_log.find(
+            {"user_id": user_id, "created_at": {"$gte": cutoff}},
+            {"_id": 0},
+        ).sort("created_at", -1).limit(limit)
+        async for r in cur:
+            out.append({
+                "id":        f"opt-{r.get('id', uuid.uuid4().hex[:8])}",
+                "title":     r.get("bottleneck") or "Cortex detected a bottleneck",
+                "icon":      "alert-triangle",
+                "subtitle":  r.get("recommendation") or "",
+                "hypothesis": r.get("hypothesis") or "",
+                "type":      "find_opportunities",   # entry point — discuss with Cortex
+                "default_params": {},
+                "source":    "optimization_loop",
+                "kind":      r.get("kind"),
+                "confidence": r.get("confidence"),
+                "detected_by_cortex": True,
+            })
+    except Exception:
+        logger.exception("_opps_from_optimization failed (non-fatal)")
+    return out
+
+
+
 # --- Briefing entry point -------------------------------------------
 async def build_briefing(user_id: str, max_opportunities: int = 6) -> dict:
     """Construct the proactive briefing payload for the Command Center."""
@@ -209,6 +240,10 @@ async def build_briefing(user_id: str, max_opportunities: int = 6) -> dict:
     opps.extend(await _opps_from_seller_funnel(user_id))
     opps.extend(await _opps_from_missions(user_id))
     opps.extend(await _opps_seasonal(user_id))
+    # Surface the OODA loop's most recent findings as inline opportunities
+    # so the user sees them alongside other proactive suggestions, not
+    # only in the dedicated 'Cortex is monitoring' panel.
+    opps.extend(await _opps_from_optimization(user_id))
 
     # Skip opportunities whose type was dismissed by this user in the
     # last 7 days. cortex_dismissed_plans is written by /api/cortex/plan/cancel.

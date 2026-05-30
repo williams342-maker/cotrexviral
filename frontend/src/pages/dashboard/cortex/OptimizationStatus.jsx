@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import {
-  Radar, AlertTriangle, TrendingUp, Loader2, RefreshCw,
-  ArrowRight, Sparkles,
+  Radar, AlertTriangle, Loader2, RefreshCw,
+  ArrowRight, Sparkles, ChevronDown, ChevronUp, Brain,
 } from 'lucide-react';
 import { API } from '../../../context/AuthContext';
 
@@ -31,6 +31,7 @@ export const OptimizationStatus = ({ onDiscuss }) => {
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [whyOpen, setWhyOpen] = useState(false);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -97,37 +98,62 @@ export const OptimizationStatus = ({ onDiscuss }) => {
 
       {/* Latest detection */}
       {latest ? (
-        <button onClick={() => onDiscuss?.(latest)}
-                data-testid="optimization-latest"
-                className="w-full text-left rounded-xl border border-amber-500/20 hover:border-amber-500/40 bg-amber-500/[0.04] hover:bg-amber-500/[0.06] p-3 transition group">
-          <div className="flex items-start gap-2 mb-1.5">
-            <AlertTriangle size={11} className="text-amber-300 mt-0.5 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <div className="text-[10px] uppercase tracking-wider text-amber-300 font-semibold">
-                Bottleneck detected · {fmtAge(latest.created_at)}
-              </div>
-              <div className="text-[12.5px] text-white leading-tight mt-0.5">
-                {latest.bottleneck}
+        <div data-testid="optimization-latest"
+             className="rounded-xl border border-amber-500/20 hover:border-amber-500/40 bg-amber-500/[0.04] hover:bg-amber-500/[0.06] p-3 transition group">
+          <button onClick={() => onDiscuss?.(latest)}
+                  data-testid="optimization-latest-discuss"
+                  className="w-full text-left">
+            <div className="flex items-start gap-2 mb-1.5">
+              <AlertTriangle size={11} className="text-amber-300 mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] uppercase tracking-wider text-amber-300 font-semibold">
+                  Bottleneck detected · {fmtAge(latest.created_at)}
+                </div>
+                <div className="text-[12.5px] text-white leading-tight mt-0.5">
+                  {latest.bottleneck}
+                </div>
               </div>
             </div>
-          </div>
-          {latest.recommendation && (
-            <div className="text-[11px] text-zinc-400 leading-relaxed mb-1.5 pl-5">
-              <span className="text-zinc-500">Recommendation:</span> {latest.recommendation}
+            {latest.recommendation && (
+              <div className="text-[11px] text-zinc-400 leading-relaxed mb-1.5 pl-5">
+                <span className="text-zinc-500">Recommendation:</span> {latest.recommendation}
+              </div>
+            )}
+          </button>
+
+          {/* "Why this matters" expandable hypothesis */}
+          {latest.hypothesis && (
+            <div className="pl-5 mt-1">
+              <button onClick={(e) => { e.stopPropagation(); setWhyOpen(!whyOpen); }}
+                      data-testid="optimization-why-toggle"
+                      className="text-[10px] text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition">
+                {whyOpen ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
+                <span className="uppercase tracking-wider font-semibold">Why this matters</span>
+              </button>
+              {whyOpen && (
+                <div data-testid="optimization-why-body"
+                     className="mt-1.5 rounded-md bg-white/[0.03] border border-white/5 p-2 text-[11px] text-zinc-400 leading-relaxed flex items-start gap-1.5">
+                  <Brain size={10} className="text-violet-300 mt-0.5 shrink-0" />
+                  <span><em className="text-zinc-500">Hypothesis:</em> {latest.hypothesis}</span>
+                </div>
+              )}
             </div>
           )}
-          <div className="flex items-center gap-1.5 pl-5 text-[10px] text-zinc-500">
+
+          <div className="flex items-center gap-1.5 pl-5 mt-2 text-[10px] text-zinc-500">
             <span>confidence</span>
             <div className="flex-1 h-1 rounded-full bg-white/5 overflow-hidden max-w-[80px]">
               <div className="h-full bg-amber-400"
                     style={{ width: `${confidence}%` }} />
             </div>
             <span className="tabular-nums">{confidence}%</span>
-            <span className="ml-auto text-violet-300 opacity-0 group-hover:opacity-100 transition flex items-center gap-0.5">
+            <button onClick={() => onDiscuss?.(latest)}
+                    data-testid="optimization-discuss-btn"
+                    className="ml-auto text-violet-300 hover:text-violet-200 transition flex items-center gap-0.5">
               Discuss <ArrowRight size={9} />
-            </span>
+            </button>
           </div>
-        </button>
+        </div>
       ) : (
         <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 text-[11px] text-zinc-500 italic">
           <div className="flex items-start gap-2">

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, AlertCircle, ChevronRight, Loader2, TrendingUp } from 'lucide-react';
+import { Sparkles, AlertCircle, ChevronRight, Loader2, TrendingUp, AlertTriangle } from 'lucide-react';
 import ActiveMissionRail from './ActiveMissionRail';
 import OptimizationStatus from './OptimizationStatus';
 
@@ -72,21 +72,37 @@ export const OpportunityRail = ({
         <div className="space-y-2">
           {opportunities.map((opp, i) => {
             const urg = URGENCY[opp.urgency] || URGENCY.monitor;
+            const detected = opp.detected_by_cortex === true;
+            const borderCls = detected
+              ? 'border-amber-500/25 hover:border-amber-500/50 bg-amber-500/[0.04] hover:bg-amber-500/[0.06]'
+              : 'border-white/5 hover:border-violet-500/30 bg-white/[0.02] hover:bg-white/[0.04]';
             return (
               <button key={opp.id || i} onClick={() => onPrompt?.(opp)}
                       data-testid={`opportunity-${i}`}
-                      className="w-full text-left rounded-xl border border-white/5 hover:border-violet-500/30 bg-white/[0.02] hover:bg-white/[0.04] p-3 transition group">
+                      className={`w-full text-left rounded-xl border ${borderCls} p-3 transition group`}>
                 <div className="flex items-start justify-between gap-2 mb-1">
-                  <div className="text-[12.5px] font-semibold text-white leading-tight">
-                    {opp.title || opp.type}
+                  <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                    {detected && (
+                      <AlertTriangle size={10} className="text-amber-300 mt-1 shrink-0" />
+                    )}
+                    <div className="text-[12.5px] font-semibold text-white leading-tight">
+                      {opp.title || opp.type}
+                    </div>
                   </div>
-                  <span className={`shrink-0 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${urg.cls}`}>
-                    {urg.label}
-                  </span>
+                  {detected ? (
+                    <span data-testid="opp-detected-tag"
+                          className="shrink-0 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border bg-amber-500/15 text-amber-300 border-amber-500/30">
+                      DETECTED
+                    </span>
+                  ) : (
+                    <span className={`shrink-0 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${urg.cls}`}>
+                      {urg.label}
+                    </span>
+                  )}
                 </div>
-                {opp.summary && (
+                {(opp.subtitle || opp.summary) && (
                   <div className="text-[11px] text-zinc-500 leading-relaxed line-clamp-2">
-                    {opp.summary}
+                    {opp.subtitle || opp.summary}
                   </div>
                 )}
                 {(opp.expected_outcome || opp.confidence != null) && (
@@ -102,7 +118,7 @@ export const OpportunityRail = ({
                   </div>
                 )}
                 <div className="text-[10px] text-violet-300 mt-1 opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition">
-                  Ask Cortex about this <ChevronRight size={9} />
+                  {detected ? 'Discuss with Cortex' : 'Ask Cortex about this'} <ChevronRight size={9} />
                 </div>
               </button>
             );
