@@ -35,7 +35,8 @@ from pydantic import BaseModel
 from core import api, db
 from deps import get_current_user
 
-from cortex.asset_storage import storage, MAX_ASSET_BYTES, ALLOWED_MIME
+from cortex.asset_storage import (
+    storage, MAX_ASSET_BYTES, MAX_BYTES_BY_MIME, ALLOWED_MIME)
 from cortex.asset_extraction import extract, kind_from_mime
 from cortex.asset_intelligence import analyze_asset
 from cortex.creative_brief import generate_brief
@@ -103,7 +104,7 @@ async def _run_pipeline(asset_id: str) -> None:
         # 1. Extract
         kind = asset.get("kind")
         data: Optional[bytes] = None
-        if kind in ("pdf", "image") and asset.get("storage_key"):
+        if kind in ("pdf", "image", "pptx", "video") and asset.get("storage_key"):
             data = await storage.read(asset["storage_key"])
         extracted = await extract(kind=kind, data=data,
                                      url=asset.get("source_url"))
@@ -216,14 +217,16 @@ async def upload_asset(request: Request,
     content_type = (file.content_type or "").lower()
     if content_type not in ALLOWED_MIME:
         raise HTTPException(415, f"Unsupported file type: {content_type or 'unknown'}. "
-                                    "Allowed: PDF, JPG, PNG, WebP.")
+                                    "Allowed: PDF, JPG, PNG, WebP, PPTX, MP4/MOV/WebM.")
 
-    # Read into memory (≤ 20 MiB cap) — small enough that streaming to
-    # disk isn't worth the complexity.
+    # Read into memory — small files use 20 MiB cap; videos get the
+    # higher 50 MiB cap (audio extracted before LLM call stays tiny).
+    max_bytes = MAX_BYTES_BY_MIME.get(content_type, MAX_ASSET_BYTES)
     data = await file.read()
-    if len(data) > MAX_ASSET_BYTES:
+    if len(data) > max_bytes:
+        cap_mib = max_bytes // (1024 * 1024)
         raise HTTPException(413, f"File too large ({len(data)} bytes). "
-                                    f"Max {MAX_ASSET_BYTES} bytes (20 MiB).")
+                                    f"Max {max_bytes} bytes ({cap_mib} MiB).")
     if not data:
         raise HTTPException(400, "Empty file.")
 
@@ -231,7 +234,7 @@ async def upload_asset(request: Request,
     ext = ALLOWED_MIME[content_type]
     storage_key = f"{user.user_id}/{asset_id}{ext}"
     try:
-        await storage.save(storage_key, data)
+        await storage.save(storage_key, data, max_bytes=max_bytes)
     except ValueError as e:
         raise HTTPException(413, str(e))
 

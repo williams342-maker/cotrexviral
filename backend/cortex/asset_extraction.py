@@ -143,11 +143,208 @@ async def _extract_url(url: str) -> dict:
     }
 
 
+# --------------------------------------------------------------- PPTX
+async def _extract_pptx(data: bytes) -> dict:
+    """Pull slide titles, bullet text, and speaker notes from a PPTX
+    deck using python-pptx (offline, no API calls)."""
+    def _run():
+        from pptx import Presentation
+        prs = Presentation(io.BytesIO(data))
+        slides: list[str] = []
+        total_shapes = 0
+        for i, slide in enumerate(prs.slides):
+            chunks: list[str] = []
+            # Title is a property; fall back to scanning shapes.
+            title = ""
+            try:
+                if slide.shapes.title and slide.shapes.title.has_text_frame:
+                    title = (slide.shapes.title.text_frame.text or "").strip()
+            except Exception:
+                title = ""
+            if title:
+                chunks.append(f"# Slide {i+1}: {title}")
+            else:
+                chunks.append(f"# Slide {i+1}")
+            for shape in slide.shapes:
+                total_shapes += 1
+                if not getattr(shape, "has_text_frame", False):
+                    continue
+                txt = (shape.text_frame.text or "").strip()
+                if not txt or txt == title:
+                    continue
+                chunks.append(txt)
+            # Speaker notes — often where the real narrative lives.
+            try:
+                notes = slide.notes_slide.notes_text_frame.text \
+                    if slide.has_notes_slide else ""
+                notes = (notes or "").strip()
+                if notes:
+                    chunks.append(f"[Speaker notes] {notes}")
+            except Exception:
+                pass
+            slides.append("\n".join(chunks))
+        text = "\n\n".join(slides).strip()
+        return {
+            "text": text[:TEXT_CAP],
+            "meta": {
+                "slide_count":   len(prs.slides),
+                "shape_count":   total_shapes,
+                "char_count":    len(text),
+            },
+        }
+    return await asyncio.to_thread(_run)
+
+
+# --------------------------------------------------------------- Video
+async def _extract_video(data: bytes) -> dict:
+    """Extract a first-second keyframe (→ thumb_b64) and the full
+    transcript (via Whisper, Emergent LLM Key) from a short video clip.
+
+    Caps:
+      * input bytes ≤ 50 MiB (enforced at route layer too).
+      * duration ≤ 5 min — anything longer gets the first 5 min only.
+      * audio extracted at 32 kbps mono so the Whisper upload stays
+        well under the 25 MiB API limit.
+    """
+    import os
+    import shutil
+    import subprocess
+    import tempfile
+
+    def _run() -> dict:
+        ffmpeg_bin: Optional[str] = None
+        try:
+            import imageio_ffmpeg  # type: ignore
+            ffmpeg_bin = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            ffmpeg_bin = shutil.which("ffmpeg")
+        if not ffmpeg_bin:
+            return {"text": "",
+                    "meta":  {"error": "ffmpeg_unavailable"}}
+
+        tmpdir = tempfile.mkdtemp(prefix="cortex_video_")
+        try:
+            src_path  = os.path.join(tmpdir, "src")
+            thumb_png = os.path.join(tmpdir, "thumb.png")
+            audio_mp3 = os.path.join(tmpdir, "audio.mp3")
+            with open(src_path, "wb") as fh:
+                fh.write(data)
+
+            # 1) Single keyframe at t=1s (or t=0 for very short clips).
+            #    Scale to width 320 preserving aspect (matches image asset
+            #    thumb convention) so the Assets grid renders consistently.
+            try:
+                subprocess.run(
+                    [ffmpeg_bin, "-y", "-loglevel", "error",
+                     "-ss", "1", "-i", src_path,
+                     "-vframes", "1", "-vf", "scale=320:-2",
+                     thumb_png],
+                    check=True, timeout=30)
+            except Exception:
+                # t=1s failed (very short clip?). Retry at t=0.
+                try:
+                    subprocess.run(
+                        [ffmpeg_bin, "-y", "-loglevel", "error",
+                         "-i", src_path,
+                         "-vframes", "1", "-vf", "scale=320:-2",
+                         thumb_png],
+                        check=True, timeout=30)
+                except Exception:
+                    pass
+
+            thumb_b64 = ""
+            if os.path.exists(thumb_png):
+                with open(thumb_png, "rb") as fh:
+                    thumb_b64 = base64.b64encode(fh.read()).decode("ascii")
+
+            # 2) Audio → mono 32 kbps mp3, capped at 5 min.
+            try:
+                subprocess.run(
+                    [ffmpeg_bin, "-y", "-loglevel", "error",
+                     "-i", src_path,
+                     "-vn", "-ac", "1", "-ar", "16000",
+                     "-b:a", "32k", "-t", "300",
+                     audio_mp3],
+                    check=True, timeout=180)
+            except Exception:
+                pass
+
+            # 3) Probe duration for meta.
+            duration_s = None
+            try:
+                probe = subprocess.run(
+                    [ffmpeg_bin, "-i", src_path, "-hide_banner"],
+                    capture_output=True, text=True, timeout=15)
+                # ffmpeg emits to stderr; parse "Duration: HH:MM:SS.XX"
+                import re as _re
+                m = _re.search(r"Duration:\s+(\d+):(\d+):([\d.]+)",
+                                  probe.stderr or "")
+                if m:
+                    h, mn, sec = int(m.group(1)), int(m.group(2)), float(m.group(3))
+                    duration_s = h * 3600 + mn * 60 + sec
+            except Exception:
+                pass
+
+            audio_path: Optional[str] = audio_mp3 if os.path.exists(audio_mp3) else None
+            audio_size = os.path.getsize(audio_path) if audio_path else 0
+            return {
+                "thumb_b64":  thumb_b64,
+                "audio_path": audio_path,
+                "duration_s": duration_s,
+                "audio_size": audio_size,
+            }
+        finally:
+            # We DO need the audio file outside _run() for the async
+            # Whisper call, so we postpone tmpdir cleanup to the caller.
+            pass
+
+    extracted = await asyncio.to_thread(_run)
+    if extracted.get("meta", {}).get("error"):
+        return extracted
+
+    # Transcribe outside the thread so we don't block. Whisper accepts
+    # mp3 directly per playbook; 25 MiB ceiling is way above our 32 k
+    # mono * 5 min ≈ 1.2 MiB output.
+    transcript = ""
+    audio_path = extracted.get("audio_path")
+    if audio_path:
+        try:
+            from emergentintegrations.llm.openai import OpenAISpeechToText
+            import os as _os
+            stt = OpenAISpeechToText(api_key=_os.environ["EMERGENT_LLM_KEY"])
+            with open(audio_path, "rb") as fh:
+                resp = await stt.transcribe(
+                    file=fh, model="whisper-1",
+                    response_format="json")
+            transcript = (getattr(resp, "text", "") or "").strip()
+        except Exception:
+            logger.exception("video transcript failed")
+        finally:
+            # Drop the temp audio (+ keep the dir; OS reaper handles it).
+            try:
+                import os as _os2
+                _os2.unlink(audio_path)
+            except Exception:
+                pass
+
+    return {
+        "text": transcript[:TEXT_CAP],
+        "meta": {
+            "duration_s":  extracted.get("duration_s"),
+            "audio_bytes": extracted.get("audio_size"),
+            "char_count":  len(transcript),
+            "thumb_format": "png" if extracted.get("thumb_b64") else None,
+        },
+        "thumb_b64": extracted.get("thumb_b64") or "",
+    }
+
+
 _EXTRACTORS = {
     "pdf":   _extract_pdf,
     "image": _extract_image,
     "url":   _extract_url,
-    # Future: "pptx", "video" — register here, no other changes needed.
+    "pptx":  _extract_pptx,
+    "video": _extract_video,
 }
 
 
@@ -160,4 +357,9 @@ def kind_from_mime(mime: str | None) -> Optional[str]:
         return "pdf"
     if m.startswith("image/"):
         return "image"
+    if m == ("application/vnd.openxmlformats-officedocument"
+             ".presentationml.presentation"):
+        return "pptx"
+    if m.startswith("video/"):
+        return "video"
     return None

@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload, Link as LinkIcon, FileText, Image as ImageIcon, Globe, Loader2,
+  Presentation, Film,
   Sparkles, RefreshCw, Trash2, ArrowLeft, Target, TrendingUp, AlertCircle,
   Lightbulb, Users, Tag, Megaphone, X, ChevronRight, AlertTriangle, CheckCircle2,
 } from 'lucide-react';
@@ -24,9 +25,11 @@ import { API } from '../../context/AuthContext';
  */
 
 const KIND_META = {
-  pdf:   { icon: FileText,   tone: 'text-rose-300 border-rose-500/25 bg-rose-500/[0.04]',   label: 'PDF' },
-  image: { icon: ImageIcon,  tone: 'text-sky-300 border-sky-500/25 bg-sky-500/[0.04]',     label: 'Image' },
-  url:   { icon: Globe,      tone: 'text-emerald-300 border-emerald-500/25 bg-emerald-500/[0.04]', label: 'URL' },
+  pdf:   { icon: FileText,    tone: 'text-rose-300 border-rose-500/25 bg-rose-500/[0.04]',   label: 'PDF' },
+  image: { icon: ImageIcon,   tone: 'text-sky-300 border-sky-500/25 bg-sky-500/[0.04]',     label: 'Image' },
+  url:   { icon: Globe,       tone: 'text-emerald-300 border-emerald-500/25 bg-emerald-500/[0.04]', label: 'URL' },
+  pptx:  { icon: Presentation, tone: 'text-amber-300 border-amber-500/25 bg-amber-500/[0.04]', label: 'PPTX' },
+  video: { icon: Film,        tone: 'text-violet-300 border-violet-500/25 bg-violet-500/[0.04]', label: 'Video' },
 };
 
 const STATUS_META = {
@@ -164,7 +167,7 @@ function AssetUploader({ onUploaded }) {
               }`}
               onClick={() => fileRef.current?.click()}>
           <input ref={fileRef} type="file"
-                  accept="application/pdf,image/png,image/jpeg,image/webp"
+                  accept="application/pdf,image/png,image/jpeg,image/webp,application/vnd.openxmlformats-officedocument.presentationml.presentation,video/mp4,video/quicktime,video/webm"
                   data-testid="asset-uploader-input"
                   className="hidden"
                   onChange={(e) => {
@@ -177,7 +180,7 @@ function AssetUploader({ onUploaded }) {
             {busy ? 'Uploading…' : 'Drop a file or click to upload'}
           </div>
           <div className="text-[11px] text-zinc-500 mt-1">
-            PDF · JPG · PNG · WebP · up to 20MB
+            PDF · JPG · PNG · WebP · PPTX · MP4/MOV/WebM · up to 20MB (50MB for video)
           </div>
         </div>
       </div>

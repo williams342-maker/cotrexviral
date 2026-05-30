@@ -21,8 +21,11 @@ from typing import Protocol
 logger = logging.getLogger(__name__)
 
 
-# 20 MiB hard limit per asset (Phase A spec). Easy to raise per-tier later.
-MAX_ASSET_BYTES = 20 * 1024 * 1024
+# 20 MiB hard limit per asset (Phase A spec). Videos get a higher cap
+# below since a 5-minute clip can easily exceed 20 MiB; everything else
+# stays at 20.
+MAX_ASSET_BYTES        = 20 * 1024 * 1024
+MAX_VIDEO_ASSET_BYTES  = 50 * 1024 * 1024
 
 # MIME → extension whitelist. Anything else is rejected at the route layer.
 ALLOWED_MIME = {
@@ -31,12 +34,27 @@ ALLOWED_MIME = {
     "image/jpg":       ".jpg",
     "image/png":       ".png",
     "image/webp":      ".webp",
+    # Phase A expansion — PPTX presentations.
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+        ".pptx",
+    # Phase A expansion — Short videos (≤ 50 MiB, ≤ 5 min handled later).
+    "video/mp4":        ".mp4",
+    "video/quicktime":  ".mov",
+    "video/webm":       ".webm",
+}
+
+# Per-MIME size override. Falls back to MAX_ASSET_BYTES when unset.
+MAX_BYTES_BY_MIME = {
+    "video/mp4":        MAX_VIDEO_ASSET_BYTES,
+    "video/quicktime":  MAX_VIDEO_ASSET_BYTES,
+    "video/webm":       MAX_VIDEO_ASSET_BYTES,
 }
 
 
 class AssetStorage(Protocol):
     """The contract every storage backend implements."""
-    async def save(self, key: str, data: bytes) -> str: ...
+    async def save(self, key: str, data: bytes,
+                     max_bytes: int = MAX_ASSET_BYTES) -> str: ...
     async def read(self, key: str) -> bytes: ...
     async def delete(self, key: str) -> None: ...
     def public_url(self, key: str) -> str: ...
@@ -59,12 +77,13 @@ class LocalDiskStorage:
             raise ValueError(f"unsafe asset key: {key!r}")
         return self.root / safe
 
-    async def save(self, key: str, data: bytes) -> str:
-        if len(data) > MAX_ASSET_BYTES:
-            raise ValueError(f"asset exceeds {MAX_ASSET_BYTES} byte cap")
+    async def save(self, key: str, data: bytes,
+                     max_bytes: int = MAX_ASSET_BYTES) -> str:
+        if len(data) > max_bytes:
+            raise ValueError(f"asset exceeds {max_bytes} byte cap")
         target = self._path(key)
         target.parent.mkdir(parents=True, exist_ok=True)
-        # Write synchronously — file sizes are bounded ≤ 20 MiB so this
+        # Write synchronously — file sizes are bounded ≤ 50 MiB so this
         # is microseconds. async file I/O via aiofiles is unnecessary
         # overhead here.
         target.write_bytes(data)

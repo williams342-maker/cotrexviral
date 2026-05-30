@@ -235,6 +235,10 @@ def _build_prompt_payload(asset: dict, extracted: dict) -> str:
         parts.append(f"Page title: {meta['title']}")
     if meta.get("page_count"):
         parts.append(f"PDF pages: {meta['page_count']}")
+    if meta.get("slide_count"):
+        parts.append(f"PPTX slides: {meta['slide_count']}")
+    if meta.get("duration_s"):
+        parts.append(f"Video duration: {meta['duration_s']:.0f}s")
     if meta.get("width") and meta.get("height"):
         parts.append(f"Image dimensions: {meta['width']}x{meta['height']}")
 
@@ -245,6 +249,9 @@ def _build_prompt_payload(asset: dict, extracted: dict) -> str:
     elif kind == "image":
         parts.append("\n(image asset — no extractable text; reason from "
                       "the dimensions, filename, and any visible signals)")
+    elif kind == "video":
+        parts.append("\n(video asset — transcript may be empty if the "
+                      "clip was silent; reason from filename and duration)")
 
     return "\n".join(parts)
 
