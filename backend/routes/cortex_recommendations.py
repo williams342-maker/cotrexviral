@@ -269,18 +269,22 @@ async def build_briefing(user_id: str, max_opportunities: int = 6) -> dict:
     top_rec = None
     if opps:
         top = opps[0]
-        params = top.get("default_params") or {}
-        if not params and top["type"] == "launch_seller_mission":
-            # Infer a niche from any existing leads if user already has some.
-            niches = await db.seller_leads.distinct("niche", {"user_id": user_id})
-            params = {"niche": (niches[0] if niches else "woodworking"),
-                      "target": 50}
-        if not params and top["type"] == "run_bulk_outreach":
-            params = {"limit": funnel.get("qualified", 0)}
-        top_rec = await build_recommendation_from_intent(
-            user_id=user_id, intent=top["type"], params=params,
-            user_message=top["title"],
-        )
+        # Skip computing top_rec for "find_opportunities" type: this
+        # intent calls back into build_briefing and would recurse
+        # infinitely. The opportunity card itself is sufficient.
+        if top["type"] != "find_opportunities":
+            params = top.get("default_params") or {}
+            if not params and top["type"] == "launch_seller_mission":
+                # Infer a niche from any existing leads if user already has some.
+                niches = await db.seller_leads.distinct("niche", {"user_id": user_id})
+                params = {"niche": (niches[0] if niches else "woodworking"),
+                          "target": 50}
+            if not params and top["type"] == "run_bulk_outreach":
+                params = {"limit": funnel.get("qualified", 0)}
+            top_rec = await build_recommendation_from_intent(
+                user_id=user_id, intent=top["type"], params=params,
+                user_message=top["title"],
+            )
 
     greeting = _greeting_for_now()
     summary = _summary_for_state(funnel, running, opps)

@@ -22,12 +22,22 @@ Storage:
 """
 from __future__ import annotations
 
+import json
 import logging
+import os
+import re
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# LLM-augmented detector cadence — Claude is consulted at most once per
+# user per this many hours to bound cost. The deterministic rules still
+# run every tick (free + fast); the LLM only fires when they're silent.
+_LLM_DETECTOR_INTERVAL_HOURS = 6
+_LLM_DETECTOR_ENABLED = (os.environ.get("CORTEX_LLM_DETECTOR_ENABLED", "true").strip().lower()
+                          not in ("0", "false", "no", "off"))
 
 
 # ---------------------------------------------------------- detectors
@@ -157,7 +167,158 @@ def _rules(snap: dict) -> list[dict]:
     return out
 
 
-# --------------------------------------------------------- per-user run
+# ----------------------------------------------------------- LLM rules
+async def _llm_rules(snap: dict, *, user_id: str,
+                      already_detected_kinds: set[str]) -> list[dict]:
+    """LLM-augmented detector — surfaces *non-obvious* bottlenecks the
+    deterministic heuristics miss (cross-stage patterns, ratios outside
+    rule thresholds, leading indicators of decay, etc.).
+
+    Cost guard: at most one Claude consultation per user per
+    _LLM_DETECTOR_INTERVAL_HOURS. Heuristics already run every tick;
+    this only fills the gap when they're silent or when the patterns
+    are subtler than any single rule could catch.
+
+    Each finding is tagged `source="llm_augmented"` and uses an
+    `llm_<slug>` kind so it doesn't collide with deterministic kinds
+    in the dedupe / Apply-action maps.
+    """
+    if not _LLM_DETECTOR_ENABLED:
+        return []
+    from core import db
+
+    # Skip if we'd just call the LLM with an empty signal — saves cost
+    # and avoids hallucinated bottlenecks on brand-new accounts.
+    if (snap.get("funnel_total", 0) == 0
+            and snap.get("outreach_24h", {}).get("sent", 0) == 0
+            and snap.get("missions", {}).get("running", 0) == 0):
+        return []
+
+    # Rate limit per user (any prior LLM-augmented call within window
+    # blocks a fresh one).
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=_LLM_DETECTOR_INTERVAL_HOURS)
+    try:
+        recent_llm = await db.cortex_optimization_log.find_one(
+            {"user_id": user_id, "source": "llm_augmented",
+             "created_at": {"$gte": cutoff}}, {"_id": 0, "id": 1})
+        if recent_llm:
+            return []
+    except Exception:
+        pass
+
+    system = (
+        "You are Cortex's reasoning brain — a Chief Growth Officer for an "
+        "AI marketing operating system. Inspect the metrics snapshot of a "
+        "user's business and surface NON-OBVIOUS bottlenecks the heuristic "
+        "rules miss. Things to look for:\n"
+        "  • Compounding ratios across funnel stages (e.g., qualified→outreached drop-off).\n"
+        "  • Volume vs. velocity mismatches (e.g., paused missions hoarding capacity).\n"
+        "  • Early decay signals before the heuristics' thresholds fire.\n"
+        "  • Cross-signal patterns (low opens + many running missions ⇒ overload).\n"
+        "Be conservative — only flag a bottleneck if there's clear evidence in the snapshot. "
+        "Never duplicate kinds already detected by deterministic rules (listed below)."
+    )
+    user_text = (
+        "Snapshot:\n"
+        f"{json.dumps(_compact_snap(snap), indent=2)}\n\n"
+        f"Kinds already detected this tick (do not duplicate): "
+        f"{sorted(already_detected_kinds) or '[]'}\n\n"
+        "Return STRICT JSON of shape:\n"
+        '{"findings":[{"kind":"llm_<short_slug>","bottleneck":"...",'
+        '"hypothesis":"...","recommendation":"...","confidence":0.0}]}\n'
+        "If no bottleneck is found, return {\"findings\":[]}. "
+        "Confidence must be a float in [0,1]. Limit to 2 findings max, ranked by importance."
+    )
+
+    try:
+        from cortex.llm_provider import cortex_chat
+        text, _ = await cortex_chat(
+            system, user_text,
+            session_id=f"cortex-llm-detector-{user_id}",
+            user_id=user_id,
+            prefer="claude",
+            json_mode=True,
+        )
+    except Exception:
+        logger.exception("optimization_loop: LLM detector call failed")
+        return []
+
+    findings = _parse_llm_findings(text, already_detected_kinds)
+    for f in findings:
+        f["source"] = "llm_augmented"
+    return findings
+
+
+def _compact_snap(snap: dict) -> dict:
+    """Trim snapshot to the fields the LLM actually needs — keeps the
+    prompt small and prevents leaking irrelevant context."""
+    return {
+        "funnel":          snap.get("funnel") or {},
+        "funnel_total":    snap.get("funnel_total", 0),
+        "missions":        snap.get("missions") or {},
+        "outreach_24h":    snap.get("outreach_24h") or {},
+        "open_rate":       snap.get("open_rate"),
+        "reply_rate":      snap.get("reply_rate"),
+        "autonomy_level":  snap.get("autonomy_level", 2),
+    }
+
+
+def _parse_llm_findings(text: str, already_detected_kinds: set[str]) -> list[dict]:
+    """Robust JSON parsing — strips fences, drops malformed entries."""
+    if not text:
+        return []
+    t = text.strip()
+    # Defensive fence strip (cortex_chat already strips, but belt-and-braces).
+    if t.startswith("```"):
+        t = re.sub(r"^```[a-zA-Z]*\n?|```\s*$", "", t, flags=re.MULTILINE).strip()
+    try:
+        data = json.loads(t)
+    except Exception:
+        # Some models wrap with prose despite instructions — try extracting
+        # the first {...} JSON object.
+        m = re.search(r"\{.*\}", t, re.DOTALL)
+        if not m:
+            return []
+        try:
+            data = json.loads(m.group(0))
+        except Exception:
+            return []
+    items = data.get("findings") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        return []
+    out: list[dict] = []
+    for f in items[:2]:
+        if not isinstance(f, dict):
+            continue
+        kind = str(f.get("kind") or "").strip().lower()
+        bottleneck = str(f.get("bottleneck") or "").strip()
+        rec = str(f.get("recommendation") or "").strip()
+        if not kind or not bottleneck or not rec:
+            continue
+        # Reject if the LLM tried to duplicate a deterministic kind
+        # (either with or without the llm_ prefix).
+        raw_kind = kind[4:] if kind.startswith("llm_") else kind
+        if raw_kind in already_detected_kinds:
+            continue
+        if not kind.startswith("llm_"):
+            kind = f"llm_{kind}"
+        # Truncate so a misbehaving model can't bloat the doc.
+        kind = kind[:64]
+        if kind in already_detected_kinds:
+            continue
+        try:
+            conf = float(f.get("confidence") or 0.6)
+        except Exception:
+            conf = 0.6
+        conf = max(0.0, min(1.0, conf))
+        out.append({
+            "kind":           kind,
+            "bottleneck":     bottleneck[:400],
+            "hypothesis":     str(f.get("hypothesis") or "")[:600],
+            "recommendation": rec[:600],
+            "confidence":     conf,
+        })
+    return out
 async def run_for_user(user_id: str, *, dry_run: bool = False) -> Optional[dict]:
     """Run one OODA iteration for the given user. Returns the log
     document (already persisted) or None if no bottleneck fired."""
@@ -167,6 +328,17 @@ async def run_for_user(user_id: str, *, dry_run: bool = False) -> Optional[dict]
     if not snap.get("user_id"):
         return None
     detections = _rules(snap)
+
+    # LLM augmentation — only consulted when the deterministic rules
+    # are silent (saves cost; heuristics handle the obvious cases).
+    if not detections:
+        try:
+            llm_detections = await _llm_rules(
+                snap, user_id=user_id,
+                already_detected_kinds=set())
+            detections.extend(llm_detections)
+        except Exception:
+            logger.exception("optimization_loop: _llm_rules failed (non-fatal)")
     if not detections:
         return None
 
@@ -196,6 +368,7 @@ async def run_for_user(user_id: str, *, dry_run: bool = False) -> Optional[dict]
         "id":              uuid.uuid4().hex,
         "user_id":         user_id,
         "kind":            top["kind"],
+        "source":          top.get("source", "heuristic"),
         "observations":    snap,
         "bottleneck":      top["bottleneck"],
         "hypothesis":      top["hypothesis"],

@@ -35,6 +35,18 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 96) **🧠 LLM-augmented OODA detector + a11y polish + briefing recursion fix**
+  - **`_llm_rules()` in `cortex/optimization_loop.py`** — new Claude-powered detector that surfaces NON-OBVIOUS bottlenecks the 5 deterministic rules miss (cross-stage ratios, volume-vs-velocity mismatches, leading decay signals). Only fires when heuristics are silent (saves cost — heuristics handle the obvious cases). Output kinds are namespaced `llm_*` to avoid collisions with deterministic kinds; persisted with `source: "llm_augmented"`.
+  - **Cost guardrails**:
+    - Rate-limit: at most one LLM call per user per 6h (configurable via `CORTEX_LLM_DETECTOR_ENABLED` env + window constant).
+    - Thin-signal skip: no LLM call if funnel=0 + outreach=0 + missions=0.
+    - Feature flag: `CORTEX_LLM_DETECTOR_ENABLED=false` disables entirely.
+    - Robust JSON parsing: strips fences, extracts JSON from prose, drops malformed entries, clamps confidence to [0,1], rejects duplicate kinds.
+  - **Frontend `OptimizationStatus.jsx`** — distinct visual treatment for LLM findings: violet (vs amber) border, `Brain` icon, "AI REASONING" badge. Apply button hidden for `llm_*` kinds since those are free-form (user discusses them via the Discuss CTA).
+  - **A11y fix**: `CommandDialog` was rendering `<DialogContent>` without a `<DialogTitle>` → DialogContent a11y warning across the app. Added sr-only `<DialogTitle>` + `<DialogDescription>` to `components/ui/command.jsx`. WCAG-compliant.
+  - **🐛 Pre-existing recursion bug fixed**: `build_briefing` → `build_recommendation_from_intent("find_opportunities")` → `build_briefing` → ∞. Was hard-500'ing `/api/cortex/console/briefing` and `/opportunities` whenever the OODA loop surfaced any optimization finding (since those are tagged `type: "find_opportunities"`). Patched `build_briefing` to skip the `top_rec` computation when the top opportunity's intent is `find_opportunities` — the opportunity card itself is the recommendation.
+  - **iter19 tests**: 14 unit tests in `tests/test_cortex_iter19.py` covering JSON parsing robustness, rate-limit, feature flag, thin-signal skip, source-tagging in `run_for_user`. All 14 pass + iter15/17/18 regression (42/42 green).
+
 - 2026-02-25 (part 95) **🗂️ Multi-thread conversation history + Apply-recommendation one-click**
   - **ConversationHistory panel** (per user screenshot annotation) — ChatGPT-style sidebar between the main app nav and the chat thread. `+ New conversation` button (mints uuid), search-by-title input, list grouped by Today / Yesterday / This week / This month / Older. Active thread highlighted violet. Click a thread → loads its messages into the chat area.
   - **Backend `/api/cortex/console/conversations`** — list/get/new endpoints. `conversation_id` now flows through both `/chat` (POST) and `/chat/stream` (SSE); persisted on every `cortex_conversations` row. Pre-multi-thread rows bucket cleanly into `id='legacy'` so nothing is lost.

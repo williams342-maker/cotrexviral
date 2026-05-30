@@ -118,15 +118,29 @@ export const OptimizationStatus = ({ onDiscuss }) => {
       {/* Latest detection */}
       {latest ? (
         <div data-testid="optimization-latest"
-             className="rounded-xl border border-amber-500/20 hover:border-amber-500/40 bg-amber-500/[0.04] hover:bg-amber-500/[0.06] p-3 transition group">
+             className={`rounded-xl border p-3 transition group ${
+               latest.source === 'llm_augmented'
+                 ? 'border-violet-500/25 hover:border-violet-500/40 bg-violet-500/[0.04] hover:bg-violet-500/[0.07]'
+                 : 'border-amber-500/20 hover:border-amber-500/40 bg-amber-500/[0.04] hover:bg-amber-500/[0.06]'
+             }`}>
           <button onClick={() => onDiscuss?.(latest)}
                   data-testid="optimization-latest-discuss"
                   className="w-full text-left">
             <div className="flex items-start gap-2 mb-1.5">
-              <AlertTriangle size={11} className="text-amber-300 mt-0.5 shrink-0" />
+              {latest.source === 'llm_augmented'
+                ? <Brain size={11} className="text-violet-300 mt-0.5 shrink-0" />
+                : <AlertTriangle size={11} className="text-amber-300 mt-0.5 shrink-0" />}
               <div className="flex-1 min-w-0">
-                <div className="text-[10px] uppercase tracking-wider text-amber-300 font-semibold">
-                  Bottleneck detected · {fmtAge(latest.created_at)}
+                <div className={`text-[10px] uppercase tracking-wider font-semibold flex items-center gap-1.5 ${
+                  latest.source === 'llm_augmented' ? 'text-violet-300' : 'text-amber-300'
+                }`}>
+                  <span>Bottleneck detected · {fmtAge(latest.created_at)}</span>
+                  {latest.source === 'llm_augmented' && (
+                    <span data-testid="optimization-ai-badge"
+                          className="text-[8.5px] px-1 py-[1px] rounded-sm bg-violet-500/20 border border-violet-400/30 text-violet-200">
+                      AI REASONING
+                    </span>
+                  )}
                 </div>
                 <div className="text-[12.5px] text-white leading-tight mt-0.5">
                   {latest.bottleneck}
@@ -162,7 +176,7 @@ export const OptimizationStatus = ({ onDiscuss }) => {
           <div className="flex items-center gap-1.5 pl-5 mt-2 text-[10px] text-zinc-500">
             <span>confidence</span>
             <div className="flex-1 h-1 rounded-full bg-white/5 overflow-hidden max-w-[80px]">
-              <div className="h-full bg-amber-400"
+              <div className={`h-full ${latest.source === 'llm_augmented' ? 'bg-violet-400' : 'bg-amber-400'}`}
                     style={{ width: `${confidence}%` }} />
             </div>
             <span className="tabular-nums">{confidence}%</span>
@@ -173,23 +187,28 @@ export const OptimizationStatus = ({ onDiscuss }) => {
             </button>
           </div>
 
-          {/* Apply action — one click to enact Cortex's recommendation */}
-          <div className="pl-5 mt-2">
-            {(applied || latest.applied_at) ? (
-              <div data-testid="optimization-applied"
-                    className="text-[10px] text-emerald-400 flex items-center gap-1">
-                <Sparkles size={9} /> Applied — Cortex is acting on this.
-              </div>
-            ) : (
-              <button onClick={applyFinding} disabled={applying}
-                      data-testid="optimization-apply-btn"
-                      className="text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/30 transition disabled:opacity-50 flex items-center gap-1">
-                {applying
-                  ? <><Loader2 size={10} className="animate-spin" /> Applying…</>
-                  : <>⚡ Apply Cortex's recommendation</>}
-              </button>
-            )}
-          </div>
+          {/* Apply action — one click to enact Cortex's recommendation.
+              Hidden for LLM-augmented findings: those kinds are free-
+              form and don't map to deterministic APPLY_ACTIONS — users
+              discuss them with Cortex to refine into an action. */}
+          {latest.source !== 'llm_augmented' && (
+            <div className="pl-5 mt-2">
+              {(applied || latest.applied_at) ? (
+                <div data-testid="optimization-applied"
+                      className="text-[10px] text-emerald-400 flex items-center gap-1">
+                  <Sparkles size={9} /> Applied — Cortex is acting on this.
+                </div>
+              ) : (
+                <button onClick={applyFinding} disabled={applying}
+                        data-testid="optimization-apply-btn"
+                        className="text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/30 transition disabled:opacity-50 flex items-center gap-1">
+                  {applying
+                    ? <><Loader2 size={10} className="animate-spin" /> Applying…</>
+                    : <>⚡ Apply Cortex's recommendation</>}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 text-[11px] text-zinc-500 italic">
