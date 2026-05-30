@@ -293,13 +293,29 @@ async def run_loop_all_users() -> dict:
         if uid:
             seen.add(uid)
 
-    summary = {"total_users": len(seen), "fired": 0, "users_with_findings": []}
+    summary = {"total_users": len(seen), "fired": 0, "users_with_findings": [],
+                "learnings_written": 0}
     for uid in seen:
         try:
             doc = await run_for_user(uid)
             if doc:
                 summary["fired"] += 1
                 summary["users_with_findings"].append(uid)
+            else:
+                # Even on detection-free ticks, write learnings for any
+                # prior detections that are 24-72h old. Keeps the
+                # learning step accruing across quiet periods.
+                try:
+                    from core import db
+                    snap = await _observe(uid)
+                    before = await db.cortex_optimization_log.count_documents(
+                        {"user_id": uid, "result": None})
+                    await _measure_prior(uid, snap)
+                    after = await db.cortex_optimization_log.count_documents(
+                        {"user_id": uid, "result": None})
+                    summary["learnings_written"] += max(0, before - after)
+                except Exception:
+                    logger.exception("optimization_loop: measure-only step failed for %s", uid)
         except Exception:
             logger.exception("optimization_loop: run_for_user failed for %s", uid)
     summary["ran_at"] = datetime.now(timezone.utc).isoformat()

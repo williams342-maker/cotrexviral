@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, TrendingUp, AlertCircle, ChevronRight, Loader2 } from 'lucide-react';
+import { Sparkles, AlertCircle, ChevronRight, Loader2, TrendingUp } from 'lucide-react';
 import ActiveMissionRail from './ActiveMissionRail';
 import OptimizationStatus from './OptimizationStatus';
 

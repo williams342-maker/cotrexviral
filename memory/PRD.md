@@ -35,6 +35,16 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-25 (part 93) **🧠 Cortex Autonomous Optimization Loop — OODA cycle live (Executive Consultant + CGO mode)**
+  - **The shift**: Cortex no longer waits to be asked. A background OODA loop (Observe → Analyze → Recommend → Execute → Measure → Learn → Repeat) runs every 30 minutes per user with recent mission activity, detects bottlenecks, and surfaces them in real time. This makes Cortex feel like a Chief Growth Officer actively improving the business rather than a chat companion.
+  - **`/app/backend/cortex/optimization_loop.py`** (NEW) — deterministic rule-based detector with 5 production rules covering: `discovery_stall`, `qualification_bottleneck`, `deliverability_risk`, `copy_conversion_gap`, `onboarding_stall`. Each rule emits `{bottleneck, hypothesis, recommendation, confidence (0-1)}`. `run_for_user()` runs one tick and persists to `cortex_optimization_log`. 12h per-kind dedupe prevents spam. `_measure_prior()` writes `learning: improved|regressed|neutral` back into 24-72h-old detections so the loop *learns* from outcomes — also runs on quiet (no-detection) ticks so learning accrues continuously.
+  - **`/api/cortex/optimization/{status,log,run-now}`** — UI endpoints for the monitoring panel.
+  - **Scheduler** — `cortex_optimization_loop` job (30min IntervalTrigger, `next_run_time = startup + 2min`) registered in `routes/scheduler.py`.
+  - **Frontend**: New `OptimizationStatus.jsx` ("Cortex is monitoring" panel with pulsing radar) at the TOP of the right rail — above Active Missions. Stats row (24h / 7d / Improved counts), latest detection tile with confidence bar, "Scan now" button, and click-to-discuss CTA that drops the finding into the chat composer as an executive-consultant follow-up.
+  - **Executive-consultant tone reinforced**: `cortex/stages.py` stage classifier prompt now requires Cortex to *challenge assumptions* in discovery (the user's vision example: "Why traffic? What's your current conversion rate? More traffic before improving conversion may increase cost without revenue"). `_normalize()` post-processes discovery acks to always include the first clarifying question with a `?`, closing iter16's soft-fail.
+  - **iteration_17.json**: 12/12 backend pytest pass + 6/6 frontend spec items. Live-verified end-to-end: detected `discovery_stall` (78% confidence) on the test user (5 missions running with 0 leads), surfaced in the UI within 5 seconds, click-to-discuss pre-fills the composer correctly.
+
+
 - 2026-02-25 (part 92) **🛠️ Iter15 polish — larger chat, Cancel button, subcomponent extraction, dismissed-plan filter, AUTONOMY chip**
   - **Bigger Command Center chat**: chat thread now `min-h-[68vh] max-h-[80vh]` and the conversation column `min-h-[85vh]` — measured 864px tall on a 1080p viewport (was ~600px). The chat is now the dominant surface as the user requested.
   - **Mission Cancel** (backend + 2 frontends): NEW `POST /api/missions/{id}/cancel` sets status='cancelled' + writes a `mission_events` audit row. UI buttons added on `/dashboard/cortex/{id}` (next to Pause) and on `/dashboard/missions` list cards (mini X next to Pause/Resume). Hidden for terminal statuses (cancelled/completed/failed). Confirmation modal before action.
