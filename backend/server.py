@@ -77,6 +77,7 @@ from routes import (  # noqa: F401
     cortex_memory,   # Hybrid memory (Mongo strategy + Qdrant semantic) + exec log
     cortex_plan_actions,  # Plan-card actions: cancel + email-to-inbox
     cortex_stream,   # SSE-streamed Cortex chat (phase events)
+    cortex_active_missions,  # Active Mission Rail — live status per running mission
     mission_loop,    # Event-driven relay: scout→creator→operator→intelligence
     seller_leads,        # Seller Acquisition OS — leads pipeline
     seller_discovery,    # Seller Acquisition OS — Discovery Scout

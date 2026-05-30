@@ -1,5 +1,6 @@
 import React from 'react';
 import { Sparkles, TrendingUp, AlertCircle, ChevronRight, Loader2 } from 'lucide-react';
+import ActiveMissionRail from './ActiveMissionRail';
 
 /* OpportunityRail — right sidebar showing AI-surfaced opportunities,
    recommended actions, and recent discoveries. Each card is a
@@ -11,11 +12,18 @@ const URGENCY = {
   monitor:   { label: 'MONITOR',   cls: 'text-zinc-300 bg-zinc-500/15 border-zinc-500/30' },
 };
 
-export const OpportunityRail = ({ opportunities = [], loading, onPrompt, strategy }) => {
+export const OpportunityRail = ({
+  opportunities = [], loading, onPrompt, strategy,
+  activeMissions = [], missionsLoading = false, onOpenMission,
+}) => {
   return (
     <aside data-testid="cortex-opportunity-rail"
            className="h-full flex flex-col gap-4 overflow-y-auto pr-1">
-      {/* Strategic memory header — "what Cortex remembers about you" */}
+      {/* Active missions — TOP of the rail (live status) */}
+      <ActiveMissionRail missions={activeMissions} loading={missionsLoading}
+                            onOpenDetails={onOpenMission} />
+
+      {/* Strategic memory header */}
       {(strategy?.summary || (strategy?.goals && strategy.goals.length > 0)) && (
         <div data-testid="cortex-strategy-summary"
              className="rounded-xl border border-violet-500/20 bg-violet-500/[0.04] p-3">

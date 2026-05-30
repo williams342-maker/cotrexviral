@@ -323,17 +323,109 @@ async def console_execute(payload: ExecutePayload, request: Request):
 
     # Execute per behavior.
     if behavior == "draft":
-        return await _execute_draft(user.user_id, rec, level)
-    if behavior == "queue":
-        return await _execute_queue(user.user_id, rec, level)
-    if behavior == "launch":
-        return await _execute_launch(user.user_id, rec, level)
-    if behavior == "auto":
+        result = await _execute_draft(user.user_id, rec, level)
+    elif behavior == "queue":
+        result = await _execute_queue(user.user_id, rec, level)
+    elif behavior == "launch":
+        result = await _execute_launch(user.user_id, rec, level)
+    elif behavior == "auto":
         # Full-autonomous — still launch, but flag the row so the
         # mission-loop knows it can self-iterate without human gates.
-        return await _execute_launch(user.user_id, rec, level, autopilot=True)
+        result = await _execute_launch(user.user_id, rec, level, autopilot=True)
+    else:
+        raise HTTPException(500, f"Unknown autonomy behavior: {behavior}")
 
-    raise HTTPException(500, f"Unknown autonomy behavior: {behavior}")
+    # ----- Auto follow-up turn ---------------------------------------
+    # After execution, Cortex appends a contextual refinement question
+    # so the conversation never feels "over" — the user just hired an
+    # autonomous teammate and can keep collaborating with them.
+    try:
+        followup_text = _build_followup_text(rec, result)
+        if followup_text:
+            followup_doc = {
+                "id":             uuid.uuid4().hex,
+                "user_id":        user.user_id,
+                "role":           "cortex",
+                "message":        followup_text,
+                "intent":         "followup",
+                "followup_for":   result.get("mission_id") or result.get("queue_id") or result.get("draft_id"),
+                "rec_type":       rec.get("type"),
+                "created_at":     datetime.now(timezone.utc),
+            }
+            await db.cortex_conversations.insert_one(followup_doc)
+            # Strip _id for response.
+            followup_doc.pop("_id", None)
+            followup_doc["created_at"] = followup_doc["created_at"].isoformat()
+            result["followup"] = {
+                "id":      followup_doc["id"],
+                "message": followup_doc["message"],
+                "for":     followup_doc["followup_for"],
+            }
+    except Exception:
+        logger.exception("console_execute: follow-up generation failed (non-fatal)")
+
+    return result
+
+
+def _build_followup_text(rec: dict, result: dict) -> str:
+    """Generate Cortex's contextual follow-up message based on the
+    type of plan executed + the action taken. Deterministic (not LLM)
+    so it's instant + cheap. Mirrors the chat tone."""
+    t = rec.get("type")
+    action = result.get("action_taken")
+    mid = result.get("mission_id")
+    qid = result.get("queue_id")
+    payload = rec.get("action_payload") or {}
+    niche = payload.get("niche")
+    target = payload.get("target")
+
+    head = ""
+    if action == "launched" and mid:
+        head = f"Mission launched (`{mid[:8]}`). Current phase: **Discovery**. "
+    elif action == "queued":
+        head = f"Plan queued for approval (`{(qid or '')[:8]}`). "
+    elif action == "draft":
+        head = "Saved as draft. "
+
+    if t == "launch_seller_mission":
+        niche_str = niche or "your target category"
+        target_str = target or "your goal"
+        body = (
+            f"I'm now scanning Etsy, Shopify, and {niche_str} communities for {target_str} candidate sellers. "
+            "While I work, would you like me to:\n"
+            "  • focus on premium / high-AOV sellers\n"
+            "  • focus on high-volume / many-listings sellers\n"
+            "  • prioritize a specific region (e.g. Pacific Northwest, EU, UK)\n"
+            "  • surface anything else I should weight in qualification?"
+        )
+        return head + body
+
+    if t == "run_bulk_outreach":
+        body = (
+            "Outreach is firing now. Want me to:\n"
+            "  • A/B test two subject lines\n"
+            "  • throttle to N sends per hour\n"
+            "  • auto-attach a personalized audit PDF to every message?"
+        )
+        return head + body
+
+    if t == "launch_retention_workflow":
+        body = (
+            "Retention scan started — I'll surface at-risk sellers as I find them. "
+            "Want me to auto-trigger the churn-recovery email sequence, or hold and let you review each one?"
+        )
+        return head + body
+
+    if t in ("launch_ads_campaign", "generate_content_plan"):
+        body = (
+            "Working on it now. Any constraints I should respect — budget cap, brand voice, channels to exclude?"
+        )
+        return head + body
+
+    # Generic fallback so the conversation always continues.
+    if head:
+        return head + "I'll keep you posted as updates land. Anything else you want me to weight while I work?"
+    return ""
 
 
 async def _execute_draft(user_id: str, rec: dict, level: int) -> dict:

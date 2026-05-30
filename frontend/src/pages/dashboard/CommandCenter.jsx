@@ -11,6 +11,7 @@ import { useToast } from '../../hooks/use-toast';
 import PlanCard from './cortex/PlanCard';
 import OpportunityRail from './cortex/OpportunityRail';
 import ExecutionLog from './cortex/ExecutionLog';
+import MissionEventStream from './cortex/MissionEventStream';
 import useResizableRail from '../../hooks/useResizableRail';
 
 /* /dashboard — the Conversational Command Center.
@@ -33,6 +34,15 @@ const PHASE_COPY = {
 
 const ChatMessage = ({ turn, onAction, busyId, isStale }) => {
   const isUser = turn.role === 'user';
+
+  // Mission event stream entry (rendered inline in chat).
+  if (turn._kind === 'mission_events') {
+    return (
+      <MissionEventStream missionTitle={turn.missionTitle}
+                            events={turn.events || []} />
+    );
+  }
+
   if (isUser) {
     return (
       <div data-testid="chat-user-turn" className="flex justify-end mb-3">
@@ -181,14 +191,18 @@ const CommandCenter = () => {
   const [draft, setDraft]     = useState('');
   const [sending, setSending] = useState(false);
   const [phase, setPhase]     = useState(null);          // SSE phase indicator
+  const [phaseHistory, setPhaseHistory] = useState([]);   // recent phases for the indicator
   const [busyId, setBusyId]   = useState(null);
   const [strategy, setStrategy] = useState(null);
   const [opportunities, setOpps] = useState([]);
   const [oppLoading, setOppLoading] = useState(true);
   const [execItems, setExecItems] = useState([]);
   const [execLoading, setExecLoading] = useState(true);
+  const [activeMissions, setActiveMissions] = useState([]);
+  const [missionsLoading, setMissionsLoading] = useState(true);
+  const trackedMissionsRef = useRef({});         // missionId -> {title, lastSeen}
   const [searchOpen, setSearchOpen] = useState(false);
-  const lastPlanIdRef = useRef(null);                    // for stale-marking
+  const lastPlanIdRef = useRef(null);            // for stale-marking
 
   const rail = useResizableRail({
     key: 'cortex-right-rail',
@@ -240,6 +254,70 @@ const CommandCenter = () => {
       setExecItems(r.data?.items || []);
     } catch (_e) { setExecItems([]); }
     finally { setExecLoading(false); }
+  }, []);
+
+  const loadActiveMissions = useCallback(async () => {
+    try {
+      const r = await axios.get(`${API}/cortex/missions/active?limit=6`,
+                                  { withCredentials: true });
+      setActiveMissions(r.data?.missions || []);
+    } catch (_e) { /* silent */ }
+    finally { setMissionsLoading(false); }
+  }, []);
+
+  // Poll active missions every 5s. Cheap (single endpoint per user).
+  useEffect(() => {
+    loadActiveMissions();
+    const t = setInterval(loadActiveMissions, 5000);
+    return () => clearInterval(t);
+  }, [loadActiveMissions]);
+
+  // On first load, seed tracked-missions from currently-running ones so we
+  // also stream events for missions launched in previous sessions.
+  useEffect(() => {
+    if (activeMissions.length && Object.keys(trackedMissionsRef.current).length === 0) {
+      const seed = {};
+      for (const m of activeMissions.slice(0, 3)) {
+        seed[m.id] = { title: m.title,
+                        lastSeen: new Date(Date.now() - 30_000).toISOString() };
+      }
+      trackedMissionsRef.current = seed;
+    }
+  }, [activeMissions]);
+
+  // Stream NEW mission events into the chat thread as live timeline entries.
+  // For each mission Cortex just launched (tracked via trackedMissionsRef),
+  // poll its events endpoint and append fresh ones as system-style turns.
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      const tracked = trackedMissionsRef.current;
+      const ids = Object.keys(tracked);
+      if (ids.length === 0) return;
+      for (const mid of ids.slice(0, 3)) {     // cap concurrent polls
+        try {
+          const t = tracked[mid];
+          const since = t?.lastSeen || new Date(Date.now() - 60_000).toISOString();
+          const r = await axios.get(
+            `${API}/cortex/missions/${mid}/events?since=${encodeURIComponent(since)}&limit=10`,
+            { withCredentials: true });
+          const evs = r.data?.events || [];
+          if (cancelled) return;
+          if (evs.length > 0) {
+            tracked[mid].lastSeen = evs[0].created_at || new Date().toISOString();
+            setThread((thread) => [...thread, {
+              id: `mev-${mid}-${Date.now()}`,
+              _kind: 'mission_events',
+              missionTitle: t.title,
+              events: evs.reverse(),    // oldest-first reads better as a stream
+              created_at: new Date().toISOString(),
+            }]);
+          }
+        } catch (_e) { /* */ }
+      }
+    };
+    const iv = setInterval(poll, 8000);
+    return () => { cancelled = true; clearInterval(iv); };
   }, []);
 
   useEffect(() => {
@@ -379,18 +457,35 @@ const CommandCenter = () => {
           title: `Cortex · ${taken.toUpperCase()}`,
           description: r.data?.message || `Autonomy L${r.data?.autonomy_level}.`,
         });
-        setThread((t) => [...t, {
-          id: `s-${Date.now()}`, role: 'cortex',
-          message: r.data?.message || `Executed (L${r.data?.autonomy_level})`,
-          created_at: new Date().toISOString(),
-        }]);
+
+        // Mark the launched plan as completed (so it shrinks into rail visually).
         if (r.data?.mission_id) {
-          setTimeout(() => toast({
-            title: 'Mission launched',
-            description: 'Tap to open Mission Control →',
-            action: <button onClick={() => navigate('/dashboard/missions')}
-                            className="text-[11px] font-semibold text-violet-300">Open</button>,
-          }), 600);
+          setThread((t) => t.map((x) => x.id === turn.id
+            ? { ...x, _stale: true, _launched: true } : x));
+          // Start tracking this mission for live event polling.
+          trackedMissionsRef.current[r.data.mission_id] = {
+            title: rec.title || 'Mission',
+            lastSeen: new Date().toISOString(),
+          };
+          // Auto-refresh active missions immediately.
+          setTimeout(loadActiveMissions, 400);
+        }
+
+        // Render the auto-followup as a new Cortex turn.
+        if (r.data?.followup?.message) {
+          setThread((t) => [...t, {
+            id: r.data.followup.id || `f-${Date.now()}`,
+            role: 'cortex',
+            message: r.data.followup.message,
+            followup_for: r.data.followup.for,
+            created_at: new Date().toISOString(),
+          }]);
+        } else {
+          setThread((t) => [...t, {
+            id: `s-${Date.now()}`, role: 'cortex',
+            message: r.data?.message || `Executed (L${r.data?.autonomy_level})`,
+            created_at: new Date().toISOString(),
+          }]);
         }
         loadExec(); loadOpps();
       }
@@ -506,6 +601,9 @@ const CommandCenter = () => {
               opportunities={opportunities}
               loading={oppLoading}
               strategy={strategy}
+              activeMissions={activeMissions}
+              missionsLoading={missionsLoading}
+              onOpenMission={(m) => navigate(`/dashboard/missions`)}
               onPrompt={handlePrompt}
             />
           </div>

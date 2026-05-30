@@ -1,0 +1,69 @@
+{
+  "summary": "Iteration 14 — Conversational Execution Architecture (Cortex plan→launch-in-background→conversation continues). 12/12 backend tests PASS for the new /api/cortex/missions/active, /{id}, /{id}/events endpoints and the /console/execute followup behaviour (launch_seller_mission, run_bulk_outreach, autonomy=1 queued path, persistence in cortex_conversations). Frontend conversational rail flow verified end-to-end after fixing a P0 frontend regression (phaseHistory state was undefined and crashed CommandCenter on every send).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "CommandCenter.jsx",
+        "issue": "P0 REGRESSION (FIXED): `phaseHistory` / `setPhaseHistory` referenced but never declared via useState. Every message send triggered 'Uncaught ReferenceError: phaseHistory is not defined' + 'setPhaseHistory is not defined', tearing down the chat (whole conversational flow broken — no plan render, no launch, no followup). Patched by adding `const [phaseHistory, setPhaseHistory] = useState([]);` next to existing `phase` state.",
+        "selector": "CommandCenter.jsx:193 + lines 351, 378, 565, 567",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_cortex_iter14.py",
+    "/app/test_reports/pytest/cortex_iter14.xml"
+  ],
+  "action_items": [
+    "Confirm the phaseHistory useState fix shipped in CommandCenter.jsx is correct (it is; same shape used by existing rendering code at lines 351/378/565). No further action required unless the main agent wants to also auto-bake recent-phase history visibility (currently empty array start).",
+    "MissionEventStream component was not visible in the chat thread during testing because none of the 6 active missions have ANY mission_events / seller_outreach_events rows yet (verified via /events endpoint — 0 events on all 6 missions). This is expected per spec ('when mission_events exist…'). For a future live test the agent should seed a mission_event row to verify the inline live-updates rendering visually."
+  ],
+  "critical_code_review_comments": [
+    "BUG (fixed by testing agent): CommandCenter.jsx referenced phaseHistory/setPhaseHistory without declaring the useState — this is a hard crash and trivially preventable with a lint rule (no-undef). Recommend turning on ESLint no-undef for the dashboard tree.",
+    "CommandCenter.jsx continues to grow (now likely 700+ lines after iter14 conversational additions). Time to extract ChatMessage, MissionEventStream-host, Composer, PhaseIndicator into co-located files under /pages/dashboard/cortex/.",
+    "Active-mission tiles show 'L#' autonomy but the rail mixes 'L0/9' (current/target) with 'L3' (autonomy) — visually ambiguous on small widths. Consider labeling autonomy chip as 'AUTONOMY L3' or moving it to a clear chip slot.",
+    "Active missions endpoint sorts by created_at desc — fine — but the `limit` cap of 20 + always 6-default may hide newer launches once the user exceeds 6 active. Acceptable trade-off, but consider an 'X more →' affordance.",
+    "_last_action() in cortex_active_missions.py returns from the FIRST collection that has any matching row — so once mission_events has any tick, seller_outreach_events is never inspected. If outreach events are typically more recent than mission heartbeats, the rail will appear stale. Consider merging both collections by created_at and picking the max."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_cortex_iter14.py (NEW)",
+    "/app/frontend/src/pages/dashboard/CommandCenter.jsx (1-line fix: added phaseHistory useState declaration)"
+  ],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "100% on critical conversational flow after the phaseHistory fix"},
+  "test_credentials": "test_session_1779636592168 (Bearer + cookie), user_test1779636592168, admin",
+  "seed_data_creation": "None — relied on the 6 pre-existing active missions seeded by prior iterations. No mission_events rows exist for any of them (verified).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 14 = conversational-execution architecture. Backend exposes /api/cortex/missions/active, /{id}, /{id}/events and execute now returns a `followup` object that frontend renders inline as a new chat-cortex-turn. The user STAYS on /dashboard after launch (no nav-away). Polling: active missions every ~5000ms (verified), per-mission events every 8000ms. To visually verify MissionEventStream, seed a row into `mission_events` for one of the user's active missions (e.g. {user_id:'user_test1779636592168', mission_id:'<any active id>', event:'discovered_lead', body:'Found new ceramic seller', created_at:<now>}). NOTE: testing agent fixed a P0 crash where CommandCenter.jsx used phaseHistory without declaring useState — verify still in place.",
+  "test_results_detail": {
+    "backend_pytest": {
+      "test_active_missions_shape": "PASS",
+      "test_active_missions_sorted_newest_first": "PASS",
+      "test_active_missions_status_filter": "PASS",
+      "test_mission_detail_ok": "PASS",
+      "test_mission_detail_404": "PASS",
+      "test_mission_events_ok": "PASS",
+      "test_mission_events_since_filter": "PASS (since=2100 returns [])",
+      "test_mission_events_404": "PASS",
+      "test_execute_launch_seller_mission_followup": "PASS (followup contains 'Mission launched', 'Discovery', premium, high-volume, region)",
+      "test_execute_bulk_outreach_followup": "PASS (followup references A/B test + throttle + audit)",
+      "test_execute_queued_followup_starts_with_queued": "PASS (autonomy=1 → action_taken=queued, followup starts 'Plan queued for approval')",
+      "test_execute_followup_persisted_in_conversations": "PASS (followup turn lands in cortex_conversations with intent=followup)"
+    },
+    "frontend_flows": {
+      "active-mission-rail renders with 'ACTIVE MISSIONS' header + '6 running' count": "PASS",
+      "active-mission-{id} tiles include title, type label, autonomy L#, progress bar, current/target ratio, ETA, Current/Next phase": "PASS",
+      "5s polling cadence on /api/cortex/missions/active": "PASS (measured intervals: ~5000ms ± 12ms)",
+      "Chat composer sends message → cortex-turn renders with plan card": "PASS",
+      "URL stays on /dashboard after Launch Mission (no navigate-away)": "PASS",
+      "Followup cortex turn appended inline with 'Mission launched (`<id>`). Current phase: **Discovery**.' + premium/high-volume/region/qualification refinement bullets": "PASS",
+      "MissionEventStream renders inline when events exist": "NOT VERIFIED VISUALLY (no mission_events rows seeded; component code present per files_of_reference and chat rendering pipeline imports it). Endpoint behaviour verified backend-side."
+    }
+  }
+}
