@@ -74,6 +74,7 @@ from routes import (  # noqa: F401
     teams,           # 4 agent-team façade endpoints (Scout/Creator/Operator/Intelligence)
     cortex,          # Master orchestrator — single entry-point for user goals
     cortex_console,  # AI Command Center — conversational chat + briefing + execute
+    cortex_conversations,  # Multi-thread conversation history (list/get/new)
     cortex_memory,   # Hybrid memory (Mongo strategy + Qdrant semantic) + exec log
     cortex_plan_actions,  # Plan-card actions: cancel + email-to-inbox
     cortex_stream,   # SSE-streamed Cortex chat (phase events)

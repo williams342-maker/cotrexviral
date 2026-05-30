@@ -13,6 +13,7 @@ import ChatMessage from './cortex/ChatMessage';
 import Composer from './cortex/Composer';
 import PhaseIndicator from './cortex/PhaseIndicator';
 import MemorySearch from './cortex/MemorySearch';
+import ConversationHistory from './cortex/ConversationHistory';
 import useResizableRail from '../../hooks/useResizableRail';
 
 /* /dashboard — the Conversational Command Center.
@@ -55,6 +56,8 @@ const CommandCenter = () => {
   const trackedMissionsRef = useRef({});
   const [searchOpen, setSearchOpen] = useState(false);
   const lastPlanIdRef = useRef(null);
+  const [activeConvId, setActiveConvId] = useState('legacy');
+  const [historyKey, setHistoryKey] = useState(0);   // bump to refresh history list
 
   const rail = useResizableRail({
     key: 'cortex-right-rail',
@@ -65,10 +68,13 @@ const CommandCenter = () => {
   const esRef = useRef(null);
 
   // ----- Initial + periodic data loaders -----------------------------
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(async (convId) => {
     try {
-      const r = await axios.get(`${API}/cortex/console/history?limit=40`,
-                                  { withCredentials: true });
+      const cid = convId || activeConvId || 'legacy';
+      const url = cid === 'legacy'
+        ? `${API}/cortex/console/history?limit=40`
+        : `${API}/cortex/console/conversations/${encodeURIComponent(cid)}?limit=200`;
+      const r = await axios.get(url, { withCredentials: true });
       const turns = r.data?.turns || [];
       let latestPlanIdx = -1;
       for (let i = turns.length - 1; i >= 0; i--) {
@@ -79,8 +85,11 @@ const CommandCenter = () => {
       }));
       setThread(annotated);
       lastPlanIdRef.current = latestPlanIdx >= 0 ? turns[latestPlanIdx].id : null;
-    } catch (_e) { /* */ }
-  }, []);
+    } catch (_e) {
+      // Empty thread is fine (new conversation).
+      setThread([]);
+    }
+  }, [activeConvId]);
   const loadStrategy = useCallback(async () => {
     try {
       const r = await axios.get(`${API}/cortex/memory/strategy`,
@@ -213,7 +222,7 @@ const CommandCenter = () => {
     setDraft('');
 
     try {
-      const url = `${API}/cortex/console/chat/stream?message=${encodeURIComponent(msg)}`;
+      const url = `${API}/cortex/console/chat/stream?message=${encodeURIComponent(msg)}&conversation_id=${encodeURIComponent(activeConvId)}`;
       const es = new EventSource(url, { withCredentials: true });
       esRef.current = es;
       let memoryRecallCount = 0;
@@ -255,6 +264,9 @@ const CommandCenter = () => {
           };
           setThread((t) => [...t, cortexTurn]);
           lastPlanIdRef.current = cortexTurn.id;
+          // If this was the first message on a new conversation_id, the
+          // history list now has a new thread — refresh it.
+          setHistoryKey((k) => k + 1);
         } catch { /* */ }
         finally {
           es.close(); esRef.current = null;
@@ -385,10 +397,23 @@ const CommandCenter = () => {
         </div>
       }
     >
-      <div className="grid gap-0 lg:grid-cols-[1fr_auto_auto]"
-            style={{ gridTemplateColumns: window.innerWidth >= 1024 ? gridTemplate : undefined }}>
+      <div className="grid gap-0 lg:grid-cols-[auto_1fr_auto_auto]"
+            style={{ gridTemplateColumns: window.innerWidth >= 1024
+              ? `auto ${gridTemplate}` : undefined }}>
+
+        {/* Conversation history panel */}
+        <ConversationHistory
+          activeId={activeConvId}
+          refreshKey={historyKey}
+          onSelect={(c) => { setActiveConvId(c.id); loadHistory(c.id); }}
+          onNew={(cid) => {
+            setActiveConvId(cid);
+            setThread([]);
+            lastPlanIdRef.current = null;
+          }} />
+
         {/* Left: conversation — chat area is now the dominant surface */}
-        <div className="flex flex-col gap-3 min-h-[85vh]">
+        <div className="flex flex-col gap-3 min-h-[85vh] ml-3">
           <div ref={scrollRef}
                data-testid="cortex-chat-thread"
                className="flex-1 rounded-2xl border border-white/5 bg-white/[0.02] p-5 overflow-y-auto min-h-[68vh] max-h-[80vh]">

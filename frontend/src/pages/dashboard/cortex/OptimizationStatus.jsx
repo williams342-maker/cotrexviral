@@ -32,6 +32,8 @@ export const OptimizationStatus = ({ onDiscuss }) => {
   const [busy, setBusy] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [whyOpen, setWhyOpen] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [applied, setApplied] = useState(false);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -49,8 +51,25 @@ export const OptimizationStatus = ({ onDiscuss }) => {
       await axios.post(`${API}/cortex/optimization/run-now`, {},
                         { withCredentials: true });
       await load();
+      setApplied(false);
     } catch (_e) { /* */ }
     finally { setScanning(false); }
+  };
+
+  const applyFinding = async () => {
+    if (!latest?.id || applying) return;
+    setApplying(true);
+    try {
+      const r = await axios.post(
+        `${API}/cortex/optimization/${latest.id}/apply`, {},
+        { withCredentials: true });
+      if (r.data?.applied) {
+        setApplied(true);
+        // Re-load to pick up the applied_at stamp.
+        await load();
+      }
+    } catch (_e) { /* */ }
+    finally { setApplying(false); }
   };
 
   useEffect(() => {
@@ -152,6 +171,24 @@ export const OptimizationStatus = ({ onDiscuss }) => {
                     className="ml-auto text-violet-300 hover:text-violet-200 transition flex items-center gap-0.5">
               Discuss <ArrowRight size={9} />
             </button>
+          </div>
+
+          {/* Apply action — one click to enact Cortex's recommendation */}
+          <div className="pl-5 mt-2">
+            {(applied || latest.applied_at) ? (
+              <div data-testid="optimization-applied"
+                    className="text-[10px] text-emerald-400 flex items-center gap-1">
+                <Sparkles size={9} /> Applied — Cortex is acting on this.
+              </div>
+            ) : (
+              <button onClick={applyFinding} disabled={applying}
+                      data-testid="optimization-apply-btn"
+                      className="text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/30 transition disabled:opacity-50 flex items-center gap-1">
+                {applying
+                  ? <><Loader2 size={10} className="animate-spin" /> Applying…</>
+                  : <>⚡ Apply Cortex's recommendation</>}
+              </button>
+            )}
           </div>
         </div>
       ) : (

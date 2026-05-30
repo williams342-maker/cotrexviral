@@ -51,6 +51,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------
 class ChatPayload(BaseModel):
     message: str = Field(..., min_length=1, max_length=1000)
+    conversation_id: Optional[str] = None     # multi-thread support
 
 
 class ExecutePayload(BaseModel):
@@ -216,6 +217,12 @@ async def console_chat(payload: ChatPayload, request: Request):
     "Would you like me to create a mission?" CTA)."""
     user = await get_current_user(request)
 
+    # ---- Conversation scope ----
+    # Use the caller-supplied conversation_id when provided so we can
+    # support ChatGPT-style multi-thread history; default to "legacy"
+    # for backwards-compat with pre-multi-thread rows.
+    conv_id = (payload.conversation_id or "").strip() or "legacy"
+
     # ---- Memory snapshot before classification ----
     from cortex import memory as cmem
     from cortex.stages import classify_and_respond, should_render_plan_card
@@ -252,27 +259,29 @@ async def console_chat(payload: ChatPayload, request: Request):
     now = datetime.now(timezone.utc)
     # Persist the chat turn so the Conversations history works.
     await db.cortex_conversations.insert_one({
-        "id":         uuid.uuid4().hex,
-        "user_id":    user.user_id,
-        "role":       "user",
-        "message":    payload.message[:1000],
-        "stage":      stage_data["stage"],
-        "created_at": now,
+        "id":              uuid.uuid4().hex,
+        "user_id":         user.user_id,
+        "conversation_id": conv_id,
+        "role":            "user",
+        "message":         payload.message[:1000],
+        "stage":           stage_data["stage"],
+        "created_at":      now,
     })
     await db.cortex_conversations.insert_one({
-        "id":             uuid.uuid4().hex,
-        "user_id":        user.user_id,
-        "role":           "cortex",
-        "message":        stage_data["ack"],
-        "stage":          stage_data["stage"],
-        "intent":         stage_data.get("intent"),
-        "params":         stage_data.get("params"),
+        "id":              uuid.uuid4().hex,
+        "user_id":         user.user_id,
+        "conversation_id": conv_id,
+        "role":            "cortex",
+        "message":         stage_data["ack"],
+        "stage":           stage_data["stage"],
+        "intent":          stage_data.get("intent"),
+        "params":          stage_data.get("params"),
         "clarifying_questions": stage_data.get("clarifying_questions"),
-        "findings":       stage_data.get("findings"),
+        "findings":        stage_data.get("findings"),
         "recommendation_summary": stage_data.get("recommendation_summary"),
-        "alternatives":   stage_data.get("alternatives"),
-        "recommendation": rec,
-        "created_at":     now,
+        "alternatives":    stage_data.get("alternatives"),
+        "recommendation":  rec,
+        "created_at":      now,
     })
 
     # ---- Embed into Qdrant (best-effort) ----
@@ -295,6 +304,7 @@ async def console_chat(payload: ChatPayload, request: Request):
         logger.exception("cortex chat: strategy refresh failed (non-fatal)")
 
     return {
+        "conversation_id":         conv_id,
         "stage":                   stage_data["stage"],
         "discovery_complete":      stage_data["discovery_complete"],
         "analysis_complete":       stage_data["analysis_complete"],

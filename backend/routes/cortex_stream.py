@@ -45,7 +45,8 @@ def _sse(event: str, data: dict) -> str:
 
 @api.get("/cortex/console/chat/stream")
 async def cortex_chat_stream(request: Request, message: str = "",
-                               session_id: str = ""):
+                               session_id: str = "",
+                               conversation_id: str = ""):
     """SSE-streamed Cortex chat. Browsers can only send GET via
     EventSource so the message is passed as a query param (capped
     server-side at 1000 chars to match the POST endpoint)."""
@@ -53,6 +54,7 @@ async def cortex_chat_stream(request: Request, message: str = "",
     msg = (message or "").strip()[:1000]
     if not msg:
         raise HTTPException(400, "message is required")
+    conv_id = (conversation_id or "").strip() or "legacy"
 
     async def gen():
         try:
@@ -117,11 +119,13 @@ async def cortex_chat_stream(request: Request, message: str = "",
             now = datetime.now(timezone.utc)
             await db.cortex_conversations.insert_one({
                 "id": uuid.uuid4().hex, "user_id": user.user_id,
+                "conversation_id": conv_id,
                 "role": "user", "message": msg,
                 "stage": stage_data["stage"], "created_at": now,
             })
             await db.cortex_conversations.insert_one({
                 "id": uuid.uuid4().hex, "user_id": user.user_id,
+                "conversation_id": conv_id,
                 "role": "cortex", "message": stage_data["ack"],
                 "stage": stage_data["stage"],
                 "intent": stage_data.get("intent"),
@@ -144,6 +148,7 @@ async def cortex_chat_stream(request: Request, message: str = "",
 
             # ----- Phase 4: ready ------------------------------
             yield _sse("ready", {
+                "conversation_id":         conv_id,
                 "stage":                   stage_data["stage"],
                 "discovery_complete":      stage_data["discovery_complete"],
                 "analysis_complete":       stage_data["analysis_complete"],
