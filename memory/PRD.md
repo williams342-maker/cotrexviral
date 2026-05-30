@@ -35,6 +35,16 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 113) **🎯 Phase D refinement (P2) — Per-post 'Push as draft' button + P1 verifications**
+  - **New endpoint** `POST /api/cortex/campaigns/{cid}/posts/{pid}/push` body `{mode:'draft'|'scheduled', scheduled_at?, creative_id?}` materialises a SINGLE cortex_social_post → /posts row with all the same cross-stamps as the bulk endpoint. Returns the documented shape `{ok, cortex_post_id, posts_id, platform, status, scheduled_at}` or the idempotent `{ok:true, already_pushed:true, posts_id, platform, pushed_at}` on retry.
+  - **Refactor**: extracted `_materialize_push()` and `_resolve_default_media()` helpers so the single + bulk endpoints share one persistence path with no duplication. Creative override chain: `creative_id (override) → campaign creatives → brief creatives → null`.
+  - **Error paths covered**: 400 invalid mode / missing scheduled_at, 404 unknown post / unknown campaign / soft-deleted campaign, 409 campaign not complete, 422 platform not pushable, cross-user isolation (every query scoped by user_id).
+  - **Frontend** (`Campaigns.jsx`): each PostCard now renders an inline **`Push as draft`** button (`data-testid: post-push-{id}`) when the platform is pushable AND the post is not yet pushed. After click → POST + onChanged() refresh → button disappears + Pushed badge replaces it. Errors surface inline in rose tone.
+  - **P1 verifications (deployed in earlier session, now confirmed live)**:
+    - **Multi-thread conversations**: `GET /api/cortex/console/conversations` returns `{items: [...]}` with id/title/last_message; `conversation_id` flows through `/chat` + `/chat/stream` and persists per-thread on every `cortex_conversations` row.
+    - **Apply-recommendation**: seeded `qualification_bottleneck` finding → `POST /cortex/optimization/{id}/apply` queues the action via APPLY_ACTIONS (autonomy_level=2, queue_id returned); second call returns `{already_applied:true, applied_at}` (idempotent).
+  - **iter21 tests**: **16/16 new backend tests pass** (7 error paths + idempotency + fresh draft push + fresh scheduled push + creative_id override + conversations endpoint + apply + apply idempotency) and prior bulk-push 6/6 still passes. Frontend 100% — Push button appears/disappears/replaces with Pushed badge as expected.
+
 - 2026-02-26 (part 112) **📤 Phase D — Direct Social Media Publishing (bulk push to calendar)**
   - **One endpoint** `POST /api/cortex/campaigns/{cid}/push` body `{mode:'draft'|'scheduled', start_at?, cadence_hours?}` materialises one `posts` row per pushable cortex_social_post and stamps both sides for full traceability.
   - **Pushable platforms** (whitelist): facebook, instagram, instagram_story, linkedin, pinterest. Other brief platforms (email, blog, google_ads, x, etc.) are skipped with `reason=platform_not_pushable` since they need different surfaces (SendGrid/WordPress/Ads Manager/Twitter API).
