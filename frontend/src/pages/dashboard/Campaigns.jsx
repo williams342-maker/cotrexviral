@@ -295,6 +295,7 @@ function PostsTab({ posts, campaign, onChanged }) {
 
 
 const PUSHABLE = new Set(['facebook', 'instagram', 'instagram_story', 'linkedin', 'pinterest']);
+const _normPlatform = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, '_');
 
 
 function BulkPushBar({ campaign, posts, onChanged }) {
@@ -305,7 +306,7 @@ function BulkPushBar({ campaign, posts, onChanged }) {
   const [result, setResult] = useState(null);
   const [err, setErr] = useState('');
 
-  const pushable = posts.filter((p) => PUSHABLE.has(p.platform));
+  const pushable = posts.filter((p) => PUSHABLE.has(_normPlatform(p.platform)));
   const alreadyPushed = pushable.filter((p) => p.pushed_at).length;
   const eligible = pushable.length - alreadyPushed;
   const status = campaign?.status || 'building';
