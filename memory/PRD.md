@@ -35,6 +35,26 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 110) **🎨 Phase B — Image Generation with Provider Abstraction (Gemini + OpenAI GPT Image 1)**
+  - **Provider abstraction layer** (`cortex/image_provider.py`) — `ImageProvider` protocol with `name` + `async generate(prompt, size) → bytes`. Two adapters: `GeminiNanoBananaProvider` (uses `emergentintegrations.llm.chat.LlmChat` with `gemini-3.1-flash-image-preview`, modalities=image+text, base64-decoded to PNG bytes) + `OpenAIGPTImageProvider` (uses `emergentintegrations.llm.openai.image_generation.OpenAIImageGeneration` with `gpt-image-1`, returns raw PNG bytes directly). New providers (FLUX/Imagen) require only registering in `_PROVIDERS` — no call-site changes.
+  - **Smart routing** (`select_provider`) — Gemini for product/lifestyle/photoreal (concept format ∈ image/photo/lifestyle/carousel/reel/video), OpenAI for infographics/illustrations/marketing visuals (format ∈ infographic/illustration/graphic/diagram/chart OR keyword match in title/description). Explicit user override via `provider="gemini"|"openai"` always wins. Default = Gemini.
+  - **Aspect ratio presets** (square / story 9:16 / pin 2:3 / landscape 16:9) — Gemini via prompt injection, OpenAI via native size parameter. Auto-resolved per concept from brief's recommended_platforms.
+  - **5 new endpoints** (`routes/cortex_creatives.py`): single-concept generate, parallel `generate-all` (idempotent), list, regenerate, delete. Storage reuses `cortex.asset_storage` adapter under `<user_id>/creatives/<id>.png`.
+  - **Frontend**: each concept card now has Generate / Regenerate / Open full actions; section header has a gradient "Generate all images" parallel button; auto-polls every 3s while any creative is generating. Provider chip (GEMINI fuchsia / OPENAI emerald) corner-stamped on each rendered image.
+  - **Live verified end-to-end**: "Workshop-to-Wall" (video format) → Gemini, 848×1264 photoreal artisan workshop with brand-coherent overlay; "6-Week Countdown" (graphic format) → OpenAI GPT Image 1, 1024×1536 typography infographic — completely different aesthetics confirming routing works.
+
+- 2026-02-26 (part 109) **🎯 Phase A2 — Creative Brief Generator**
+  - `cortex/creative_brief.py` — `generate_brief()` LLM tool-call with 8-field `record_creative_brief` schema. Auto-invoked from asset pipeline step 3b. Three endpoints (POST generate, GET fetch with lazy backfill, GET list for future Campaign Library).
+  - `CreativeBriefPanel.jsx` — full-width fuchsia-gradient surface below Intelligence + Review. Live verified on `craftersmarket.org`: brief in ~5s with 87% confidence — concrete numbers, audience demographics, messaging angles, 6 platforms ranked correctly, content plan, named creative concepts.
+
+- 2026-02-26 (part 108) **📦 Phase A1 — Asset Upload Center + Intelligence + Marketing Review Engine**
+  - `cortex/asset_storage.py` — Storage adapter (LocalDiskStorage today, S3/R2 drop-in tomorrow). 20MB cap, MIME whitelist (PDF/JPG/PNG/WebP).
+  - `cortex/asset_extraction.py` — File-type dispatcher. PDF via PyMuPDF, images via Pillow, URLs via httpx + HTML strip. Extensible registry.
+  - `cortex/asset_intelligence.py` — Two LLM tool-calls: marketing intelligence + marketing review (6 scores). Auto-writes summary into Cortex Memory.
+  - `routes/cortex_assets.py` — 6 endpoints with status lifecycle (queued → extracting → analyzing → complete/failed). `pages/dashboard/Assets.jsx` — Drag-drop + URL paste + grid + detail. Sidebar entry added.
+  - Live verified: craftersmarket.org → 68/100 with consultant-grade weaknesses; tech PDF → 18/100 (tough-consultant behavior confirmed).
+
+
 - 2026-02-26 (part 107) **⚡ Native Tool-Calling promotion + Mission Detail provenance card**
   - **Tool-call promotion**: `/api/cortex/memory/tool-call-trend` flipped `promotion_ready: true` (95.3% success over 127 calls in 24h, 100% in last 1h). Promoted three remaining `cortex_chat(json_mode=True)` call sites to native `cortex_tool_call(tool=...)`:
     - **`cortex/recommendation_bridge.py`** — bridge synthesis now uses `synthesize_recommendation` tool with strict 8-field schema (finding/root_cause/recommendation/expected_impact/confidence/reasoning/mission_intent/mission_params, all required). Live verified: bridge for `example.com` now produces `source: "llm:claude:tool_call"` with confidence **95%** (vs ~75% via JSON-mode) and richer, schema-strict output.

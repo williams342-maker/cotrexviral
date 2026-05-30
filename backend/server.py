@@ -82,6 +82,7 @@ from routes import (  # noqa: F401
     cortex_analysis_jobs,    # Active Work rail — long-running analysis with job IDs
     cortex_recommendation_bridge,  # Proactive recommendation layer (finding → action)
     cortex_assets,          # Asset Upload Center (Phase A1 — upload + intel + review)
+    cortex_creatives,       # Image Generation (Phase B — Gemini + OpenAI providers)
     cortex_optimization,     # OODA loop endpoints: status, log, run-now
     cortex_onboarding,       # AI-guided first-run onboarding mission (replaces tour)
     mission_loop,    # Event-driven relay: scout→creator→operator→intelligence

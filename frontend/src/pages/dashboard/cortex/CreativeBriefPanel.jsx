@@ -3,7 +3,7 @@ import axios from 'axios';
 import { motion } from 'framer-motion';
 import {
   Compass, Target, Users, Megaphone, Layers, Sparkles, RefreshCw,
-  Loader2, ChevronRight, Hash, Lightbulb,
+  Loader2, Hash, Lightbulb, Wand2, Image as ImageIcon, AlertTriangle,
 } from 'lucide-react';
 import { API } from '../../../context/AuthContext';
 
@@ -48,9 +48,65 @@ const ConfidenceTone = (c) => {
 export default function CreativeBriefPanel({ asset, onChanged }) {
   const brief = asset?.brief;
   const [busy, setBusy] = useState(false);
+  const [creatives, setCreatives] = useState([]);
+  const [generatingIdx, setGeneratingIdx] = useState(null);
+  const [generatingAll, setGeneratingAll] = useState(false);
   const animate = ['queued', 'extracting', 'analyzing'].includes(asset?.status);
 
-  const regenerate = async () => {
+  const loadCreatives = React.useCallback(async () => {
+    if (!brief?.id) return;
+    try {
+      const r = await axios.get(
+        `${API}/cortex/creatives?brief_id=${brief.id}`,
+        { withCredentials: true });
+      setCreatives(r.data?.creatives || []);
+    } catch (_e) { setCreatives([]); }
+  }, [brief?.id]);
+
+  React.useEffect(() => { loadCreatives(); }, [loadCreatives]);
+
+  // Poll while any creative is mid-generation.
+  React.useEffect(() => {
+    const busy = creatives.some((c) => c.status === 'generating');
+    if (!busy) return undefined;
+    const id = setInterval(loadCreatives, 3000);
+    return () => clearInterval(id);
+  }, [creatives, loadCreatives]);
+
+  const creativeForIdx = (i) =>
+    creatives.find((c) => c.concept_index === i && c.status !== 'deleted');
+
+  const generateConcept = async (idx) => {
+    setGeneratingIdx(idx);
+    try {
+      await axios.post(
+        `${API}/cortex/briefs/${brief.id}/concepts/${idx}/generate`,
+        {}, { withCredentials: true });
+      await loadCreatives();
+    } catch (_e) {
+      // surfaced in the row's `failed` state on next poll
+    } finally { setGeneratingIdx(null); }
+  };
+
+  const generateAll = async () => {
+    setGeneratingAll(true);
+    try {
+      await axios.post(`${API}/cortex/briefs/${brief.id}/generate-all`,
+                          {}, { withCredentials: true });
+      await loadCreatives();
+    } catch (_e) { /* */ }
+    finally { setGeneratingAll(false); }
+  };
+
+  const regenerate = async (creativeId) => {
+    try {
+      await axios.post(`${API}/cortex/creatives/${creativeId}/regenerate`,
+                          {}, { withCredentials: true });
+      await loadCreatives();
+    } catch (_e) { /* */ }
+  };
+
+  const regenerateBrief = async () => {
     setBusy(true);
     try {
       await axios.post(`${API}/cortex/assets/${asset.id}/brief`,
@@ -75,7 +131,7 @@ export default function CreativeBriefPanel({ asset, onChanged }) {
             className="rounded-xl border border-white/5 bg-white/[0.02] p-4 text-sm text-zinc-400 text-center">
         <Compass size={18} className="text-violet-300 mx-auto mb-2" />
         Creative Brief hasn't been generated for this asset yet.
-        <button onClick={regenerate} disabled={busy}
+        <button onClick={regenerateBrief} disabled={busy}
                 data-testid="brief-generate-btn"
                 className="block mx-auto mt-3 text-[12px] font-semibold px-3 py-1.5 rounded-md bg-violet-500/20 hover:bg-violet-500/30 text-violet-200 border border-violet-500/40 transition disabled:opacity-50">
           {busy ? 'Generating…' : 'Generate brief'}
@@ -105,7 +161,7 @@ export default function CreativeBriefPanel({ asset, onChanged }) {
                 className={`text-[10px] uppercase tracking-wider font-bold ${tone.text}`}>
             {conf}% confidence
           </span>
-          <button onClick={regenerate} disabled={busy}
+          <button onClick={regenerateBrief} disabled={busy}
                   data-testid="brief-regenerate-btn"
                   className="text-[11px] font-semibold px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-zinc-300 transition flex items-center gap-1 disabled:opacity-50">
             <RefreshCw size={10} className={busy ? 'animate-spin' : ''} /> Regenerate
@@ -239,32 +295,134 @@ export default function CreativeBriefPanel({ asset, onChanged }) {
         </div>
       )}
 
-      {/* Creative concepts */}
+      {/* Creative concepts — now with one-click image generation */}
       {brief.creative_concepts?.length > 0 && (
         <div data-testid="brief-concepts">
-          <div className="text-[9.5px] uppercase tracking-wider text-violet-300 font-semibold mb-1.5 flex items-center gap-1">
-            <Sparkles size={10} /> Creative concepts
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="text-[9.5px] uppercase tracking-wider text-violet-300 font-semibold flex items-center gap-1">
+              <Sparkles size={10} /> Creative concepts
+            </div>
+            <button onClick={generateAll} disabled={generatingAll}
+                    data-testid="generate-all-btn"
+                    className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-400 hover:to-fuchsia-400 text-white shadow-md shadow-violet-500/20 transition flex items-center gap-1 disabled:opacity-50">
+              {generatingAll
+                ? <><Loader2 size={10} className="animate-spin" /> Generating all…</>
+                : <><Wand2 size={10} /> Generate all images</>}
+            </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
-            {brief.creative_concepts.map((c, i) => (
-              <div key={i}
-                    className="rounded-md bg-violet-500/[0.05] border border-violet-500/15 p-2">
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className="text-[12px] text-zinc-100 font-semibold truncate">{c.title}</span>
-                  {c.format && (
-                    <span className="text-[9.5px] uppercase tracking-wider text-violet-300 font-bold px-1.5 py-0.5 rounded bg-violet-500/15 border border-violet-500/30 shrink-0">
-                      {c.format}
-                    </span>
-                  )}
-                </div>
-                <div className="text-[11.5px] text-zinc-300 leading-snug">
-                  {c.description}
-                </div>
-              </div>
-            ))}
+            {brief.creative_concepts.map((c, i) => {
+              const cr = creativeForIdx(i);
+              return (
+                <ConceptCard key={i}
+                              concept={c} idx={i}
+                              creative={cr}
+                              busy={generatingIdx === i}
+                              onGenerate={() => generateConcept(i)}
+                              onRegenerate={() => cr && regenerate(cr.id)} />
+              );
+            })}
           </div>
         </div>
       )}
     </motion.div>
+  );
+}
+
+
+
+function ConceptCard({ concept, idx, creative, busy, onGenerate, onRegenerate }) {
+  const status = creative?.status;
+  const fileUrl = creative?.file_url;
+  const generating = status === 'generating' || busy;
+  const failed = status === 'failed';
+  const complete = status === 'complete' && fileUrl;
+  const provider = creative?.provider;
+  const providerTone = provider === 'openai'
+    ? 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30'
+    : 'text-fuchsia-300 bg-fuchsia-500/15 border-fuchsia-500/30';
+
+  // Stream the image through the auth-scoped /assets/file route. The
+  // backend's storage adapter publishes file_url already prefixed with
+  // /api/cortex/assets/file/<user_id>/creatives/<id>.png so we just
+  // prepend REACT_APP_BACKEND_URL when needed.
+  const imgSrc = fileUrl ? (fileUrl.startsWith('http')
+    ? fileUrl
+    : `${process.env.REACT_APP_BACKEND_URL}${fileUrl}`) : null;
+
+  return (
+    <div data-testid={`concept-card-${idx}`}
+          className="rounded-md bg-violet-500/[0.05] border border-violet-500/15 p-2.5 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[12px] text-zinc-100 font-semibold truncate">{concept.title}</span>
+        {concept.format && (
+          <span className="text-[9.5px] uppercase tracking-wider text-violet-300 font-bold px-1.5 py-0.5 rounded bg-violet-500/15 border border-violet-500/30 shrink-0">
+            {concept.format}
+          </span>
+        )}
+      </div>
+      <div className="text-[11.5px] text-zinc-300 leading-snug">
+        {concept.description}
+      </div>
+
+      {/* Image surface */}
+      {complete && imgSrc && (
+        <div className="relative rounded-md overflow-hidden border border-white/10 bg-black/30">
+          <img src={imgSrc} alt={concept.title}
+                data-testid={`concept-image-${idx}`}
+                className="w-full aspect-square object-cover" />
+          <span className={`absolute top-1 left-1 text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded border ${providerTone}`}>
+            {provider}
+          </span>
+        </div>
+      )}
+      {generating && (
+        <div data-testid={`concept-generating-${idx}`}
+              className="rounded-md border border-violet-500/20 bg-violet-500/[0.05] aspect-square flex flex-col items-center justify-center text-violet-300">
+          <Loader2 size={20} className="animate-spin mb-1" />
+          <span className="text-[11px]">Generating image…</span>
+          <span className="text-[9.5px] text-zinc-500 mt-0.5">~30-60s</span>
+        </div>
+      )}
+      {failed && (
+        <div data-testid={`concept-failed-${idx}`}
+              className="rounded-md border border-rose-500/30 bg-rose-500/[0.06] p-2 text-[11px] text-rose-200">
+          <AlertTriangle size={11} className="inline mr-1" />
+          Generation failed. <span className="text-zinc-500 font-mono">{(creative?.error || '').slice(0, 80)}</span>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 pt-1">
+        {!complete && !generating && (
+          <button onClick={onGenerate}
+                  data-testid={`concept-generate-${idx}`}
+                  className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-violet-500/20 hover:bg-violet-500/30 text-violet-200 border border-violet-500/40 transition flex items-center gap-1">
+            <Wand2 size={10} /> Generate image
+          </button>
+        )}
+        {complete && (
+          <>
+            <button onClick={onRegenerate}
+                    data-testid={`concept-regenerate-${idx}`}
+                    className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-zinc-300 transition flex items-center gap-1">
+              <RefreshCw size={9} /> Regenerate
+            </button>
+            <a href={imgSrc} target="_blank" rel="noreferrer"
+                data-testid={`concept-open-${idx}`}
+                className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-zinc-300 transition flex items-center gap-1">
+              <ImageIcon size={9} /> Open full
+            </a>
+          </>
+        )}
+        {failed && (
+          <button onClick={onGenerate}
+                  data-testid={`concept-retry-${idx}`}
+                  className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-rose-500/15 hover:bg-rose-500/25 text-rose-200 border border-rose-500/30 transition flex items-center gap-1">
+            <RefreshCw size={9} /> Retry
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
