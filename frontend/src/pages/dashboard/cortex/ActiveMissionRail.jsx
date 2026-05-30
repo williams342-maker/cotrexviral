@@ -49,7 +49,11 @@ const MissionTile = ({ m, onClick }) => {
 
   return (
     <button onClick={onClick} data-testid={`active-mission-${m.id}`}
-            className="w-full text-left rounded-xl border border-violet-500/15 hover:border-violet-500/35 bg-gradient-to-br from-violet-500/[0.04] to-fuchsia-500/[0.02] p-3 transition group">
+            className={`w-full text-left rounded-xl border p-3 transition group ${
+              m.demo
+                ? 'border-amber-400/30 hover:border-amber-400/50 bg-gradient-to-br from-amber-500/[0.06] to-amber-500/[0.02]'
+                : 'border-violet-500/15 hover:border-violet-500/35 bg-gradient-to-br from-violet-500/[0.04] to-fuchsia-500/[0.02]'
+            }`}>
       {/* Title row */}
       <div className="flex items-start gap-2 mb-2">
         <span className={`shrink-0 w-7 h-7 rounded-md bg-white/[0.04] border border-white/5 flex items-center justify-center ${tone}`}>
@@ -60,6 +64,12 @@ const MissionTile = ({ m, onClick }) => {
             {m.title}
           </div>
           <div className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5 flex items-center gap-1.5">
+            {m.demo && (
+              <span data-testid="demo-mission-badge"
+                    className="px-1 py-px rounded-sm text-[9px] font-bold bg-amber-500/20 text-amber-200 border border-amber-400/40">
+                DEMO
+              </span>
+            )}
             <span>{(m.mission_type || 'mission').replace('_', ' ')}</span>
             {m.autonomy_level != null && (
               <span className="px-1 py-px rounded-sm text-[9px] font-bold bg-violet-500/15 text-violet-300 border border-violet-500/25">

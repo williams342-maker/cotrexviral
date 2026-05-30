@@ -116,6 +116,48 @@ async def cortex_active_missions(request: Request, limit: int = 6):
 
     out: list[dict] = []
     async for m in cur:
+        # Demo missions short-circuit phase inference + progress and
+        # use their `demo_phase_idx` (set by /onboarding/demo-tick) so
+        # the rail animates while the user reads the lifecycle narration.
+        if m.get("demo"):
+            from routes.cortex_onboarding import _DEMO_PHASES
+            idx = int(m.get("demo_phase_idx") or 0)
+            ph = _DEMO_PHASES[min(idx, len(_DEMO_PHASES) - 1)]
+            out.append({
+                "id":             m["id"],
+                "title":          m.get("title") or "Demo mission",
+                "mission_type":   m.get("mission_type") or "seller_acquisition",
+                "status":         "running",
+                "autonomy_level": m.get("autonomy_level"),
+                "created_at":     _iso(m.get("created_at")),
+                "demo":           True,
+                "progress": {
+                    "current":     int(round(ph["pct"] * (m.get("target") or 10) / 100)),
+                    "target":      int(m.get("target") or 10),
+                    "pct":         int(ph["pct"]),
+                    "eta_days":    0,
+                    "confidence":  0.95,
+                },
+                "phase": {
+                    "key":         ph["key"],
+                    "label":       ph["label"],
+                    "next_label":  _DEMO_PHASES[min(idx + 1, len(_DEMO_PHASES) - 1)]["label"],
+                    "stages":      {},
+                    "leads_total": 0,
+                },
+                "last_action": {
+                    "label":      f"Demo · {ph['label'].lower()} tick",
+                    "summary":    "Showing how a real mission would advance — no outreach is fired.",
+                    "created_at": _iso(datetime.now(timezone.utc)),
+                    "source":     "demo",
+                },
+                "next_action": {
+                    "label":       _DEMO_PHASES[min(idx + 1, len(_DEMO_PHASES) - 1)]["label"],
+                    "description": "Cortex narrates each phase as the demo advances.",
+                },
+            })
+            continue
+
         try:
             progress = await compute_progress(m)
         except Exception:

@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
   Sparkles, Loader2, PanelRightClose, PanelRightOpen, PanelLeftOpen, GripVertical, Search,
+  Compass,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { API } from '../../context/AuthContext';
@@ -14,6 +15,7 @@ import Composer from './cortex/Composer';
 import PhaseIndicator from './cortex/PhaseIndicator';
 import MemorySearch from './cortex/MemorySearch';
 import ConversationHistory from './cortex/ConversationHistory';
+import OnboardingOrchestrator from './cortex/OnboardingOrchestrator';
 import useResizableRail from '../../hooks/useResizableRail';
 
 /* /dashboard — the Conversational Command Center.
@@ -62,6 +64,10 @@ const CommandCenter = () => {
     if (typeof window === 'undefined') return false;
     return localStorage.getItem('cortex-history-open') === '1';
   });
+  // Onboarding state
+  const [onbReplayCounter, setOnbReplayCounter] = useState(0);
+  const [onbGoalSignal, setOnbGoalSignal] = useState(0);
+  const [onbLastUserMsg, setOnbLastUserMsg] = useState('');
 
   const rail = useResizableRail({
     key: 'cortex-right-rail',
@@ -209,6 +215,20 @@ const CommandCenter = () => {
   const send = async () => {
     const msg = draft.trim();
     if (!msg || sending) return;
+
+    // "Show me around" — manual replay trigger. Bumps onboarding without
+    // sending to the LLM (saves cost + is the persistent replay handle).
+    if (/^\s*show\s+me\s+around\s*[.!?]?\s*$/i.test(msg)) {
+      setDraft('');
+      setOnbReplayCounter((c) => c + 1);
+      return;
+    }
+
+    // Signal onboarding orchestrator so it can capture the user's goal
+    // during the `set_goal` step.
+    setOnbLastUserMsg(msg);
+    setOnbGoalSignal((s) => s + 1);
+
     setSending(true);
     setPhase({ phase: 'classifying', label: PHASE_COPY.classifying });
     setPhaseHistory([{ phase: 'classifying', label: PHASE_COPY.classifying }]);
@@ -402,6 +422,12 @@ const CommandCenter = () => {
                   className="text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/5 transition flex items-center gap-1.5">
             <Search size={11} /> Search memory
           </button>
+          <button onClick={() => setOnbReplayCounter((c) => c + 1)}
+                  data-testid="onboarding-replay-btn"
+                  title="Replay the Cortex onboarding walkthrough"
+                  className="text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-violet-500/10 hover:bg-violet-500/20 text-violet-200 border border-violet-500/30 transition flex items-center gap-1.5">
+            <Compass size={11} /> Show me around
+          </button>
           <button onClick={rail.toggle} data-testid="rail-toggle-btn"
                   title={rail.collapsed ? 'Show rail' : 'Hide rail'}
                   className="w-8 h-8 rounded-md bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/5 transition flex items-center justify-center">
@@ -513,6 +539,16 @@ const CommandCenter = () => {
       </div>
 
       <MemorySearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <OnboardingOrchestrator
+        replayCounter={onbReplayCounter}
+        goalSubmittedSignal={onbGoalSignal}
+        lastUserMessage={onbLastUserMsg}
+        onCommandeerComposer={() => {
+          // Auto-focus the composer when onboarding asks for input.
+          const ta = document.querySelector('[data-testid="cortex-composer"] textarea');
+          if (ta) ta.focus();
+        }}
+      />
     </DashboardLayout>
   );
 };
