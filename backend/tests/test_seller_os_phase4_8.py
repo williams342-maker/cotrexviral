@@ -25,7 +25,7 @@ def _run(coro):
 
 
 def _uid() -> str:
-    return requests.get(f"{API_URL}/api/auth/me", headers=HEADERS, timeout=10).json()["user_id"]
+    return requests.get(f"{API_URL}/api/auth/me", headers=HEADERS, timeout=30).json()["user_id"]
 
 
 @pytest.fixture
@@ -276,3 +276,94 @@ class TestChurnRiskScoring:
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["scanned"] >= 3
+
+    def test_cron_auto_advances_due_workflow_steps(self, user_id):
+        """Phase 8.5 — `auto_advance_due_workflows` ticks workflow steps
+        whose scheduled_at is >24h past. Verifies step 2 (nudge_message)
+        advances and step 3 (operator_alert) emits a retention alert."""
+        from routes.seller_retention_intel import auto_advance_due_workflows
+        # Seed a high-risk lead → workflow launches with step 1 auto-executed,
+        # steps 2+3 pending.
+        lead = _seed_lead(
+            user_id, stage="active",
+            updated_at=datetime.now(timezone.utc) - timedelta(days=85),
+            onboarded_at=datetime.now(timezone.utc) - timedelta(days=92),
+            seller_score=25, socials={},
+        )
+        requests.post(
+            f"{API_URL}/api/seller-retention/intel/score",
+            json={"lead_id": lead["id"]}, headers=HEADERS, timeout=90,
+        )
+
+        # Back-date both remaining steps so they look 25h overdue.
+        async def backdate():
+            db = _mongo()
+            wf = await db.seller_retention_workflows.find_one(
+                {"user_id": user_id, "lead_id": lead["id"]})
+            past = (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat()
+            new_steps = []
+            for s in wf["steps"]:
+                if s["status"] == "pending":
+                    s["scheduled_at"] = past
+                new_steps.append(s)
+            await db.seller_retention_workflows.update_one(
+                {"id": wf["id"]}, {"$set": {"steps": new_steps}})
+            return wf["id"]
+        wf_id = _run(backdate())
+
+        # First cron run → advances step 2 (nudge_message).
+        summary = _run(auto_advance_due_workflows())
+        assert summary["advanced_steps"] >= 1
+
+        async def check_one():
+            db = _mongo()
+            wf = await db.seller_retention_workflows.find_one({"id": wf_id})
+            nudge = [s for s in wf["steps"] if s["step"] == "nudge_message"][0]
+            assert nudge["status"] == "ok"
+            assert "cron" in (nudge.get("detail") or "")
+        _run(check_one())
+
+        # Back-date the still-pending step 3 again so the next run picks it up.
+        async def backdate_two():
+            db = _mongo()
+            wf = await db.seller_retention_workflows.find_one({"id": wf_id})
+            past = (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat()
+            new_steps = []
+            for s in wf["steps"]:
+                if s["status"] == "pending":
+                    s["scheduled_at"] = past
+                new_steps.append(s)
+            await db.seller_retention_workflows.update_one(
+                {"id": wf_id}, {"$set": {"steps": new_steps}})
+        _run(backdate_two())
+        _run(auto_advance_due_workflows())
+
+        async def check_complete():
+            db = _mongo()
+            wf = await db.seller_retention_workflows.find_one({"id": wf_id})
+            assert wf["status"] == "complete"
+            # Step 3 (operator_alert) should have written a retention_alerts row.
+            alert = await db.retention_alerts.find_one(
+                {"user_id": user_id, "lead_id": lead["id"], "workflow_id": wf_id})
+            assert alert is not None
+            assert alert["severity"] == "at_risk"
+        _run(check_complete())
+
+    def test_cron_skips_steps_not_yet_due(self, user_id):
+        """A freshly-launched workflow with step scheduled_at in the future
+        should NOT advance on cron tick."""
+        from routes.seller_retention_intel import auto_advance_due_workflows
+        lead = _seed_lead(
+            user_id, stage="active",
+            updated_at=datetime.now(timezone.utc) - timedelta(days=85),
+            onboarded_at=datetime.now(timezone.utc) - timedelta(days=92),
+            seller_score=25, socials={},
+        )
+        requests.post(
+            f"{API_URL}/api/seller-retention/intel/score",
+            json={"lead_id": lead["id"]}, headers=HEADERS, timeout=90,
+        )
+        # Default scheduled_at offsets are 0h, 24h, 48h from now — so
+        # without back-dating, steps 2+3 are NOT yet due.
+        summary = _run(auto_advance_due_workflows())
+        assert summary["advanced_steps"] == 0

@@ -299,6 +299,14 @@ async def start_scheduler():
     except Exception:
         logger.exception("scheduler: failed to register seller_retention_scan")
 
+    # Seller OS — retention workflow auto-advance (Phase 8). Hourly scan
+    # that ticks workflow steps whose scheduled_at is >24h past.
+    try:
+        from routes.seller_retention_intel import register_retention_workflow_cron
+        register_retention_workflow_cron(scheduler)
+    except Exception:
+        logger.exception("scheduler: failed to register seller_retention_workflow_advance")
+
     scheduler.start()
     logger.info("scheduler: started (worker=%s, every 60s)", WORKER_ID)
 

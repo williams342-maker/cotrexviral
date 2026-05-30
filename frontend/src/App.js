@@ -38,12 +38,10 @@ import AutonomyControl from './pages/dashboard/AutonomyControl';
 import SellerMissionControl from './pages/dashboard/seller/SellerMissionControl';
 import SellerDiscovery from './pages/dashboard/seller/SellerDiscovery';
 import QualifiedSellers from './pages/dashboard/seller/QualifiedSellers';
-import {
-  SellerConversationsLive as SellerConversations,
-  SellerOnboardingLive as SellerOnboarding,
-  SellerRetentionLive as SellerRetention,
-  SellerAnalyticsLive as SellerAnalytics,
-} from './pages/dashboard/seller/SellerLifecycle';
+import SellerConversations from './pages/dashboard/seller/Conversations';
+import SellerOnboarding from './pages/dashboard/seller/Onboarding';
+import SellerRetention from './pages/dashboard/seller/Retention';
+import SellerAnalytics from './pages/dashboard/seller/Analytics';
 import Memory from './pages/dashboard/Memory';
 import Approvals from './pages/dashboard/Approvals';
 import Trends from './pages/dashboard/Trends';

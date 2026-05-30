@@ -354,3 +354,96 @@ async def advance_workflow(workflow_id: str, request: Request):
             {"$set": {"status": "complete"}},
         )
     return {"workflow_id": workflow_id, "advanced_step": step["step"], "status": "ok"}
+
+
+# --- Cron — auto-advance retention workflows ------------------------
+async def auto_advance_due_workflows() -> dict:
+    """Scan running workflows. For each, advance the OLDEST pending step
+    when its scheduled_at is >24h past. Step 2 (nudge_message) is a stub
+    that just marks 'ok' with a synthetic detail line. Step 3
+    (operator_alert) writes a HITL retention alert row so the inbox bell
+    fires. Idempotent — running this twice in the same window is a no-op
+    because steps already marked 'ok' are skipped.
+    """
+    now = _now_utc()
+    cutoff = now - timedelta(hours=24)
+    advanced = 0
+    completed = 0
+    cursor = db.seller_retention_workflows.find({"status": "running"})
+    async for wf in cursor:
+        try:
+            idx = next(
+                (i for i, s in enumerate(wf["steps"]) if s["status"] == "pending"),
+                None,
+            )
+            if idx is None:
+                await db.seller_retention_workflows.update_one(
+                    {"id": wf["id"]}, {"$set": {"status": "complete"}})
+                completed += 1
+                continue
+
+            step = wf["steps"][idx]
+            sched = step.get("scheduled_at")
+            # Step scheduled_at is stored as ISO string; coerce to datetime.
+            sched_dt = None
+            if isinstance(sched, str):
+                try:
+                    sched_dt = datetime.fromisoformat(sched.replace("Z", "+00:00"))
+                except Exception:
+                    sched_dt = None
+            elif isinstance(sched, datetime):
+                sched_dt = sched if sched.tzinfo else sched.replace(tzinfo=timezone.utc)
+            if sched_dt is None or sched_dt > cutoff:
+                continue   # not yet due
+
+            detail = f"Step '{step['step']}' executed by cron"
+            updates = {
+                f"steps.{idx}.status":      "ok",
+                f"steps.{idx}.executed_at": now.isoformat(),
+                f"steps.{idx}.detail":      detail,
+            }
+
+            # Step-specific side effect.
+            if step["step"] == "operator_alert":
+                await db.retention_alerts.insert_one({
+                    "id":         uuid.uuid4().hex,
+                    "user_id":    wf["user_id"],
+                    "lead_id":    wf["lead_id"],
+                    "severity":   "at_risk",
+                    "reason":     f"Retention workflow exhausted · score {wf.get('score', 0):.0f}/100",
+                    "score":      wf.get("score"),
+                    "workflow_id": wf["id"],
+                    "created_at": now,
+                })
+
+            await db.seller_retention_workflows.update_one(
+                {"id": wf["id"]}, {"$set": updates})
+            advanced += 1
+
+            # If last step just completed, flip status.
+            w2 = await db.seller_retention_workflows.find_one({"id": wf["id"]})
+            if all(s["status"] == "ok" for s in w2["steps"]):
+                await db.seller_retention_workflows.update_one(
+                    {"id": wf["id"]}, {"$set": {"status": "complete"}})
+                completed += 1
+        except Exception:
+            logger.exception("retention cron: failed advancing wf=%s", wf.get("id"))
+
+    return {"advanced_steps": advanced, "completed_workflows": completed,
+            "scanned_at": now.isoformat()}
+
+
+def register_retention_workflow_cron(scheduler) -> None:
+    """Hourly scan for due retention-workflow steps. Hourly cadence keeps
+    the 24h SLA tight even if the pod restarts during the day."""
+    from apscheduler.triggers.interval import IntervalTrigger
+    if scheduler.get_job("seller_retention_workflow_advance"):
+        return
+    scheduler.add_job(
+        auto_advance_due_workflows,
+        trigger=IntervalTrigger(hours=1),
+        id="seller_retention_workflow_advance",
+        max_instances=1,
+        coalesce=True,
+        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=3),
+    )

@@ -35,6 +35,27 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-05-30 (part 84) **🟢 Refactor cleanup — seller pages split + retention cron + sidebar fix**
+
+  **A. Split `SellerLifecycle.jsx` (712 LOC) into 4 focused route files**
+  - NEW: `pages/dashboard/seller/Conversations.jsx`, `Onboarding.jsx`, `Retention.jsx`, `Analytics.jsx`
+  - NEW: `pages/dashboard/seller/_shared.js` (CHANNEL_ICONS + EVENT_TONE constants used by Conversations)
+  - DELETED: `SellerLifecycle.jsx` (superseded). App.js routes updated with `Seller*` aliased imports (avoids collision with the top-level `Onboarding` and `Analytics` page names).
+
+  **B. Cron-wire retention workflow auto-advance**
+  - `routes/seller_retention_intel.auto_advance_due_workflows()` — hourly scan that walks every `status=running` row, picks the OLDEST `status=pending` step, and marks it `ok` when `scheduled_at` is >24h past. Step `operator_alert` also writes a `retention_alerts` row (severity=at_risk, workflow_id stamped) so the inbox bell fires. When the last step flips to `ok`, the workflow status flips to `complete`.
+  - `register_retention_workflow_cron(scheduler)` — `IntervalTrigger(hours=1)`, `seller_retention_workflow_advance` job id. Idempotent. Wired into `routes/scheduler.py` startup right after the heuristic retention scan.
+  - Tests: `test_cron_auto_advances_due_workflow_steps` (back-dates pending steps then asserts step 2 → ok, then step 3 → ok + retention_alert row + workflow.status=complete) + `test_cron_skips_steps_not_yet_due` (fresh workflow with future scheduled_at → 0 advances).
+
+  **C. Sidebar dual-highlight fix**
+  - `components/DashboardLayout.jsx` — added `end` prop to the sub-route `<NavLink>`. Previously `/dashboard/seller-os` (Mission Control) prefix-matched ALL `/dashboard/seller-os/*` URLs and stayed purple alongside the active sub-route. With `end`, Mission Control only matches the exact path so Retention / Conversations / etc. own the highlight cleanly.
+
+  **D. Test infra hardening**
+  - Bumped `_uid()` request timeout 10s → 30s in `test_seller_os_phase4_8.py` to absorb preview-ingress slowness flagged by testing agent in iteration_10. Eliminates the 5-ERROR + 2-FAIL flake observed on back-to-back LLM-heavy runs.
+
+  **Tests**: Phase 4/8 = 12/12 PASS (+2 new cron tests). Phase 1 = 12/12 PASS. Phase 2/3 = 10/10 PASS. **Backend total 34/34 across all Seller-OS phases.** Frontend lint clean. Smoke screenshot confirms sidebar highlights only the active sub-route (Retention shown purple, Mission Control de-tinted).
+
+
 - 2026-05-29 (part 83) **🟣 Seller Acquisition OS — Phase 4 (Offer Artifacts) + Phase 8 (Churn Intel)**
 
   **Phase 4 — AI personalized offer artifacts with downloadable audits**

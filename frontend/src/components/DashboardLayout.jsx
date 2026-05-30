@@ -211,6 +211,7 @@ const DashboardLayout = ({ children, title, subtitle, headerExtra }) => {
                           <NavLink
                             key={child.to}
                             to={child.to}
+                            end
                             data-testid={`nav-${section.id}-${child.label.toLowerCase()}`}
                             className={({ isActive }) =>
                               `flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all ${
