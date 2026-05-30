@@ -88,31 +88,46 @@ _DEFAULT_INTENT = {
 }
 
 
-async def build_bridge_from_job(job_id: str) -> Optional[dict]:
+async def build_bridge_from_job(job_id: str, *, pushback: Optional[str] = None) -> Optional[dict]:
     """Idempotent — returns existing bridge if one is already on file
     for this job, otherwise generates a new one via the LLM and
     persists it. Returns None when the job doesn't exist or isn't
-    completed."""
+    completed.
+
+    When `pushback` is supplied, the existing bridge is bypassed and a
+    fresh one is synthesized that explicitly factors in the user's
+    feedback. The previous bridge row is replaced (not appended) so
+    the conversation surface always reflects the latest take.
+    """
     from core import db
     j = await db.analysis_jobs.find_one({"id": job_id}, {"_id": 0})
     if not j:
         return None
     if j.get("status") not in ("completed", "reviewed", "mission_created"):
         return None
-    # Idempotency: return existing bridge if present.
-    existing = await db.cortex_recommendation_bridges.find_one(
-        {"job_id": job_id}, {"_id": 0})
-    if existing:
-        return existing
+    # Idempotency: return existing bridge if present (only when no
+    # pushback — pushback forces re-synthesis).
+    if not (pushback and pushback.strip()):
+        existing = await db.cortex_recommendation_bridges.find_one(
+            {"job_id": job_id}, {"_id": 0})
+        if existing:
+            return existing
 
-    bridge = await _synthesize_bridge(j)
+    bridge = await _synthesize_bridge(j, pushback=pushback)
     bridge["id"] = uuid.uuid4().hex
     bridge["job_id"] = job_id
     bridge["user_id"] = j.get("user_id")
     bridge["job_type"] = j.get("job_type")
     bridge["target"] = j.get("target")
     bridge["created_at"] = datetime.now(timezone.utc)
+    if pushback and pushback.strip():
+        bridge["pushback"] = pushback.strip()[:800]
     try:
+        # On pushback, replace any prior row so a single bridge always
+        # reflects Cortex's CURRENT take.
+        if pushback and pushback.strip():
+            await db.cortex_recommendation_bridges.delete_many(
+                {"job_id": job_id})
         await db.cortex_recommendation_bridges.insert_one(bridge)
     except Exception:
         logger.exception("recommendation_bridge: persist failed for job %s",
@@ -122,10 +137,15 @@ async def build_bridge_from_job(job_id: str) -> Optional[dict]:
     return bridge
 
 
-async def _synthesize_bridge(job: dict) -> dict:
+async def _synthesize_bridge(job: dict, *, pushback: Optional[str] = None) -> dict:
     """Call the LLM to produce a strict-JSON bridge. Falls back to a
     deterministic synthesizer (no LLM) so the bridge always renders
-    even when the LLM is offline."""
+    even when the LLM is offline.
+
+    When `pushback` is provided (user disagreed with the previous
+    recommendation), it's injected into the prompt as direct user
+    feedback so the LLM re-thinks rather than restating its first take.
+    """
     job_type = job.get("job_type") or "site_scan"
     target = job.get("target") or "your asset"
     metrics = job.get("metrics") or {}
@@ -156,11 +176,24 @@ async def _synthesize_bridge(job: dict) -> dict:
         '}'
     )
 
+    pushback_block = ""
+    if pushback and pushback.strip():
+        pushback_block = (
+            "\n\n=== USER PUSHBACK ON YOUR PREVIOUS RECOMMENDATION ===\n"
+            f"{pushback.strip()[:800]}\n"
+            "\nRe-think the recommendation in light of this feedback. "
+            "Do NOT restate your earlier take — adjust the approach, "
+            "address the user's concern explicitly in `reasoning`, and "
+            "produce a genuinely different recommendation that respects "
+            "their input."
+        )
+
     user_text = (
         f"Analysis job type: {job_type}\n"
         f"Target: {target}\n"
         f"Metrics: {json.dumps(metrics, default=str)[:600]}\n\n"
         f"Report excerpt:\n{report_excerpt[:3500]}"
+        f"{pushback_block}"
     )
 
     try:

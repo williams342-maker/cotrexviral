@@ -334,56 +334,73 @@ async def create_mission_from_job(job_id: str, request: Request):
 
 @api.post("/cortex/analysis-jobs/{job_id}/optimize")
 async def optimize_automatically(job_id: str, request: Request):
-    """Option-A semantics: launch an `seo_auto_fix` mission at L3 that
-    drafts ready-to-apply change records from the SEO scan report.
+    """Job-type-agnostic Optimize Automatically — leverages the
+    Recommendation Bridge to spawn an L3 mission for ANY completed
+    analysis kind.
 
-    L3 means Cortex can act without per-step approval — but irreversible
-    production changes (i.e., actually deploying the rewrites to the
-    user's site) still wait on the CMS connector. Until that ships,
-    this endpoint:
+    Per job_type:
+      • seo_scan         — preserves the original `seo_auto_fix` flow:
+                           drafts ready-to-apply change records via
+                           `cortex.seo_auto_fix.draft_changes_for_job`
+                           so the UI hop lands on an approve-all batch.
+      • site_scan        — L3 `improve_conversions` mission staged for
+                           review (conversion copy / hero rewrites).
+      • competitor_audit — L3 `analyze_competitors` mission with
+                           counter-move drafts queued for approval.
+      • content_audit    — L3 `generate_content_plan` mission with
+                           refresh recommendations.
+      • seller_discovery — L3 `launch_seller_mission` (outreach still
+                           respects the user's compliance settings).
 
-      1) Creates a real `missions` row at autonomy_level=3,
-         mission_type=seo_auto_fix, target=high_priority count.
-      2) Synchronously drafts copy-pasteable change records via
-         `cortex.seo_auto_fix.draft_changes_for_job` (~one Claude call,
-         <20s). Each record lands in `seo_change_records` with
-         status='ready'.
-      3) Returns mission_id + draft counts so the UI can deep-link
-         straight to the approve-all batch.
-
-    Idempotent — second call returns the existing mission and skips
-    redrafting (records persist).
-
-    Only applicable to completed `seo_scan` jobs today; other job
-    types are 400.
+    Every Optimize call reads the bridge's `mission_intent` +
+    `mission_params` so the L3 mission inherits the LLM's structured
+    recommendation. Idempotent: subsequent calls return the existing
+    mission and skip redrafting.
     """
     user = await get_current_user(request)
     j = await db.analysis_jobs.find_one(
         {"id": job_id, "user_id": user.user_id}, {"_id": 0})
     if not j:
         raise HTTPException(404, "Job not found")
-    if j.get("job_type") != "seo_scan":
-        raise HTTPException(400, "Optimize Automatically is only available for SEO scans today.")
     if j["status"] not in ("completed", "reviewed", "mission_created"):
         raise HTTPException(409, f"Job must be completed first (status={j['status']})")
 
-    # Idempotency: if a mission was already auto-fixed from this job,
-    # return it + the existing draft count.
+    job_type = j.get("job_type")
+    if job_type not in JOB_TYPES:
+        raise HTTPException(400, f"Unknown job type: {job_type}")
+
+    # Idempotency: existing mission of the same auto-optimize lineage.
     if j.get("mission_id"):
         m = await db.missions.find_one(
             {"id": j["mission_id"], "user_id": user.user_id}, {"_id": 0})
-        if m and m.get("mission_type") == "seo_auto_fix":
-            ready = await db.seo_change_records.count_documents({
-                "user_id": user.user_id, "mission_id": m["id"],
-                "status":  "ready",
-            })
+        if m and m.get("auto_optimize_meta", {}).get("source") == "bridge":
+            extra: dict = {}
+            if job_type == "seo_scan":
+                extra["drafted"] = await db.seo_change_records.count_documents({
+                    "user_id": user.user_id, "mission_id": m["id"],
+                    "status":  "ready",
+                })
+                extra["ready"] = extra["drafted"]
             return {"mission_id": m["id"], "title": m.get("title"),
-                    "drafted": ready, "ready": ready,
-                    "already_created": True}
+                    "already_created": True, **extra}
 
-    # Build an L3 seo_auto_fix mission. Target = high-priority count
-    # (or fall back to issues_found / 3) so the bar reflects what's
-    # being prepared.
+    # ----- SEO scan keeps the dedicated draft flow ------------------
+    if job_type == "seo_scan":
+        return await _optimize_seo_scan(j, user)
+
+    # ----- All other job types: bridge-driven L3 mission ------------
+    from cortex.recommendation_bridge import build_bridge_from_job
+    bridge = await build_bridge_from_job(job_id)
+    if not bridge:
+        raise HTTPException(500, "Could not synthesize recommendation bridge")
+
+    return await _optimize_via_bridge(j, bridge, user)
+
+
+async def _optimize_seo_scan(j: dict, user) -> dict:
+    """Original SEO-scan auto-fix flow: creates L3 seo_auto_fix mission
+    + synchronously drafts SEO change records ready for batch approve."""
+    job_id = j["id"]
     metrics = j.get("metrics") or {}
     high = int(metrics.get("high_priority", 0)) \
             or max(3, int(metrics.get("issues_found", 0)) // 3)
@@ -397,20 +414,20 @@ async def optimize_automatically(job_id: str, request: Request):
     )
     from routes.missions import _create_mission_core
     mid = await _create_mission_core(
-        user_id=user.user_id,
-        title=title,
-        description=description,
-        metric="fixes_ready",
-        target=high,
-        autonomy_level=3,
+        user_id=user.user_id, title=title, description=description,
+        metric="fixes_ready", target=high, autonomy_level=3,
         teams_assigned=["intelligence", "creator"],
-        mission_type="seo_auto_fix",
-        seller_target_niche=None,
+        mission_type="seo_auto_fix", seller_target_niche=None,
         status="running",
     )
 
-    # Drafting happens synchronously so the UI hop lands on a ready
-    # batch (good UX). One Claude tool-call covers all findings.
+    # Stamp auto_optimize_meta so idempotency works on next call.
+    await db.missions.update_one(
+        {"id": mid}, {"$set": {"auto_optimize_meta": {
+            "source": "bridge", "job_id": job_id, "job_type": "seo_scan",
+        }}},
+    )
+
     from cortex.seo_auto_fix import draft_changes_for_job
     result = await draft_changes_for_job(
         job_id=job_id, mission_id=mid, user_id=user.user_id)
@@ -421,12 +438,82 @@ async def optimize_automatically(job_id: str, request: Request):
     )
 
     return {
-        "mission_id":      mid,
-        "title":           title,
+        "mission_id":      mid, "title": title,
         "drafted":         result.get("drafted", 0),
         "ready":           result.get("ready", 0),
         "report_id":       result.get("report_id"),
         "error":           result.get("error"),
+        "already_created": False,
+    }
+
+
+async def _optimize_via_bridge(j: dict, bridge: dict, user) -> dict:
+    """Generic Optimize flow for non-SEO job types — uses the bridge's
+    mission_intent + recommendation to spawn an L3 mission. Mission
+    starts in `running` status but actual external work is staged for
+    user review until per-intent connectors land."""
+    job_id = j["id"]
+    job_type = j.get("job_type")
+    intent = bridge.get("mission_intent") or "improve_conversions"
+    params = bridge.get("mission_params") or {}
+    recommendation = bridge.get("recommendation") or ""
+
+    # Pull a sensible mission shape from _spec_for_job, then upgrade
+    # autonomy + bake the bridge's recommendation into the description.
+    spec = _spec_for_job(j)
+    spec["autonomy_level"] = 3   # L3 — Cortex acts without per-step approval
+    spec["title"] = (recommendation[:120] if recommendation
+                      else spec["title"])
+    spec["description"] = (
+        f"Auto-launched at L3 from {job_type} job #{job_id[:8]} via "
+        f"Cortex's Recommendation Bridge.\n\n"
+        f"**Recommended action:** {recommendation or '—'}\n\n"
+        f"**Expected impact:** {bridge.get('expected_impact') or '—'}\n\n"
+        f"**Cortex confidence:** {bridge.get('confidence', 0)}%\n\n"
+        "Cortex drafts the work; user-facing changes stage for review "
+        "until the connector for this intent ships."
+    )
+
+    # Honor bridge.mission_params overrides (e.g. niche, target counts).
+    if isinstance(params.get("niche"), str) and not spec.get("seller_target_niche"):
+        spec["seller_target_niche"] = params["niche"]
+    if isinstance(params.get("target"), int) and params["target"] > 0:
+        spec["target"] = params["target"]
+
+    from routes.missions import _create_mission_core
+    mid = await _create_mission_core(
+        user_id=user.user_id,
+        title=spec["title"], description=spec["description"],
+        metric=spec["metric"], target=spec["target"],
+        autonomy_level=spec["autonomy_level"],
+        teams_assigned=spec["teams"], mission_type=spec["mission_type"],
+        seller_target_niche=spec.get("seller_target_niche"),
+        status="running",
+    )
+
+    # Stamp auto_optimize_meta + cross-link to bridge for traceability.
+    await db.missions.update_one(
+        {"id": mid}, {"$set": {"auto_optimize_meta": {
+            "source":       "bridge",
+            "bridge_id":    bridge.get("id"),
+            "job_id":       job_id,
+            "job_type":     job_type,
+            "intent":       intent,
+            "confidence":   bridge.get("confidence"),
+            "recommendation": recommendation[:300],
+        }}},
+    )
+
+    await db.analysis_jobs.update_one(
+        {"id": job_id, "user_id": user.user_id},
+        {"$set": {"mission_id": mid, "status": "mission_created"}},
+    )
+
+    return {
+        "mission_id":      mid,
+        "title":           spec["title"],
+        "intent":          intent,
+        "confidence":      bridge.get("confidence"),
         "already_created": False,
     }
 

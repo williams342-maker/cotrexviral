@@ -3,6 +3,7 @@ import { Sparkles, AlertCircle, ChevronRight, Loader2, TrendingUp, AlertTriangle
 import ActiveMissionRail from './ActiveMissionRail';
 import ActiveWorkRail from './ActiveWorkRail';
 import OptimizationStatus from './OptimizationStatus';
+import ExecutiveInsights from './ExecutiveInsights';
 
 /* OpportunityRail — right sidebar showing AI-surfaced opportunities,
    recommended actions, and recent discoveries. Each card is a
@@ -31,6 +32,11 @@ export const OpportunityRail = ({
 
       {/* Active Work — long-running analyses with real job IDs */}
       <ActiveWorkRail onLaunchScan={onLaunchScan} />
+
+      {/* Executive Insights — recent Cortex Recommendation Bridges
+          sorted by confidence × recency. The single source of truth
+          for "what should I do next?" across all completed analyses. */}
+      <ExecutiveInsights />
 
       {/* Strategic memory header */}
       {(strategy?.summary || (strategy?.goals && strategy.goals.length > 0)) && (

@@ -28,8 +28,10 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import HTTPException, Request
+from pydantic import BaseModel
 
 from core import api, db
 from deps import get_current_user
@@ -56,10 +58,22 @@ async def get_bridge(job_id: str, request: Request):
     return bridge
 
 
+class RegeneratePayload(BaseModel):
+    pushback: Optional[str] = None
+
+
 @api.post("/cortex/recommendation-bridges/{job_id}/regenerate")
-async def regenerate_bridge(job_id: str, request: Request):
+async def regenerate_bridge(job_id: str, payload: RegeneratePayload,
+                              request: Request):
     """Discard the existing bridge and synthesize a fresh one. Useful
-    when the user has pushed back on Cortex's first recommendation."""
+    when the user has pushed back on Cortex's first recommendation —
+    the pushback text is forwarded to the LLM so the new bridge
+    addresses the user's concern explicitly.
+
+    Side-effect: when pushback is supplied AND the job has a
+    conversation_id, posts the regenerated bridge into chat as a new
+    Cortex turn (kind='recommendation_bridge') so the user sees
+    Cortex's revised thinking inline."""
     user = await get_current_user(request)
     j = await db.analysis_jobs.find_one(
         {"id": job_id, "user_id": user.user_id}, {"_id": 0})
@@ -69,12 +83,21 @@ async def regenerate_bridge(job_id: str, request: Request):
         raise HTTPException(409,
                             f"Job must be completed first (status={j.get('status')})")
 
-    await db.cortex_recommendation_bridges.delete_many({"job_id": job_id})
+    pushback = (payload.pushback or "").strip() or None
+    if not pushback:
+        # No pushback → ordinary regenerate (clear existing + resynth).
+        await db.cortex_recommendation_bridges.delete_many({"job_id": job_id})
 
-    from cortex.recommendation_bridge import build_bridge_from_job
-    bridge = await build_bridge_from_job(job_id)
+    from cortex.recommendation_bridge import build_bridge_from_job, post_bridge_to_chat
+    bridge = await build_bridge_from_job(job_id, pushback=pushback)
     if not bridge:
         raise HTTPException(500, "Bridge synthesis failed")
+
+    # When pushback is supplied, surface the revised bridge in chat so
+    # the user immediately sees Cortex's new take.
+    if pushback:
+        await post_bridge_to_chat(job_id)
+
     bridge.pop("_id", None)
     return bridge
 

@@ -213,10 +213,10 @@ function JobCard({ job, onChange }) {
       console.error('optimize auto failed', e?.response?.data);
     }
   };
-  // Optimize Automatically is only wired for SEO scans today (the
-  // drafter only knows how to rewrite title/meta/heading/alt-text).
-  // Other job kinds keep the "Coming soon" affordance.
-  const optimizeEnabled = job.job_type === 'seo_scan';
+  // Optimize Automatically is now job-type-agnostic — every completed
+  // analysis can spawn an L3 mission via the Recommendation Bridge.
+  // SEO scans still get the dedicated draft flow (see backend).
+  const optimizeEnabled = isCompleted;
 
   return (
     <div data-testid={`active-work-job-${job.id}`}
@@ -336,7 +336,7 @@ function JobCard({ job, onChange }) {
             <button onClick={optimizeAuto} disabled={!optimizeEnabled}
                     title={optimizeEnabled
                       ? 'Auto-prepare prioritized fixes for review (L3)'
-                      : 'Available for SEO scans'}
+                      : 'Wait for completion'}
                     data-testid={`active-work-optimize-${job.id}`}
                     className={`text-[10.5px] font-semibold px-2 py-1 rounded-md transition flex items-center gap-1 ${
                       optimizeEnabled

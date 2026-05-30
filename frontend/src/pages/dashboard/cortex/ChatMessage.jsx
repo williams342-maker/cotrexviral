@@ -360,7 +360,7 @@ function AnalysisCompleteCard({ turn }) {
         <button onClick={optimizeAuto} disabled={!optimizeEnabled}
                 title={optimizeEnabled
                   ? 'Auto-prepare prioritized fixes for review (L3)'
-                  : 'Available for SEO scans'}
+                  : 'Available after completion'}
                 data-testid={`chat-analysis-optimize-${turn.job_id}`}
                 className={`text-[10.5px] font-semibold px-2.5 py-1 rounded-md transition flex items-center gap-1 ${
                   optimizeEnabled

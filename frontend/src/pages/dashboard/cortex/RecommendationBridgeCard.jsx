@@ -3,7 +3,7 @@ import axios from 'axios';
 import { motion } from 'framer-motion';
 import {
   Sparkles, FileText, Rocket, MessageSquare, ChevronRight,
-  Lightbulb, AlertCircle, Target, TrendingUp,
+  Lightbulb, AlertCircle, Target, TrendingUp, Loader2,
 } from 'lucide-react';
 import { API } from '../../../context/AuthContext';
 
@@ -49,6 +49,8 @@ const ConfidenceTone = (conf) => {
 export default function RecommendationBridgeCard({ turn }) {
   const bridge = turn?.bridge || {};
   const [busy, setBusy] = useState(null);
+  const [pushbackOpen, setPushbackOpen] = useState(false);
+  const [pushbackText, setPushbackText] = useState('');
 
   if (!bridge.finding && !bridge.recommendation) return null;
 
@@ -66,11 +68,32 @@ export default function RecommendationBridgeCard({ turn }) {
       await axios.post(
         `${API}/cortex/recommendation-bridges/${turn.job_id}/discuss`,
         {}, { withCredentials: true });
-      // Trigger the parent's poll cycle to pull the new Cortex turn.
       window.dispatchEvent(new CustomEvent('cortex:conversation:refresh'));
+      // Auto-open the pushback affordance so the user can immediately
+      // tell Cortex why they disagree.
+      setPushbackOpen(true);
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('discuss failed', e?.response?.data);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const regenerateWithPushback = async () => {
+    const text = pushbackText.trim();
+    if (!text) return;
+    setBusy('regenerate');
+    try {
+      await axios.post(
+        `${API}/cortex/recommendation-bridges/${turn.job_id}/regenerate`,
+        { pushback: text }, { withCredentials: true });
+      setPushbackText('');
+      setPushbackOpen(false);
+      window.dispatchEvent(new CustomEvent('cortex:conversation:refresh'));
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('regenerate with pushback failed', e?.response?.data);
     } finally {
       setBusy(null);
     }
@@ -183,6 +206,42 @@ export default function RecommendationBridgeCard({ turn }) {
           <ChevronRight size={10} />
         </button>
       </div>
+      {/* Pushback affordance — opens after the user clicks Discuss.
+          Submitting routes through POST /regenerate {pushback}, which
+          re-synthesizes the bridge factoring in the user's feedback. */}
+      {pushbackOpen && (
+        <motion.div data-testid="recommendation-bridge-pushback"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mt-3 pt-3 border-t border-cyan-500/20">
+          <div className="text-[10px] uppercase tracking-wider text-cyan-300 font-semibold mb-1.5 flex items-center gap-1">
+            <MessageSquare size={10} /> Tell Cortex what you'd change
+          </div>
+          <textarea value={pushbackText}
+                    onChange={(e) => setPushbackText(e.target.value)}
+                    placeholder="e.g. We tried this last quarter and conversion didn't move — focus on retention instead."
+                    data-testid="recommendation-bridge-pushback-input"
+                    rows={2}
+                    className="w-full text-[12px] text-zinc-100 bg-white/[0.03] border border-white/10 rounded-md px-2.5 py-2 mb-2 focus:outline-none focus:border-cyan-500/40 resize-none" />
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setPushbackOpen(false); setPushbackText(''); }}
+                    data-testid="recommendation-bridge-pushback-cancel"
+                    className="text-[10.5px] font-semibold px-2 py-1 rounded-md hover:bg-white/5 text-zinc-400 hover:text-zinc-200 transition">
+              Never mind
+            </button>
+            <div className="flex-1" />
+            <button onClick={regenerateWithPushback}
+                    disabled={busy === 'regenerate' || !pushbackText.trim()}
+                    data-testid="recommendation-bridge-pushback-submit"
+                    className="text-[10.5px] font-semibold px-2.5 py-1 rounded-md bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-100 border border-cyan-500/40 transition flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed">
+              {busy === 'regenerate'
+                ? <><Loader2 size={10} className="animate-spin" /> Rethinking…</>
+                : <>Regenerate with my feedback <ChevronRight size={9} /></>}
+            </button>
+          </div>
+        </motion.div>
+      )}
     </motion.div>
   );
 }
