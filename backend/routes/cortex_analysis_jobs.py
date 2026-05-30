@@ -332,6 +332,127 @@ async def create_mission_from_job(job_id: str, request: Request):
     return {"mission_id": mid, "title": spec["title"], "already_created": False}
 
 
+@api.post("/cortex/analysis-jobs/{job_id}/optimize")
+async def optimize_automatically(job_id: str, request: Request):
+    """Option-A semantics: launch an `seo_auto_fix` mission at L3 that
+    drafts ready-to-apply change records from the SEO scan report.
+
+    L3 means Cortex can act without per-step approval — but irreversible
+    production changes (i.e., actually deploying the rewrites to the
+    user's site) still wait on the CMS connector. Until that ships,
+    this endpoint:
+
+      1) Creates a real `missions` row at autonomy_level=3,
+         mission_type=seo_auto_fix, target=high_priority count.
+      2) Synchronously drafts copy-pasteable change records via
+         `cortex.seo_auto_fix.draft_changes_for_job` (~one Claude call,
+         <20s). Each record lands in `seo_change_records` with
+         status='ready'.
+      3) Returns mission_id + draft counts so the UI can deep-link
+         straight to the approve-all batch.
+
+    Idempotent — second call returns the existing mission and skips
+    redrafting (records persist).
+
+    Only applicable to completed `seo_scan` jobs today; other job
+    types are 400.
+    """
+    user = await get_current_user(request)
+    j = await db.analysis_jobs.find_one(
+        {"id": job_id, "user_id": user.user_id}, {"_id": 0})
+    if not j:
+        raise HTTPException(404, "Job not found")
+    if j.get("job_type") != "seo_scan":
+        raise HTTPException(400, "Optimize Automatically is only available for SEO scans today.")
+    if j["status"] not in ("completed", "reviewed", "mission_created"):
+        raise HTTPException(409, f"Job must be completed first (status={j['status']})")
+
+    # Idempotency: if a mission was already auto-fixed from this job,
+    # return it + the existing draft count.
+    if j.get("mission_id"):
+        m = await db.missions.find_one(
+            {"id": j["mission_id"], "user_id": user.user_id}, {"_id": 0})
+        if m and m.get("mission_type") == "seo_auto_fix":
+            ready = await db.seo_change_records.count_documents({
+                "user_id": user.user_id, "mission_id": m["id"],
+                "status":  "ready",
+            })
+            return {"mission_id": m["id"], "title": m.get("title"),
+                    "drafted": ready, "ready": ready,
+                    "already_created": True}
+
+    # Build an L3 seo_auto_fix mission. Target = high-priority count
+    # (or fall back to issues_found / 3) so the bar reflects what's
+    # being prepared.
+    metrics = j.get("metrics") or {}
+    high = int(metrics.get("high_priority", 0)) \
+            or max(3, int(metrics.get("issues_found", 0)) // 3)
+    title = f"Auto-fix top SEO issues for {j.get('target') or 'site'}"
+    description = (
+        f"Auto-launched at L3 from SEO scan job #{job_id[:8]}. "
+        f"Drafting {high} prioritized fixes for your review. "
+        "Cortex acts without per-step approval; the rewrites are staged "
+        "in `seo_change_records` ready for batch approve. "
+        "Live deployment waits on the CMS connector."
+    )
+    from routes.missions import _create_mission_core
+    mid = await _create_mission_core(
+        user_id=user.user_id,
+        title=title,
+        description=description,
+        metric="fixes_ready",
+        target=high,
+        autonomy_level=3,
+        teams_assigned=["intelligence", "creator"],
+        mission_type="seo_auto_fix",
+        seller_target_niche=None,
+        status="running",
+    )
+
+    # Drafting happens synchronously so the UI hop lands on a ready
+    # batch (good UX). One Claude tool-call covers all findings.
+    from cortex.seo_auto_fix import draft_changes_for_job
+    result = await draft_changes_for_job(
+        job_id=job_id, mission_id=mid, user_id=user.user_id)
+
+    await db.analysis_jobs.update_one(
+        {"id": job_id, "user_id": user.user_id},
+        {"$set": {"mission_id": mid, "status": "mission_created"}},
+    )
+
+    return {
+        "mission_id":      mid,
+        "title":           title,
+        "drafted":         result.get("drafted", 0),
+        "ready":           result.get("ready", 0),
+        "report_id":       result.get("report_id"),
+        "error":           result.get("error"),
+        "already_created": False,
+    }
+
+
+@api.get("/cortex/analysis-jobs/missions/{mission_id}/changes")
+async def list_seo_change_records(mission_id: str, request: Request):
+    """List the ready-to-apply SEO change records drafted by an
+    seo_auto_fix mission. Frontend renders this as an Approve-All
+    batch on the mission detail page."""
+    user = await get_current_user(request)
+    cur = db.seo_change_records.find(
+        {"user_id": user.user_id, "mission_id": mission_id},
+        {"_id": 0},
+    ).sort("created_at", 1).limit(200)
+    rows = [r async for r in cur]
+    for r in rows:
+        if isinstance(r.get("created_at"), datetime):
+            r["created_at"] = r["created_at"].isoformat()
+    by_status: dict[str, int] = {}
+    for r in rows:
+        s = r.get("status", "unknown")
+        by_status[s] = by_status.get(s, 0) + 1
+    return {"changes": rows, "by_status": by_status,
+            "total": len(rows)}
+
+
 def _spec_for_job(j: dict) -> dict:
     """Build a mission spec from a completed analysis job. Each job
     type has its own translation; metrics from the analysis inform the

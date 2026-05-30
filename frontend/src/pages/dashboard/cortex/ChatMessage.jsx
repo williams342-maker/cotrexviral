@@ -304,6 +304,20 @@ function AnalysisCompleteCard({ turn }) {
       console.error('create mission from chat failed', e?.response?.data);
     }
   };
+  const optimizeAuto = async () => {
+    try {
+      const r = await axios.post(
+        `${API}/cortex/analysis-jobs/${turn.job_id}/optimize`,
+        {}, { withCredentials: true });
+      window.location.href = `/dashboard/missions?id=${r.data.mission_id}&tab=changes`;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('optimize auto failed', e?.response?.data);
+    }
+  };
+  // Optimize Automatically lives behind job_type. seo_scan only today —
+  // matches the backend gate at /analysis-jobs/{id}/optimize.
+  const optimizeEnabled = (turn.job_type || '') === 'seo_scan';
   return (
     <div data-testid={`chat-analysis-complete-${turn.job_id}`}
           className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.05] p-3 mt-1">
@@ -335,10 +349,17 @@ function AnalysisCompleteCard({ turn }) {
                 className="text-[10.5px] font-semibold px-2.5 py-1 rounded-md bg-violet-500/15 hover:bg-violet-500/25 text-violet-200 border border-violet-500/30 transition">
           Create Mission
         </button>
-        <button disabled title="Coming soon"
+        <button onClick={optimizeAuto} disabled={!optimizeEnabled}
+                title={optimizeEnabled
+                  ? 'Auto-prepare prioritized fixes for review (L3)'
+                  : 'Available for SEO scans'}
                 data-testid={`chat-analysis-optimize-${turn.job_id}`}
-                className="text-[10.5px] font-semibold px-2.5 py-1 rounded-md bg-white/5 text-zinc-500 border border-white/10 transition opacity-60 cursor-not-allowed">
-          Optimize Automatically · soon
+                className={`text-[10.5px] font-semibold px-2.5 py-1 rounded-md transition flex items-center gap-1 ${
+                  optimizeEnabled
+                    ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/30'
+                    : 'bg-white/5 text-zinc-500 border border-white/10 opacity-60 cursor-not-allowed'
+                }`}>
+          ⚡ Optimize Automatically
         </button>
       </div>
     </div>

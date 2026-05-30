@@ -253,10 +253,102 @@ async def _run_mock(job_id: str, j: dict) -> dict:
 _RUNNERS = {
     "seo_scan":         _run_seo_scan,
     "seller_discovery": _run_seller_discovery,
-    "site_scan":        _run_mock,
+    "site_scan":        None,                 # set below
     "competitor_audit": _run_mock,
     "content_audit":    _run_mock,
 }
+
+
+# ----------------------------------------------------------- site scan
+async def _run_site_scan(job_id: str, j: dict) -> dict:
+    """REAL site scan — broader than SEO. Looks at UX / brand / trust
+    signals / conversion blockers / content gaps in addition to
+    technical issues. Same plumbing as SEO scan; different prompt."""
+    target = (j.get("target") or "").strip()
+    if not target:
+        raise ValueError("Site scan requires a target URL")
+
+    await _advance(job_id, label="Crawling site",
+                    next_label="Detecting notable elements",
+                    pct=20, sleep_s=1.0)
+    snippet = await _fetch_url_snippet(target)
+
+    await _advance(job_id, label="Detecting notable elements",
+                    next_label="Generating recommendations",
+                    pct=55, sleep_s=0.5)
+
+    report_data = await _run_site_llm(j.get("user_id"), target, snippet)
+
+    await _advance(job_id, label="Generating recommendations",
+                    next_label="Wrapping up",
+                    pct=88, sleep_s=0.3)
+
+    from core import db
+    report = {
+        "id":         uuid.uuid4().hex,
+        "user_id":    j.get("user_id"),
+        "type":       "site_scan",
+        "url":        target,
+        "report":     report_data,
+        "created_at": datetime.now(timezone.utc),
+    }
+    await db.reports.insert_one(report)
+
+    await _advance(job_id, label="Wrapping up", next_label="Done",
+                    pct=100, sleep_s=0.2)
+
+    issues = report_data.get("issues") or []
+    high_pri = [i for i in issues if isinstance(i, dict)
+                  and (i.get("severity") or "").lower() in ("critical", "high")]
+    return {
+        "summary": (report_data.get("summary")
+                    or f"Site scan complete for {target}").strip()[:500],
+        "metrics": {
+            "issues_found":     len(issues),
+            "high_priority":    len(high_pri),
+            "trust_signals":    int(report_data.get("trust_score") or 0),
+            "ux_signals":       int(report_data.get("ux_score") or 0),
+            "recommendations":  len(report_data.get("recommendations") or []),
+        },
+        "result_link": f"/dashboard/reports?id={report['id']}",
+        "report_id":   report["id"],
+    }
+
+
+async def _run_site_llm(user_id: str, url: str, snippet: str) -> dict:
+    """Holistic site analysis — not just SEO. Looks for conversion
+    blockers, trust signals, brand consistency, navigation issues."""
+    try:
+        from routes.ai import _llm_for_user, send_with_usage, _safe_json
+        from emergentintegrations.llm.chat import UserMessage
+        system = (
+            "You are a senior UX + brand + conversion strategist auditing a website. "
+            "Look at the snapshot and identify (a) trust/credibility gaps, "
+            "(b) UX friction or navigation issues, (c) conversion blockers, "
+            "(d) brand consistency issues, (e) technical issues affecting load/render. "
+            "Respond ONLY with valid JSON: "
+            '{"summary": str, '
+            '"issues": [{"category": str, "severity": "critical"|"high"|"medium"|"low", '
+            '"description": str, "impact": str}], '
+            '"trust_score": int 0-100, "ux_score": int 0-100, '
+            '"recommendations": [{"title": str, "rationale": str, "effort": "low"|"medium"|"high"}]}'
+        )
+        chat = await _llm_for_user(user_id, f"site-scan-job-{user_id}", system)
+        raw, _ = await send_with_usage(
+            chat, UserMessage(text=f"URL: {url}\n\nContent snapshot:\n{snippet}"),
+            agent_id="rae", user_id=user_id, model="gpt-5")
+        return _safe_json(raw) or {}
+    except Exception:
+        logger.exception("site_scan: LLM call failed")
+        return {
+            "summary": f"Site scan complete for {url} (LLM unavailable; "
+                        "showing baseline findings only).",
+            "issues": [], "trust_score": 0, "ux_score": 0,
+            "recommendations": [],
+        }
+
+
+_RUNNERS["site_scan"] = _run_site_scan
 
 
 # ----------------------------------------------------------- finalize

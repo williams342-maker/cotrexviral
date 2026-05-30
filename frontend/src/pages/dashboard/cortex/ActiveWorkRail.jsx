@@ -187,13 +187,27 @@ function JobCard({ job, onChange }) {
       const r = await axios.post(
         `${API}/cortex/analysis-jobs/${job.id}/create-mission`,
         {}, { withCredentials: true });
-      // Hop to Mission Control so the user lands on the new mission.
       window.location.href = `/dashboard/missions?id=${r.data.mission_id}`;
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('create mission failed', e?.response?.data);
     }
   };
+  const optimizeAuto = async () => {
+    try {
+      const r = await axios.post(
+        `${API}/cortex/analysis-jobs/${job.id}/optimize`,
+        {}, { withCredentials: true });
+      window.location.href = `/dashboard/missions?id=${r.data.mission_id}&tab=changes`;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('optimize auto failed', e?.response?.data);
+    }
+  };
+  // Optimize Automatically is only wired for SEO scans today (the
+  // drafter only knows how to rewrite title/meta/heading/alt-text).
+  // Other job kinds keep the "Coming soon" affordance.
+  const optimizeEnabled = job.job_type === 'seo_scan';
 
   return (
     <div data-testid={`active-work-job-${job.id}`}
@@ -310,10 +324,17 @@ function JobCard({ job, onChange }) {
                     className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-violet-500/15 hover:bg-violet-500/25 text-violet-200 border border-violet-500/30 transition">
               {job.create_label}
             </button>
-            <button disabled title="Coming soon"
+            <button onClick={optimizeAuto} disabled={!optimizeEnabled}
+                    title={optimizeEnabled
+                      ? 'Auto-prepare prioritized fixes for review (L3)'
+                      : 'Available for SEO scans'}
                     data-testid={`active-work-optimize-${job.id}`}
-                    className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-white/5 text-zinc-500 border border-white/10 transition opacity-60 cursor-not-allowed">
-              {job.optimize_label} · soon
+                    className={`text-[10.5px] font-semibold px-2 py-1 rounded-md transition flex items-center gap-1 ${
+                      optimizeEnabled
+                        ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/30'
+                        : 'bg-white/5 text-zinc-500 border border-white/10 opacity-60 cursor-not-allowed'
+                    }`}>
+              ⚡ {job.optimize_label}
             </button>
           </div>
         </>
