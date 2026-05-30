@@ -64,6 +64,13 @@ async def memory_health(request: Request):
     await get_current_user(request)
     info = await cmem.health()
     info["provider_chain"] = active_chain(prefer="claude")
+    # Surface native-tool-call wrapper stability so we can compare
+    # tool-call success rate vs JSON fallback rate over time.
+    try:
+        from cortex.llm_provider import _tool_call_stats
+        info["tool_call_stats"] = _tool_call_stats()
+    except Exception:
+        pass
     return info
 
 

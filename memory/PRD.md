@@ -35,6 +35,17 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 97) **🔧 Native LLM tool-calling — hybrid wrapper with graceful JSON fallback**
+  - **`cortex_tool_call()` in `cortex/llm_provider.py`** — thin wrapper that forwards `tools=[...]` + `tool_choice` through `LlmChat.with_params()` (LiteLLM accepts them as extra kwargs), then calls the private `_execute_completion()` to capture the raw `ModelResponse` and extract `tool_calls`. Bypasses `emergentintegrations`'s text-only `send_message()` while preserving the Emergent LLM Key proxy + spend tracking.
+  - **Graceful degradation**: if no tool_calls returned (or library internals change), falls back to `cortex_chat(json_mode=True)` — the same pattern the codebase used before. Library-breakage risk is isolated to one file.
+  - **Refactored 2 high-value call sites**:
+    1. `_classify_intent` in `routes/cortex_console.py` — intent + mission-parameter extraction.
+    2. `classify_and_respond` in `cortex/stages.py` — conversation stage classification (discovery / analysis / recommendation / mission_proposal / execution).
+  - **Spend attribution**: `_attribute_spend()` mirrors `routes.ai.send_with_usage`'s ledger tick. Tool-call spend rolls up to the admin LLM-spend dashboard under `agent_id=cortex`.
+  - **Observability**: `_TOOL_CALL_STATS` counters (`attempts`, `tool_call_ok`, `tool_call_empty`, `tool_call_parse`, `json_fallback_ok`, `hard_fail`) + `tool_call_rate`/`fallback_rate` ratios exposed via `GET /api/cortex/memory/health → tool_call_stats`. Lets us decide when to promote the wrapper to all call sites OR refactor to direct LiteLLM.
+  - **Live verification**: 4/4 chat-endpoint roundtrips succeeded natively (`tool_call_rate: 1.0`, `fallback_rate: 0.0`). Intent params arrive richer than the old JSON-mode flow (e.g., `seller_category`, `source_platform`, `prioritization` extracted automatically).
+  - **iter20 tests**: 15 unit tests covering native extraction, JSON fallback, hard-fail, `required`-keys validation in both paths, no-key short-circuit, `_safe_parse_json` robustness. Mock LiteLLM responses with `SimpleNamespace`. All 15 pass + iter15/17/18/19 regression (56/58, 2 skipped, 0 failures).
+
 - 2026-02-26 (part 96) **🧠 LLM-augmented OODA detector + a11y polish + briefing recursion fix**
   - **`_llm_rules()` in `cortex/optimization_loop.py`** — new Claude-powered detector that surfaces NON-OBVIOUS bottlenecks the 5 deterministic rules miss (cross-stage ratios, volume-vs-velocity mismatches, leading decay signals). Only fires when heuristics are silent (saves cost — heuristics handle the obvious cases). Output kinds are namespaced `llm_*` to avoid collisions with deterministic kinds; persisted with `source: "llm_augmented"`.
   - **Cost guardrails**:

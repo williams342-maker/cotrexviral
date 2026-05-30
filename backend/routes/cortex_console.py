@@ -95,10 +95,10 @@ If the user mentions a number, set `target`. If they mention a niche/category/ve
 async def _classify_intent(message: str, user_id: str,
                             memory_block: str = "") -> dict:
     """Run the message through the LLM intent classifier via the
-    provider-abstracted cortex_chat (Claude Sonnet 4.5 primary, GPT-5.2
-    fallback). Falls back to a deterministic regex when EMERGENT_LLM_KEY
-    is missing or every provider errors — keeps the chat endpoint
-    working offline / on key outage.
+    provider-abstracted cortex_tool_call (native tool-calling under
+    LiteLLM, with JSON-mode fallback). Falls back to a deterministic
+    regex when EMERGENT_LLM_KEY is missing or every provider errors —
+    keeps the chat endpoint working offline / on key outage.
 
     `memory_block` is the optional strategic+semantic memory snapshot
     rendered by `cortex.memory.render_memory_block()`; injected into the
@@ -108,27 +108,52 @@ async def _classify_intent(message: str, user_id: str,
     if not EMERGENT_LLM_KEY:
         return fallback
     try:
-        import json
-        from cortex.llm_provider import cortex_chat
+        from cortex.llm_provider import cortex_tool_call
         system = INTENT_PROMPT % {"intents": ", ".join(INTENT_TYPES)}
         if memory_block:
             system = f"{system}\n\n---\n{memory_block}"
-        raw, _label = await cortex_chat(
+        tool = {
+            "name":        "classify_intent",
+            "description": "Classify the operator's message into an intent + extract mission parameters.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "intent": {"type": "string", "enum": list(INTENT_TYPES)},
+                    "params": {
+                        "type": "object",
+                        "properties": {
+                            "niche":         {"type": ["string", "null"]},
+                            "target":        {"type": ["integer", "null"]},
+                            "deadline_days": {"type": ["integer", "null"]},
+                            "channel":       {"type": ["string", "null"]},
+                            "free_form":     {"type": ["string", "null"]},
+                        },
+                    },
+                    "ack": {"type": "string",
+                              "description": "Short (<=120 chars) confirmation in Cortex's voice."},
+                },
+                "required": ["intent", "ack"],
+            },
+        }
+        args, _label, mode = await cortex_tool_call(
             system=system,
             user_text=message,
+            tool=tool,
             session_id=f"cortex-intent-{user_id}-{uuid.uuid4().hex[:8]}",
             user_id=user_id,
             prefer="claude",
-            json_mode=True,
+            required=["intent"],
         )
-        data = json.loads(raw)
-        intent = data.get("intent")
+        if not args:
+            return fallback
+        intent = args.get("intent")
         if intent not in INTENT_TYPES:
             return fallback
+        logger.debug("cortex intent: %s via %s", intent, mode)
         return {
             "intent": intent,
-            "params": data.get("params") or {},
-            "ack":    str(data.get("ack") or "")[:160],
+            "params": args.get("params") or {},
+            "ack":    str(args.get("ack") or "")[:160],
         }
     except Exception:
         logger.exception("cortex chat: LLM classification failed, using regex fallback")

@@ -18,7 +18,6 @@ Public API:
 """
 from __future__ import annotations
 
-import json
 import logging
 import re
 import uuid
@@ -162,7 +161,7 @@ async def classify_and_respond(
         return _heuristic_response(user_message, intent_types)
 
     try:
-        from cortex.llm_provider import cortex_chat
+        from cortex.llm_provider import cortex_tool_call
         system = STAGE_CLASSIFIER_PROMPT % {"intents": ", ".join(intent_types)}
         if memory_block:
             system = f"{system}\n\n---\n{memory_block}"
@@ -180,16 +179,44 @@ async def classify_and_respond(
         else:
             user_payload = f"Latest user message:\n{user_message}"
 
-        raw, _label = await cortex_chat(
+        tool = {
+            "name":        "classify_stage_response",
+            "description": "Classify the conversation stage and produce Cortex's response with clarifying questions / findings / recommendation as appropriate for that stage.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "stage": {"type": "string", "enum": list(STAGES)},
+                    "discovery_complete":         {"type": "boolean"},
+                    "analysis_complete":          {"type": "boolean"},
+                    "recommendation_accepted":    {"type": "boolean"},
+                    "explicit_execution_request": {"type": "boolean"},
+                    "ack":                        {"type": "string"},
+                    "clarifying_questions":       {"type": "array",
+                                                   "items": {"type": "string"}},
+                    "findings":                   {"type": "array",
+                                                   "items": {"type": "string"}},
+                    "recommendation_summary":     {"type": "string"},
+                    "alternatives":               {"type": "array",
+                                                   "items": {"type": "string"}},
+                    "intent":                     {"type": ["string", "null"],
+                                                   "enum": list(intent_types) + [None]},
+                    "params":                     {"type": "object"},
+                },
+                "required": ["stage", "ack"],
+            },
+        }
+        args, _label, _mode = await cortex_tool_call(
             system=system,
             user_text=user_payload,
+            tool=tool,
             session_id=f"cortex-stage-{user_id}-{uuid.uuid4().hex[:8]}",
             user_id=user_id,
             prefer="claude",
-            json_mode=True,
+            required=["stage", "ack"],
         )
-        data = json.loads(raw)
-        return _normalize(data, intent_types)
+        if not args:
+            return _heuristic_response(user_message, intent_types)
+        return _normalize(args, intent_types)
     except Exception:
         logger.exception("classify_and_respond: LLM failed, using heuristic fallback")
         return _heuristic_response(user_message, intent_types)
