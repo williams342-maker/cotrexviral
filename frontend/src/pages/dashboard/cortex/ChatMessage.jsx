@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Brain, CheckCircle2, AlertTriangle, ChevronRight, RotateCw, Bug } from 'lucide-react';
 import PlanCard from './PlanCard';
 import MissionEventStream from './MissionEventStream';
+import RecommendationBridgeCard from './RecommendationBridgeCard';
 import {
   StagePill, ClarifyingQuestionsCard, RecommendationLiteCard,
   FindingsCard,
@@ -79,6 +80,13 @@ export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick, on
         )}
         {turn.kind === 'analysis_failed' && turn.job_id && (
           <AnalysisFailedCard turn={turn} />
+        )}
+        {/* Proactive Recommendation Bridge — posted as a SECOND turn
+            after the metric-tile card. Renders the 4-part executive
+            insight (Finding / Root Cause / Recommendation / Impact)
+            with confidence meter + 3 CTAs. */}
+        {turn.kind === 'recommendation_bridge' && turn.bridge && (
+          <RecommendationBridgeCard turn={turn} />
         )}
 
         {showClarify && !isStale && (

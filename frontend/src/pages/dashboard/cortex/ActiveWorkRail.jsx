@@ -75,6 +75,15 @@ export default function ActiveWorkRail({ onLaunchScan }) {
             return cp;
           });
         }, 1400);
+        // Notify CommandCenter to reload the thread so the
+        // analysis_complete + recommendation_bridge turns appear
+        // inline without a manual refresh. The bridge lands ~1.6s
+        // after completion, so refresh once now (catches the
+        // metric-tile turn) and again after the bridge delay.
+        try { window.dispatchEvent(new CustomEvent('cortex:conversation:refresh')); } catch (_e) { /* */ }
+        setTimeout(() => {
+          try { window.dispatchEvent(new CustomEvent('cortex:conversation:refresh')); } catch (_e) { /* */ }
+        }, 2200);
       }
 
       // Update prev status map for next diff.

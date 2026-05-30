@@ -377,6 +377,25 @@ async def _complete(job_id: str, user_id: str,
                               target=target, summary=result.get("summary"),
                               metrics=metrics)
 
+    # Proactive Recommendation Bridge — produces the "what should I
+    # do next?" executive insight as a SECOND Cortex turn. Delayed
+    # so the metric-tile card lands first and the recommendation
+    # feels like a conclusion, not a pop-up.
+    asyncio.create_task(_emit_bridge_with_pacing(job_id))
+
+
+async def _emit_bridge_with_pacing(job_id: str) -> None:
+    """Wait briefly so the analysis_complete message lands first, then
+    synthesize + post the recommendation bridge. Best-effort; never
+    raises into the runner's main path."""
+    try:
+        await asyncio.sleep(1.6)
+        from cortex.recommendation_bridge import post_bridge_to_chat
+        await post_bridge_to_chat(job_id)
+    except Exception:
+        logger.exception("analysis_runner: bridge emission failed for %s",
+                          job_id)
+
 
 async def _fail(job_id: str, user_id: str,
                  conv_id: Optional[str], job_type: Optional[str],

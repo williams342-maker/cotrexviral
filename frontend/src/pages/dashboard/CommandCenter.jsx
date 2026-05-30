@@ -138,6 +138,16 @@ const CommandCenter = () => {
     loadHistory(); loadStrategy(); loadOpps(); loadExec();
   }, [loadHistory, loadStrategy, loadOpps, loadExec]);
 
+  // Refresh the chat thread when background work (analysis jobs,
+  // recommendation bridges, discuss follow-ups) posts new Cortex turns
+  // into the conversation. Triggered by ActiveWorkRail on status
+  // transitions + by RecommendationBridgeCard's Discuss CTA.
+  useEffect(() => {
+    const handler = () => { loadHistory(); };
+    window.addEventListener('cortex:conversation:refresh', handler);
+    return () => window.removeEventListener('cortex:conversation:refresh', handler);
+  }, [loadHistory]);
+
   // Poll active missions every 5s.
   useEffect(() => {
     loadActiveMissions();
