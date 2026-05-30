@@ -1,0 +1,40 @@
+{
+  "summary": "Phase C Autonomous Campaign Builder — backend + frontend regression. 17/17 pytest tests passed (list, get-hydrated, post-and-delete, errors, cross-user isolation). Frontend UI loads cleanly: sidebar entry present, list with 4 campaign cards, detail view with all 5 tabs (Overview, Posts(13), Emails(3), Landing, Creatives(5)), 13 copyable post cards, 5 creatives with GEMINI/OPENAI provider badges visibly rendered. CreativeBriefPanel 'Build full campaign' button verified to POST /cortex/campaigns and redirect to /dashboard/campaigns?id=<new>. One documented backend race-condition: DELETE during an in-flight LLM compose_artifacts call can hit a 60-90s ingress timeout (502); needed 2-3 retry rounds to land. Soft-delete itself is correct (verified end-to-end with retries — row 404s on subsequent GET and disappears from list).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "DELETE /api/cortex/campaigns/{id}",
+        "issue": "Race condition: DELETE issued seconds after POST (while the async compose_artifacts LLM call is in flight) intermittently 502s at the ingress (~60-90s wait). Eventually succeeds after the LLM compose completes — suggesting the event loop is held during the tool-call. Worth checking that cortex_tool_call uses an async HTTP client (httpx/aiohttp) and not blocking calls, and/or running the long pipeline in a separate task so the FastAPI worker stays responsive. Functional impact: small (user retries) but UX impact: if user clicks delete on a 'building' campaign they'll see a perceived backend hang."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_cortex_iter19_campaigns.py",
+    "/app/test_reports/pytest/cortex_iter19.xml"
+  ],
+  "action_items": [
+    "Investigate whether compose_artifacts holds the FastAPI event loop — DELETE on a 'building' campaign should not 502. Likely fix: ensure cortex_tool_call uses httpx.AsyncClient and not requests, and/or wrap the heavy pipeline in asyncio.create_task so DELETE/GET stay snappy.",
+    "(Nit) The Landing tab label has no count suffix while Posts/Emails/Creatives do — minor visual asymmetry; landing is always 0-or-1 so this may be intentional."
+  ],
+  "critical_code_review_comments": [
+    "campaign_builder.py: _coerce_nested() guard for Claude returning JSON-encoded strings is a good defensive fix; consider also logging a warning when coercion fires so we can quantify how often Claude misbehaves.",
+    "GET /api/cortex/campaigns/{id} creatives fallback to brief-level rows is correct and matches spec; ensure the fallback also fires when the campaign has only 'generating'/'failed' creatives, not just when the campaign array is empty (current behaviour appears to be empty-only — verify intent).",
+    "DELETE-during-build race-condition (see backend.minor) — needs RCA on the FastAPI event loop."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_cortex_iter19_campaigns.py (new)"
+  ],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "100% (all 5 tabs + sidebar + counts + copy buttons + creatives badges)"},
+  "test_credentials": "test@automatex.dev / session_token=test_session_1779636592168 (user_id=user_test1779636592168). Brief id 54a01a852db740108ff7b7a60897433c reused.",
+  "seed_data_creation": "Created one fresh campaign during test_create_returns_building_then_delete and soft-deleted it (verified 404 + list-exclusion). No live campaigns destroyed; pre-existing 4 campaigns intact.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_cortex_iter19_campaigns.py is a clean regression for Phase C. Re-running it will create one fresh campaign per run (POST returns building immediately + soft-deleted same test). Polling is bounded by retry/backoff. If the LLM/Claude is rate-limited the brief-not-found test still passes since it's a pre-auth Mongo lookup. UI verified at /dashboard/campaigns with 4 existing campaigns and detail view for campaign 0b134d3bdd314519aaa97586efdff1f7 showing 13 posts + 3 emails + 1 landing + 5 creatives.",
+  "rca of the issue": "DELETE-during-build 502: when the async build_campaign() task is in its compose_artifacts LLM tool-call (~2-3 minutes of Claude streaming), DELETE on the same campaign id queues at the ingress and times out (60-90s) before reaching the backend. Mitigation in tests: retry DELETE 3-4 times with 20s backoff — eventually lands. Recommended permanent fix: confirm cortex_tool_call client is httpx.AsyncClient (not blocking requests), and ensure build_campaign() is spawned via asyncio.create_task so the request handler returns immediately and the FastAPI worker stays free for other requests targeting the same campaign id."
+}

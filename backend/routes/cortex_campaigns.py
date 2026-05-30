@@ -34,7 +34,8 @@ class CampaignCreatePayload(BaseModel):
 
 
 def _iso(row: dict) -> dict:
-    out = dict(row); out.pop("_id", None)
+    out = dict(row)
+    out.pop("_id", None)
     for k in ("created_at", "updated_at"):
         v = out.get(k)
         if isinstance(v, datetime):
@@ -123,6 +124,18 @@ async def get_campaign(campaign_id: str, request: Request,
             if row.get("storage_key"):
                 row["file_url"] = storage.public_url(row["storage_key"])
             creatives.append(row)
+        # Fall back to brief-level creatives if the campaign doesn't
+        # have its own (Phase B may have generated them upstream
+        # before the campaign was built — they belong here too).
+        if not creatives and out.get("brief_id"):
+            async for c in db.cortex_creatives.find(
+                    {"brief_id": out["brief_id"], "user_id": user.user_id,
+                      "deleted_at": {"$exists": False}}, {"_id": 0}) \
+                      .sort("concept_index", 1):
+                row = _iso(c)
+                if row.get("storage_key"):
+                    row["file_url"] = storage.public_url(row["storage_key"])
+                creatives.append(row)
         out["creatives"] = creatives
 
     return out

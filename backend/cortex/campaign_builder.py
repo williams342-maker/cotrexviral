@@ -29,6 +29,36 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def _coerce_nested(args: dict) -> dict:
+    """Some LLM providers occasionally encode nested arrays/objects as
+    JSON strings inside tool-call args. Parse those back into dict/list
+    so downstream persisters see the expected shapes."""
+    if not isinstance(args, dict):
+        return args
+    import ast
+    import json
+    for k in ("social_posts", "email_sequence", "landing_page"):
+        v = args.get(k)
+        if not isinstance(v, str):
+            continue
+        s = v.strip()
+        if not s or s[0] not in "[{":
+            continue
+        parsed = None
+        try:
+            parsed = json.loads(s)
+        except Exception:
+            try:
+                parsed = ast.literal_eval(s)
+            except Exception:
+                logger.warning(
+                    "campaign_builder._coerce_nested: failed to parse %s string (len=%d, head=%r)",
+                    k, len(s), s[:160])
+        if parsed is not None:
+            args[k] = parsed
+    return args
+
+
 _CAMPAIGN_TOOL = {
     "name": "compose_campaign_artifacts",
     "description": (
@@ -263,6 +293,7 @@ async def _compose_artifacts(brief: dict, asset_intel: Optional[dict],
             required=["campaign_title", "social_posts",
                        "email_sequence", "landing_page"],
         )
+        args = _coerce_nested(args)
         return args
     except Exception:
         logger.exception("campaign_builder: artifact compose failed")
