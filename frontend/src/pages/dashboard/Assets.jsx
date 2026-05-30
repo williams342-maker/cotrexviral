@@ -355,7 +355,7 @@ function AssetDetail({ asset, onBack, onChanged }) {
           </button>
         </div>
         {asset.thumb_b64 && (
-          <img src={`data:image/jpeg;base64,${asset.thumb_b64}`}
+          <img src={`data:image/${asset.extraction_meta?.thumb_format || 'jpeg'};base64,${asset.thumb_b64}`}
                 alt={asset.name}
                 className="mt-3 rounded-lg max-h-48 object-contain" />
         )}

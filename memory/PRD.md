@@ -35,6 +35,20 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-26 (part 115) **🎥 Phase A expansion — PPTX + Video uploads**
+  - **PPTX extractor** (`_extract_pptx`) using python-pptx: pulls slide titles + bullet text + speaker notes joined per slide; emits `extraction_meta={slide_count, shape_count, char_count}`. Offline, no LLM at extraction time.
+  - **Video extractor** (`_extract_video`) using **imageio-ffmpeg** (static binary, no apt needed — `imageio_ffmpeg.get_ffmpeg_exe()`):
+    - First-second keyframe scaled to 320 wide → base64 PNG `thumb_b64` (matches image asset convention so the Assets grid renders consistently)
+    - Audio extracted at 16 kHz mono 32 kbps mp3, capped at 5 min → ~1.2 MiB max, well under Whisper's 25 MiB API limit
+    - Whisper-1 transcription via `emergentintegrations.llm.openai.OpenAISpeechToText` + `EMERGENT_LLM_KEY`
+    - `extraction_meta={duration_s, audio_bytes, char_count, thumb_format}`
+  - **Per-MIME size cap**: `MAX_BYTES_BY_MIME` map applied at the route layer; `storage.save(key, data, max_bytes=...)` threads the cap into the storage layer (default 20 MiB for backwards compat). Videos accept up to 50 MiB; everything else stays at 20 MiB.
+  - **Backwards-compat fix**: the pipeline runner's `if kind in (pdf, image)` gate would have left pptx/video bytes empty → caught during smoke test, extended to `(pdf, image, pptx, video)`.
+  - **Frontend** (`Assets.jsx`): drop-zone `accept=` includes new MIMEs; hint reads "PDF · JPG · PNG · WebP · PPTX · MP4/MOV/WebM · up to 20MB (50MB for video)". KIND_META adds `pptx` (Presentation icon, amber) + `video` (Film icon, violet). Thumbnail data-URI now honors `extraction_meta.thumb_format` (png for video, jpeg for image).
+  - **Dependencies added**: `imageio-ffmpeg==0.6.0`, `python-pptx==1.0.2` (both freezed into requirements.txt).
+  - **iter23 tests**: **12/12 backend pytest pass** + frontend 100% — covers upload+extraction for both new kinds, per-MIME size caps (21 MiB pdf rejected / 21 MiB video accepted / 51 MiB video rejected), backwards compat for pdf/image/url, pipeline runner storage-read gate, robust failure for non-zip pptx + corrupted video. Zero bugs.
+  - **Live verified**: 5-second test video → status=complete with full extraction (5.0s duration, 20,775 bytes audio, 21,512-char PNG thumb, Whisper transcript "To be continued"); 3-slide test deck → status=complete (3 slides, 5 shapes, 284 chars, intelligence.brand="Cortex").
+
 - 2026-02-26 (part 114) **🧠 Auto-schedule on optimal times — `mode='optimal_times'`**
   - **New mode** added to the existing `POST /api/cortex/campaigns/{cid}/push` endpoint. No new endpoint, no breaking change. Body: `{mode: 'optimal_times'}` — no `start_at` / `cadence_hours` needed.
   - **Slot picker** `_compute_optimal_slot(platform, after, already_used)`: pulls the per-platform best-time matrix from `routes/channels.OPTIMAL_BASE` (Tue/Wed/Thu mornings for B2B; Mon/Tue/Wed late-morning + evenings for IG; Fri/Sat/Sun late evenings for Pinterest; Tue/Wed/Thu morning blocks for LinkedIn). Iterates 6 weeks forward and returns the soonest free slot strictly after `after` that's not already in `already_used`.
