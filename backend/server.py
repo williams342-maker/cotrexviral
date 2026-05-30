@@ -75,6 +75,8 @@ from routes import (  # noqa: F401
     cortex,          # Master orchestrator — single entry-point for user goals
     cortex_console,  # AI Command Center — conversational chat + briefing + execute
     cortex_memory,   # Hybrid memory (Mongo strategy + Qdrant semantic) + exec log
+    cortex_plan_actions,  # Plan-card actions: cancel + email-to-inbox
+    cortex_stream,   # SSE-streamed Cortex chat (phase events)
     mission_loop,    # Event-driven relay: scout→creator→operator→intelligence
     seller_leads,        # Seller Acquisition OS — leads pipeline
     seller_discovery,    # Seller Acquisition OS — Discovery Scout

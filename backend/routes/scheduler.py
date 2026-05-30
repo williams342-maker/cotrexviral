@@ -307,6 +307,35 @@ async def start_scheduler():
     except Exception:
         logger.exception("scheduler: failed to register seller_retention_workflow_advance")
 
+    # Cortex — daily strategy summary refresh. Distills each active user's
+    # conversation history into the cortex_strategy doc so the next chat
+    # turn opens with "Based on our previous conversations…" context.
+    try:
+        async def _cortex_strategy_refresh_all():
+            from cortex import memory as cmem
+            from core import db as _db
+            seen: set[str] = set()
+            cur = _db.cortex_conversations.find(
+                {}, {"user_id": 1}).sort("created_at", -1).limit(500)
+            async for row in cur:
+                uid = row.get("user_id")
+                if uid and uid not in seen:
+                    seen.add(uid)
+                    try:
+                        await cmem.update_strategy_summary(uid, force=True)
+                    except Exception:
+                        logger.exception("cortex strategy refresh failed for %s", uid)
+        scheduler.add_job(
+            _cortex_strategy_refresh_all,
+            trigger=IntervalTrigger(hours=24),
+            id="cortex_strategy_daily_refresh",
+            max_instances=1,
+            coalesce=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(minutes=5),
+        )
+    except Exception:
+        logger.exception("scheduler: failed to register cortex_strategy_daily_refresh")
+
     scheduler.start()
     logger.info("scheduler: started (worker=%s, every 60s)", WORKER_ID)
 
