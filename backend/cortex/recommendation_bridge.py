@@ -155,26 +155,6 @@ async def _synthesize_bridge(job: dict, *, pushback: Optional[str] = None) -> di
     report_excerpt = _format_report_for_prompt(report)
 
     sys_prompt = _PROMPTS.get(job_type) or _PROMPTS["site_scan"]
-    sys_prompt += (
-        "\n\nReturn STRICT JSON only, no prose, no fences. Schema:\n"
-        '{\n'
-        '  "finding":         "<one-sentence headline of what stands out>",\n'
-        '  "root_cause":      "<1-2 sentence explanation of WHY>",\n'
-        '  "recommendation":  "<single action-oriented sentence>",\n'
-        '  "expected_impact": "<projected outcome, e.g. \'+15-25% organic '
-        'visibility\' or \'Higher seller conversion rate\'>",\n'
-        '  "confidence":      <integer 0-100 — Cortex\'s confidence in '
-        'this recommendation>,\n'
-        '  "reasoning":       "<2-3 sentence consultative paragraph '
-        'that Cortex says BEFORE showing the recommendation card. '
-        'This is the \'explain THEN recommend\' bridge text>",\n'
-        '  "mission_intent":  "<one of: launch_seller_mission, '
-        'run_bulk_outreach, launch_retention_workflow, '
-        'generate_content_plan, launch_ads_campaign, analyze_competitors, '
-        'find_opportunities, improve_conversions>",\n'
-        '  "mission_params":  {<pre-filled mission parameters>}\n'
-        '}'
-    )
 
     pushback_block = ""
     if pushback and pushback.strip():
@@ -196,30 +176,68 @@ async def _synthesize_bridge(job: dict, *, pushback: Optional[str] = None) -> di
         f"{pushback_block}"
     )
 
+    # Native tool-calling — forces the LLM to emit exactly the bridge
+    # shape via the `synthesize_recommendation` tool. Tool-calling has
+    # a 95%+ success rate over the last 24h (promotion_ready=true).
+    bridge_tool = {
+        "name": "synthesize_recommendation",
+        "description": (
+            "Produce ONE high-impact executive recommendation from the "
+            "analysis report. Every field is required."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "finding":         {"type": "string",
+                                     "description": "One-sentence headline of what stands out."},
+                "root_cause":      {"type": "string",
+                                     "description": "1-2 sentence explanation of WHY this is happening."},
+                "recommendation":  {"type": "string",
+                                     "description": "Single action-oriented sentence."},
+                "expected_impact": {"type": "string",
+                                     "description": "Projected outcome (e.g. '+15-25% organic visibility')."},
+                "confidence":      {"type": "integer", "minimum": 0, "maximum": 100,
+                                     "description": "Cortex's confidence in this recommendation, 0-100."},
+                "reasoning":       {"type": "string",
+                                     "description": "2-3 sentence consultative paragraph Cortex says BEFORE the card. The 'explain THEN recommend' bridge text."},
+                "mission_intent":  {"type": "string",
+                                     "enum": ["launch_seller_mission", "run_bulk_outreach",
+                                               "launch_retention_workflow", "generate_content_plan",
+                                               "launch_ads_campaign", "analyze_competitors",
+                                               "find_opportunities", "improve_conversions"]},
+                "mission_params":  {"type": "object",
+                                     "description": "Pre-filled mission parameters (target, niche, etc.). Empty object if none."},
+            },
+            "required": ["finding", "root_cause", "recommendation",
+                          "expected_impact", "confidence", "reasoning",
+                          "mission_intent"],
+        },
+    }
+
     try:
-        from cortex.llm_provider import cortex_chat
+        from cortex.llm_provider import cortex_tool_call
         from core import EMERGENT_LLM_KEY
         if not EMERGENT_LLM_KEY:
             raise RuntimeError("no LLM key")
-        raw, _label = await cortex_chat(
+        args, label, mode = await cortex_tool_call(
             system=sys_prompt,
             user_text=user_text,
+            tool=bridge_tool,
             session_id=f"recbridge-{job.get('id')}",
             user_id=job.get("user_id") or "anonymous",
             prefer="claude",
-            json_mode=True,
+            required=["finding", "recommendation", "confidence", "reasoning",
+                       "mission_intent"],
         )
-        parsed = _parse_strict_json(raw)
-        if parsed:
-            normalized = _normalize_bridge(parsed, job_type)
-            # Source label so dashboards can distinguish LLM vs heuristic.
-            normalized["source"] = f"llm:{_label}"
+        if args:
+            normalized = _normalize_bridge(args, job_type)
+            normalized["source"] = f"llm:{label}:{mode}"
             return normalized
-        logger.warning("recommendation_bridge: LLM returned unparseable JSON "
-                        "for job %s — falling back to heuristic. raw=%r",
-                        job.get("id"), (raw or "")[:200])
+        logger.warning("recommendation_bridge: cortex_tool_call returned None "
+                        "for job %s — falling back to heuristic.",
+                        job.get("id"))
     except Exception:
-        logger.exception("recommendation_bridge: LLM call failed for job %s",
+        logger.exception("recommendation_bridge: tool-call failed for job %s",
                           job.get("id"))
 
     # Heuristic fallback — keeps the bridge always renderable.

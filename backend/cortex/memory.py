@@ -236,30 +236,46 @@ async def update_strategy_summary(user_id: str,
         for r in rows
     )[:6000]
 
-    from cortex.llm_provider import cortex_chat
+    from cortex.llm_provider import cortex_tool_call
     system = (
         "You are Cortex's strategic memory engine. Distill the user's "
-        "recent conversations into a JSON object capturing their long-"
-        "term business strategy. Schema:\n"
-        '{ "summary": "<3-5 sentence executive summary of where they '
-        'are right now>", "goals": [<3-6 short bullet strings of '
-        'durable goals>], "bottlenecks": [<2-4 bullets — what is '
-        'blocking growth>], "recent_themes": [<3-5 bullets — what '
-        'they keep coming back to>] }\n'
-        "Be concise. Strip filler. Use plain prose, no emojis."
+        "recent conversations into a structured strategy doc capturing "
+        "their long-term business strategy. Be concise. Strip filler. "
+        "Use plain prose, no emojis."
     )
+    strategy_tool = {
+        "name": "record_strategy",
+        "description": (
+            "Persist the distilled strategic memory for this user."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "summary":       {"type": "string",
+                                   "description": "3-5 sentence executive summary of where they are right now."},
+                "goals":         {"type": "array", "items": {"type": "string"},
+                                   "description": "3-6 short bullet strings of durable goals."},
+                "bottlenecks":   {"type": "array", "items": {"type": "string"},
+                                   "description": "2-4 bullets — what is blocking growth."},
+                "recent_themes": {"type": "array", "items": {"type": "string"},
+                                   "description": "3-5 bullets — what they keep coming back to."},
+            },
+            "required": ["summary", "goals", "bottlenecks", "recent_themes"],
+        },
+    }
     try:
-        raw, _label = await cortex_chat(
+        args, _label, _mode = await cortex_tool_call(
             system=system,
             user_text=f"Conversation transcript (oldest → newest):\n{transcript}",
+            tool=strategy_tool,
             session_id=f"cortex-strategy-{user_id}",
             user_id=user_id,
             prefer="claude",
-            json_mode=True,
+            required=["summary"],
         )
-        data = json.loads(raw)
+        data = args or {}
     except Exception:
-        logger.exception("cortex.memory: strategy distillation LLM call failed")
+        logger.exception("cortex.memory: strategy distillation tool-call failed")
         existing.pop("_id", None)
         return existing or {}
 

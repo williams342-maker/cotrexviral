@@ -39,6 +39,20 @@ from deps import get_current_user
 logger = logging.getLogger(__name__)
 
 
+@api.get("/cortex/recommendation-bridges/by-id/{bridge_id}")
+async def get_bridge_by_id(bridge_id: str, request: Request):
+    """Fetch a single bridge by its row id (not by job_id). Used by the
+    Mission Detail page to render provenance — every Optimize-via-Bridge
+    mission stamps `auto_optimize_meta.bridge_id`, and this endpoint
+    hydrates the structured recommendation behind that link."""
+    user = await get_current_user(request)
+    bridge = await db.cortex_recommendation_bridges.find_one(
+        {"id": bridge_id, "user_id": user.user_id}, {"_id": 0})
+    if not bridge:
+        raise HTTPException(404, "Bridge not found")
+    return bridge
+
+
 @api.get("/cortex/recommendation-bridges/{job_id}")
 async def get_bridge(job_id: str, request: Request):
     """Return the bridge for a job. If the job is completed but no

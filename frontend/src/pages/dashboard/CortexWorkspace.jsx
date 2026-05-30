@@ -8,6 +8,7 @@ import {
   Calendar, Hash, Trophy, Compass, Wand2, Send, TrendingUp, Activity,
 } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
+import MissionProvenanceCard from './cortex/MissionProvenanceCard';
 
 /* Cortex workspace — both an index (no :id) and a mission detail (:id).
 
@@ -126,6 +127,13 @@ const CortexWorkspace = () => {
       }
     >
       <div className="space-y-6" data-testid={`cortex-mission-${mission.id}`}>
+        {/* Provenance — when this mission was auto-launched via the
+            Optimize-via-Bridge flow, surface the source Recommendation
+            Bridge inline so the operator sees WHY Cortex chose this
+            mission (Finding / Root Cause / Recommendation / Confidence).
+            Renders nothing for missions created manually. */}
+        <MissionProvenanceCard mission={mission} />
+
         {/* Hero card */}
         <div className="rounded-2xl border border-white/5 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-zinc-900 p-6">
           <div className="flex items-start gap-4">

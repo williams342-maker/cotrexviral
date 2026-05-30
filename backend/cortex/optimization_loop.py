@@ -216,37 +216,99 @@ async def _llm_rules(snap: dict, *, user_id: str,
         "  • Early decay signals before the heuristics' thresholds fire.\n"
         "  • Cross-signal patterns (low opens + many running missions ⇒ overload).\n"
         "Be conservative — only flag a bottleneck if there's clear evidence in the snapshot. "
-        "Never duplicate kinds already detected by deterministic rules (listed below)."
+        "Never duplicate kinds already detected by deterministic rules (listed below). "
+        "Limit to 2 findings max, ranked by importance. If no bottleneck is found, return an empty list."
     )
     user_text = (
         "Snapshot:\n"
         f"{json.dumps(_compact_snap(snap), indent=2)}\n\n"
         f"Kinds already detected this tick (do not duplicate): "
-        f"{sorted(already_detected_kinds) or '[]'}\n\n"
-        "Return STRICT JSON of shape:\n"
-        '{"findings":[{"kind":"llm_<short_slug>","bottleneck":"...",'
-        '"hypothesis":"...","recommendation":"...","confidence":0.0}]}\n'
-        "If no bottleneck is found, return {\"findings\":[]}. "
-        "Confidence must be a float in [0,1]. Limit to 2 findings max, ranked by importance."
+        f"{sorted(already_detected_kinds) or '[]'}"
     )
 
+    detector_tool = {
+        "name": "surface_bottlenecks",
+        "description": (
+            "Surface 0-2 non-obvious bottlenecks the deterministic rules missed."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "findings": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "kind":           {"type": "string",
+                                                "description": "Short slug like 'llm_paused_mission_overload'. Prefix with llm_."},
+                            "bottleneck":     {"type": "string"},
+                            "hypothesis":     {"type": "string"},
+                            "recommendation": {"type": "string"},
+                            "confidence":     {"type": "number", "minimum": 0, "maximum": 1},
+                        },
+                        "required": ["kind", "bottleneck", "recommendation", "confidence"],
+                    },
+                },
+            },
+            "required": ["findings"],
+        },
+    }
+
     try:
-        from cortex.llm_provider import cortex_chat
-        text, _ = await cortex_chat(
-            system, user_text,
+        from cortex.llm_provider import cortex_tool_call
+        args, _label, _mode = await cortex_tool_call(
+            system=system,
+            user_text=user_text,
+            tool=detector_tool,
             session_id=f"cortex-llm-detector-{user_id}",
             user_id=user_id,
             prefer="claude",
-            json_mode=True,
+            required=["findings"],
         )
     except Exception:
-        logger.exception("optimization_loop: LLM detector call failed")
+        logger.exception("optimization_loop: LLM detector tool-call failed")
+        return []
+    if not args:
         return []
 
-    findings = _parse_llm_findings(text, already_detected_kinds)
+    findings = _normalize_findings(args.get("findings") or [], already_detected_kinds)
     for f in findings:
         f["source"] = "llm_augmented"
     return findings
+
+
+def _normalize_findings(items: list, already_detected_kinds: set[str]) -> list[dict]:
+    """Tool-call shape is already structured; just clamp + de-dupe."""
+    out: list[dict] = []
+    for f in (items or [])[:2]:
+        if not isinstance(f, dict):
+            continue
+        kind = str(f.get("kind") or "").strip().lower()
+        bottleneck = str(f.get("bottleneck") or "").strip()
+        rec = str(f.get("recommendation") or "").strip()
+        if not kind or not bottleneck or not rec:
+            continue
+        raw_kind = kind[4:] if kind.startswith("llm_") else kind
+        if raw_kind in already_detected_kinds:
+            continue
+        if not kind.startswith("llm_"):
+            kind = f"llm_{kind}"
+        kind = kind[:64]
+        if kind in already_detected_kinds:
+            continue
+        try:
+            conf = float(f.get("confidence") or 0.6)
+        except Exception:
+            conf = 0.6
+        conf = max(0.0, min(1.0, conf))
+        out.append({
+            "kind":           kind,
+            "bottleneck":     bottleneck[:400],
+            "hypothesis":     str(f.get("hypothesis") or "")[:600],
+            "recommendation": rec[:600],
+            "confidence":     conf,
+        })
+    return out
 
 
 def _compact_snap(snap: dict) -> dict:

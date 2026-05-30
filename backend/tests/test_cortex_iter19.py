@@ -124,19 +124,22 @@ class TestLlmRulesGuards:
         uid = "u-real"
         snap = {"funnel_total": 30, "outreach_24h": {"sent": 30},
                 "missions": {"running": 2}, "open_rate": 0.18, "reply_rate": 0.02}
-        ai_response = (
-            '{"findings":[{"kind":"capacity_overload","bottleneck":"running missions split focus",'
-            '"hypothesis":"too many parallel campaigns dilute attention",'
-            '"recommendation":"pause 1 mission to focus","confidence":0.7}]}'
-        )
-        mock_chat = AsyncMock(return_value=(ai_response, "claude"))
+        # cortex_tool_call returns (args_dict, label, mode)
+        tool_args = {"findings": [{
+            "kind": "capacity_overload",
+            "bottleneck": "running missions split focus",
+            "hypothesis": "too many parallel campaigns dilute attention",
+            "recommendation": "pause 1 mission to focus",
+            "confidence": 0.7,
+        }]}
+        mock_tc = AsyncMock(return_value=(tool_args, "claude", "tool_call"))
         mock_log = AsyncMock()
         mock_log.find_one = AsyncMock(return_value=None)   # no prior LLM call
         mock_db = type("MockDb", (), {"cortex_optimization_log": mock_log})
 
         async def _go():
             with patch("core.db", mock_db), \
-                 patch("cortex.llm_provider.cortex_chat", new=mock_chat):
+                 patch("cortex.llm_provider.cortex_tool_call", new=mock_tc):
                 return await ol._llm_rules(snap, user_id=uid,
                                              already_detected_kinds=set())
         out = _run(_go())
@@ -144,7 +147,7 @@ class TestLlmRulesGuards:
         assert out[0]["source"] == "llm_augmented"
         assert out[0]["kind"].startswith("llm_")
         assert out[0]["bottleneck"]
-        mock_chat.assert_awaited_once()
+        mock_tc.assert_awaited_once()
 
 
 # --- run_for_user: end-to-end source tagging -------------------------
@@ -190,12 +193,14 @@ class TestRunForUserSourceTagging:
                 "open_rate": 0.4, "reply_rate": 0.2,
                 "autonomy_level": 2,
             }
-        ai_response = (
-            '{"findings":[{"kind":"slow_velocity","bottleneck":"funnel velocity decaying",'
-            '"hypothesis":"top-of-funnel volume too low",'
-            '"recommendation":"increase Scout activity","confidence":0.65}]}'
-        )
-        mock_chat = AsyncMock(return_value=(ai_response, "claude"))
+        tool_args = {"findings": [{
+            "kind": "slow_velocity",
+            "bottleneck": "funnel velocity decaying",
+            "hypothesis": "top-of-funnel volume too low",
+            "recommendation": "increase Scout activity",
+            "confidence": 0.65,
+        }]}
+        mock_tc = AsyncMock(return_value=(tool_args, "claude", "tool_call"))
         mock_log = AsyncMock()
         mock_log.find_one = AsyncMock(return_value=None)
         mock_log.insert_one = AsyncMock(return_value=None)
@@ -205,10 +210,10 @@ class TestRunForUserSourceTagging:
             with patch.object(ol, "_observe", new=_patched_observe), \
                  patch.object(ol, "_measure_prior", new=AsyncMock()), \
                  patch("core.db", mock_db), \
-                 patch("cortex.llm_provider.cortex_chat", new=mock_chat):
+                 patch("cortex.llm_provider.cortex_tool_call", new=mock_tc):
                 return await ol.run_for_user(uid)
         doc = _run(_go())
         assert doc is not None
         assert doc["source"] == "llm_augmented"
         assert doc["kind"].startswith("llm_")
-        mock_chat.assert_awaited_once()
+        mock_tc.assert_awaited_once()
