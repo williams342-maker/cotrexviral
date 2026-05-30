@@ -31,7 +31,8 @@ from pydantic import BaseModel, Field
 from core import api, db
 from deps import get_current_user
 from cortex import memory as cmem
-from routes.cortex_console import _classify_intent
+from cortex.stages import classify_and_respond, should_render_plan_card
+from routes.cortex_console import INTENT_TYPES
 from routes.cortex_recommendations import build_recommendation_from_intent
 
 logger = logging.getLogger(__name__)
@@ -80,48 +81,82 @@ async def cortex_chat_stream(request: Request, message: str = "",
                 ],
             })
 
-            # ----- Phase 3: planning (Claude call) -------------
+            # ----- Phase 3: planning (LLM stage classifier) ----
             yield _sse("phase", {
                 "phase": "planning",
-                "label": "Cortex is drafting the plan…",
+                "label": "Cortex is thinking through your goal…",
             })
-            intent_data = await _classify_intent(msg, user.user_id,
-                                                   memory_block=memory_block)
-            rec = await build_recommendation_from_intent(
-                user_id=user.user_id,
-                intent=intent_data["intent"],
-                params=intent_data.get("params") or {},
+
+            # Pull last ~10 turns of conversation for stage continuity.
+            hist_cur = db.cortex_conversations.find(
+                {"user_id": user.user_id},
+                {"_id": 0, "role": 1, "message": 1, "stage": 1},
+            ).sort("created_at", -1).limit(10)
+            history = [h async for h in hist_cur]
+            history.reverse()
+
+            stage_data = await classify_and_respond(
                 user_message=msg,
+                user_id=user.user_id,
+                history=history,
+                memory_block=memory_block,
+                intent_types=INTENT_TYPES,
             )
+
+            # Plan card gated on the consultant funnel.
+            rec = None
+            if should_render_plan_card(stage_data) and stage_data.get("intent"):
+                rec = await build_recommendation_from_intent(
+                    user_id=user.user_id,
+                    intent=stage_data["intent"],
+                    params=stage_data.get("params") or {},
+                    user_message=msg,
+                )
 
             # Persist conversation history (same as POST endpoint).
             now = datetime.now(timezone.utc)
             await db.cortex_conversations.insert_one({
                 "id": uuid.uuid4().hex, "user_id": user.user_id,
-                "role": "user", "message": msg, "created_at": now,
+                "role": "user", "message": msg,
+                "stage": stage_data["stage"], "created_at": now,
             })
             await db.cortex_conversations.insert_one({
                 "id": uuid.uuid4().hex, "user_id": user.user_id,
-                "role": "cortex", "message": intent_data["ack"],
-                "intent": intent_data["intent"],
-                "params": intent_data.get("params"),
+                "role": "cortex", "message": stage_data["ack"],
+                "stage": stage_data["stage"],
+                "intent": stage_data.get("intent"),
+                "params": stage_data.get("params"),
+                "clarifying_questions": stage_data.get("clarifying_questions"),
+                "findings": stage_data.get("findings"),
+                "recommendation_summary": stage_data.get("recommendation_summary"),
+                "alternatives": stage_data.get("alternatives"),
                 "recommendation": rec, "created_at": now,
             })
             try:
                 await cmem.record_turn(user.user_id, "user", msg,
-                                        meta={"intent": intent_data["intent"]})
-                await cmem.record_turn(user.user_id, "cortex", intent_data["ack"],
-                                        meta={"intent": intent_data["intent"],
+                                        meta={"stage": stage_data["stage"]})
+                await cmem.record_turn(user.user_id, "cortex", stage_data["ack"],
+                                        meta={"stage": stage_data["stage"],
+                                               "intent": stage_data.get("intent"),
                                                "rec_id": (rec or {}).get("id")})
             except Exception:
                 logger.exception("stream: record_turn failed (non-fatal)")
 
             # ----- Phase 4: ready ------------------------------
             yield _sse("ready", {
-                "intent":         intent_data["intent"],
-                "params":         intent_data.get("params") or {},
-                "ack":            intent_data["ack"],
-                "recommendation": rec,
+                "stage":                   stage_data["stage"],
+                "discovery_complete":      stage_data["discovery_complete"],
+                "analysis_complete":       stage_data["analysis_complete"],
+                "recommendation_accepted": stage_data["recommendation_accepted"],
+                "explicit_execution_request": stage_data["explicit_execution_request"],
+                "intent":                  stage_data.get("intent"),
+                "params":                  stage_data.get("params") or {},
+                "ack":                     stage_data["ack"],
+                "clarifying_questions":    stage_data.get("clarifying_questions") or [],
+                "findings":                stage_data.get("findings") or [],
+                "recommendation_summary":  stage_data.get("recommendation_summary") or "",
+                "alternatives":            stage_data.get("alternatives") or [],
+                "recommendation":          rec,
                 "memory": {
                     "recalled_count":   len(recalled),
                     "strategy_summary": (strategy or {}).get("summary", ""),

@@ -242,7 +242,14 @@ const CommandCenter = () => {
             : (memoryStrategyEcho ? memoryStrategyEcho.split('. ')[0] : null);
           const cortexTurn = {
             id: `c-${Date.now()}`, role: 'cortex',
-            message: d?.ack || '', intent: d?.intent, params: d?.params,
+            message: d?.ack || '',
+            stage: d?.stage,
+            intent: d?.intent,
+            params: d?.params,
+            clarifying_questions: d?.clarifying_questions || [],
+            findings: d?.findings || [],
+            recommendation_summary: d?.recommendation_summary || '',
+            alternatives: d?.alternatives || [],
             recommendation: d?.recommendation, memoryHint: hint,
             created_at: new Date().toISOString(),
           };
@@ -269,6 +276,21 @@ const CommandCenter = () => {
   // ----- Plan-card actions ------------------------------------------
   const handleAction = async (action, turn, doneCb) => {
     const rec = turn.recommendation;
+    // Recommendation-lite actions don't require a rec object — handle first.
+    if (action === 'decline-recommendation') {
+      setThread((t) => t.map((x) => x.id === turn.id
+        ? { ...x, _stale: true } : x));
+      setDraft("Not yet — let's discuss this more first.");
+      return;
+    }
+    if (action === 'accept-recommendation') {
+      const summary = turn.recommendation_summary
+        || turn.message?.split('\n')[0]
+        || 'the recommended mission';
+      setDraft(`Yes, please create the mission: ${summary}`);
+      setTimeout(send, 80);
+      return;
+    }
     if (!rec) return;
     if (action === 'preview') {
       toast({ title: 'Preview',
@@ -391,6 +413,7 @@ const CommandCenter = () => {
                             turn={turn}
                             busyId={busyId}
                             isStale={turn._stale}
+                            onClarifyPick={(q) => setDraft(`${q} — `)}
                             onAction={handleAction} />
             ))}
             <PhaseIndicator phase={sending ? phase : null}

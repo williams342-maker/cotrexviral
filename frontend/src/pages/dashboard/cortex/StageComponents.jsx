@@ -1,0 +1,173 @@
+import React from 'react';
+import {
+  Search, Activity, Sparkles, Rocket, CheckCircle2,
+} from 'lucide-react';
+
+/* Stage pill + "Recommendation lite" card for the Discovery-First flow.
+   Plan cards are gated behind the funnel — until the user accepts the
+   recommendation, Cortex stays in conversation mode with text + soft CTAs. */
+
+const STAGES = {
+  discovery: {
+    label: 'Discovery',
+    icon: Search,
+    cls: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+  },
+  analysis: {
+    label: 'Analysis',
+    icon: Activity,
+    cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+  },
+  recommendation: {
+    label: 'Recommendation',
+    icon: Sparkles,
+    cls: 'bg-violet-500/15 text-violet-300 border-violet-500/30',
+  },
+  mission_proposal: {
+    label: 'Mission Proposal',
+    icon: Rocket,
+    cls: 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30',
+  },
+  execution: {
+    label: 'Execution',
+    icon: CheckCircle2,
+    cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+  },
+};
+
+
+export const StagePill = ({ stage }) => {
+  const meta = STAGES[stage];
+  if (!meta) return null;
+  const Icon = meta.icon;
+  return (
+    <span data-testid={`stage-pill-${stage}`}
+          className={`inline-flex items-center gap-1 text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded border ${meta.cls}`}>
+      <Icon size={9} /> {meta.label}
+    </span>
+  );
+};
+
+
+/* ClarifyingQuestionsCard — renders the discovery-stage clarifying
+   questions as click-to-insert chips so the user can answer fast. */
+export const ClarifyingQuestionsCard = ({ questions = [], onPick }) => {
+  if (!questions.length) return null;
+  return (
+    <div data-testid="clarifying-questions"
+         className="rounded-xl border border-cyan-500/15 bg-cyan-500/[0.03] p-3">
+      <div className="text-[10px] uppercase tracking-widest text-cyan-300 font-semibold mb-2 flex items-center gap-1">
+        <Search size={10} /> Help Cortex understand
+      </div>
+      <div className="space-y-1.5">
+        {questions.map((q, i) => (
+          <button key={i} onClick={() => onPick?.(q)}
+                  data-testid={`clarifying-question-${i}`}
+                  className="w-full text-left text-[12px] text-zinc-300 hover:text-white px-2.5 py-1.5 rounded-md bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 transition">
+            {q}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+
+/* RecommendationLiteCard — appears in stage=recommendation. Shows
+   findings + reasoning summary + alternatives + a "Create Mission?"
+   CTA. NO plan card yet — that comes only when the user accepts. */
+export const RecommendationLiteCard = ({
+  summary, findings = [], alternatives = [],
+  onAccept, onDecline, busy,
+}) => {
+  if (!summary && findings.length === 0) return null;
+  return (
+    <div data-testid="recommendation-lite-card"
+         className="rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.05] to-fuchsia-500/[0.02] p-4 backdrop-blur-md">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="w-7 h-7 rounded-md bg-violet-500/15 border border-violet-500/30 text-violet-300 flex items-center justify-center">
+          <Sparkles size={12} />
+        </span>
+        <span className="text-[10px] uppercase tracking-widest text-violet-300 font-semibold">
+          My recommendation
+        </span>
+      </div>
+
+      {summary && (
+        <div className="text-[13px] text-zinc-200 leading-relaxed mb-3">
+          {summary}
+        </div>
+      )}
+
+      {findings.length > 0 && (
+        <div className="mb-3 rounded-lg bg-white/[0.02] border border-white/5 p-3">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold mb-1.5">
+            Findings
+          </div>
+          <ul className="space-y-1">
+            {findings.map((f, i) => (
+              <li key={i} className="text-[12px] text-zinc-300 leading-relaxed flex items-start gap-1.5">
+                <span className="text-violet-400 mt-1 shrink-0">•</span>
+                <span>{f}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {alternatives.length > 0 && (
+        <div className="mb-3">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold mb-1.5">
+            Alternatives to consider
+          </div>
+          <ul className="space-y-1">
+            {alternatives.map((a, i) => (
+              <li key={i} className="text-[11.5px] text-zinc-400 leading-relaxed flex items-start gap-1.5">
+                <span className="text-zinc-600 mt-1 shrink-0">·</span>
+                <span>{a}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 pt-2 border-t border-white/5">
+        <div className="text-[11px] text-zinc-400 flex-1">
+          Would you like me to create a mission for this?
+        </div>
+        <button onClick={onDecline} disabled={busy}
+                data-testid="recommendation-decline-btn"
+                className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/5 transition disabled:opacity-40">
+          Not yet
+        </button>
+        <button onClick={onAccept} disabled={busy}
+                data-testid="recommendation-accept-btn"
+                className="text-[11.5px] font-semibold px-3 py-1.5 rounded-md bg-violet-500 hover:bg-violet-400 text-white transition disabled:opacity-40 shadow-lg shadow-violet-500/20 flex items-center gap-1">
+          <Rocket size={11} /> Create Mission
+        </button>
+      </div>
+    </div>
+  );
+};
+
+
+/* FindingsCard — shown in stage=analysis as Cortex scans/researches. */
+export const FindingsCard = ({ findings = [] }) => {
+  if (!findings.length) return null;
+  return (
+    <div data-testid="analysis-findings-card"
+         className="rounded-xl border border-amber-500/15 bg-amber-500/[0.03] p-3">
+      <div className="text-[10px] uppercase tracking-widest text-amber-300 font-semibold mb-2 flex items-center gap-1">
+        <Activity size={10} className="animate-pulse" /> What I'm finding
+      </div>
+      <ul className="space-y-1">
+        {findings.map((f, i) => (
+          <li key={i} className="text-[12px] text-zinc-300 leading-relaxed flex items-start gap-1.5">
+            <span className="text-amber-400 mt-1 shrink-0">•</span>
+            <span>{f}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};

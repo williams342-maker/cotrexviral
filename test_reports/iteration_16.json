@@ -1,0 +1,44 @@
+{
+  "summary": "Iter16 Discovery-First conversation model end-to-end tested. Backend: 11/12 pytest cases pass (1 LLM-variance soft assertion on ack question-mark). Verified: vague-goal → stage=discovery + clarifying_questions + no plan card; explicit-execute regex bypass ('just launch a mission to recruit 25 candle makers') → stage=mission_proposal + explicit_execution_request=true + full plan card with intent='launch_seller_mission', params.target=25, niche='candle'; 3-turn conversation continuity advances past discovery without plan-card leakage; SSE /chat/stream `ready` event carries all 12 new stage keys (stage, discovery_complete, analysis_complete, recommendation_accepted, explicit_execution_request, clarifying_questions, findings, recommendation_summary, alternatives, intent, params, recommendation); cortex_conversations Mongo docs persist stage/clarifying_questions/findings/recommendation_summary/alternatives (verified via /api/cortex/console/history); should_render_plan_card() unit-tested across all 5 stages + explicit_execution_request override. Frontend: all 3 spec items PASS on /dashboard — vague-goal renders new stage-pill-discovery + clarifying-questions card with NO new cortex-plan-card; explicit-execute renders fresh stage-pill-mission_proposal + new cortex-plan-card with Launch/Automate buttons; clarifying-question-{i} chip click pre-fills composer with 'question text — ' as designed. RecommendationLiteCard (stage=recommendation) was not naturally triggered during testing but the component is correctly wired in ChatMessage.jsx (showRecLite branch + onAccept/onDecline → onAction('accept-recommendation'/'decline-recommendation')); CommandCenter.jsx accept handler pre-fills + auto-sends — code-reviewed and looks correct.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/cortex/console/chat (discovery turn)",
+        "issue": "LLM occasionally returns an ack like 'You want to grow your business. To give you the right guidance, I need a bit more context:' — ends with colon, no '?'. The clarifying_questions array still contains the question marks, so the spec contract is met substantively, but the literal 'ack contains question-mark' assertion can be flaky depending on Claude phrasing. Consider either (a) post-processing the ack to append the first clarifying question, or (b) softening the spec to 'ack-or-clarifying-questions contains a question mark'."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_cortex_iter16.py",
+    "/app/test_reports/pytest/cortex_iter16.xml"
+  ],
+  "action_items": [
+    "(Optional, polish) Strengthen the discovery ack so it always ends with a question mark — currently the literal string can end with a colon while the question marks live in clarifying_questions[]. Either append the first clarifying question to the ack OR soften the spec assertion.",
+    "(Optional, coverage) The stage=recommendation surface (RecommendationLiteCard with Create Mission / Not yet buttons) was not naturally triggered by the LLM during 3-turn continuity testing — the classifier preferred to keep asking clarifying questions. Consider a deterministic heuristic-fallback path that forces stage=recommendation once N >= 2 clarifying turns have been answered AND target+outcome are present, so the full discovery→analysis→recommendation→mission_proposal funnel is reachable without explicit-override."
+  ],
+  "critical_code_review_comments": [
+    "cortex/stages.py should_render_plan_card() gate is implemented correctly and is the single source of truth for plan-card synthesis — both routes/cortex_console.py and routes/cortex_stream.py call it before invoking build_recommendation_from_intent(). Good design.",
+    "_EXEC_OVERRIDE regex fast-path is deterministic and tested — 'just launch a mission to recruit 25 candle makers' and 'create the mission now: …' both bypass the LLM and produce a valid plan card with parsed target/niche.",
+    "cortex_stream.py `ready` event payload is complete and matches POST /chat response shape (stage, all 4 stage flags, clarifying_questions, findings, recommendation_summary, alternatives, intent, params, recommendation). Frontend can use either endpoint interchangeably.",
+    "ChatMessage.jsx correctly gates UI surface per stage — showClarify only when stage==='discovery' && clarifying_questions.length>0; showAnalysis only when stage==='analysis' && findings.length>0; showRecLite only when stage==='recommendation' AND (summary || findings || alternatives) present; showPlanCard only when turn.recommendation present (which is server-gated). No client-side render leakage possible.",
+    "CommandCenter.jsx handleAction('accept-recommendation') correctly pre-fills composer with 'Yes, please create the mission: <summary>' and triggers auto-send — this drives the funnel forward into mission_proposal as the classifier will see the acceptance + prior recommendation in history.",
+    "Console warning still present from iter15: 'DialogContent requires a DialogTitle for the component to be accessible…' on MemorySearch modal — unchanged from iter15, low priority a11y nit."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_cortex_iter16.py (new — 12 pytest cases)"
+  ],
+  "success_rate": {"backend": "92% (11/12)", "frontend": "100% (3/3 spec items)"},
+  "test_credentials": "Authorization: Bearer test_session_1779636592168 + session_token cookie (user_test1779636592168). Source: /app/memory/test_credentials.md.",
+  "seed_data_creation": "No new seed data. The 3-turn continuity test created 3 chat turns under the test user (non-destructive, normal cortex_conversations rows). 5 existing missions for user_test1779636592168 are still running and were not touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "Iter16 test file = /app/backend/tests/test_cortex_iter16.py (12 pytest cases). NOTE: when running, you MUST export REACT_APP_BACKEND_URL because pytest does not auto-load frontend/.env: `REACT_APP_BACKEND_URL=https://social-sync-ai-1.preview.emergentagent.com python -m pytest tests/test_cortex_iter16.py -v`. The discovery-vs-mission_proposal contract is fully gated through cortex.stages.should_render_plan_card() — DO NOT trust raw recommendation field without checking stage. The _EXEC_OVERRIDE regex catches 'just launch …', 'create the mission now', 'skip the planning' — those bypass the LLM stage classifier. To trigger stage=recommendation naturally (which the LLM rarely does in our 3-turn synthetic flow), use a longer history with explicit target + outcome + accept signal, OR consider directly POSTing through Cortex with a mocked history.",
+  "rca of the issue": "N/A — single soft failure is LLM phrasing variance, not a logic bug. The Discovery-First gate is working as designed at both the API and UI layers."
+}

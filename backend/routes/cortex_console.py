@@ -207,29 +207,48 @@ async def console_opportunities(request: Request, limit: int = 20):
 
 @api.post("/cortex/console/chat")
 async def console_chat(payload: ChatPayload, request: Request):
-    """Natural-language conversation. Returns a recommendation card —
-    NOT executed. The user must hit Execute (which honors autonomy).
+    """Discovery-First conversation. Cortex behaves like a consultant:
+    discovery → analysis → recommendation → mission_proposal → execution.
 
-    Memory: pulls (a) the user's strategic-memory doc and (b) the top
-    semantically-similar prior turns, injects both into the classifier
-    prompt so Cortex references prior context. Both user + cortex turns
-    are recorded into the Qdrant vector store for future recall."""
+    Plan cards are GATED — they only render when the user has accepted
+    a recommendation OR explicitly asked for execution. Otherwise the
+    turn is text-only (clarifying questions, findings, or a soft
+    "Would you like me to create a mission?" CTA)."""
     user = await get_current_user(request)
 
     # ---- Memory snapshot before classification ----
     from cortex import memory as cmem
+    from cortex.stages import classify_and_respond, should_render_plan_card
     strategy = await cmem.get_strategy(user.user_id)
     recalled = await cmem.recall_semantic(user.user_id, payload.message, k=5)
     memory_block = cmem.render_memory_block(strategy, recalled)
 
-    intent_data = await _classify_intent(payload.message, user.user_id,
-                                          memory_block=memory_block)
-    rec = await build_recommendation_from_intent(
-        user_id=user.user_id,
-        intent=intent_data["intent"],
-        params=intent_data.get("params") or {},
+    # Pull last ~10 turns for stage continuity.
+    hist_cur = db.cortex_conversations.find(
+        {"user_id": user.user_id}, {"_id": 0, "role": 1, "message": 1, "stage": 1},
+    ).sort("created_at", -1).limit(10)
+    history = [h async for h in hist_cur]
+    history.reverse()
+
+    stage_data = await classify_and_respond(
         user_message=payload.message,
+        user_id=user.user_id,
+        history=history,
+        memory_block=memory_block,
+        intent_types=INTENT_TYPES,
     )
+
+    # Plan card is GATED — only synthesized when the consultant funnel
+    # advances to mission_proposal+ OR the user explicitly requests execution.
+    rec = None
+    if should_render_plan_card(stage_data) and stage_data.get("intent"):
+        rec = await build_recommendation_from_intent(
+            user_id=user.user_id,
+            intent=stage_data["intent"],
+            params=stage_data.get("params") or {},
+            user_message=payload.message,
+        )
+
     now = datetime.now(timezone.utc)
     # Persist the chat turn so the Conversations history works.
     await db.cortex_conversations.insert_one({
@@ -237,15 +256,21 @@ async def console_chat(payload: ChatPayload, request: Request):
         "user_id":    user.user_id,
         "role":       "user",
         "message":    payload.message[:1000],
+        "stage":      stage_data["stage"],
         "created_at": now,
     })
     await db.cortex_conversations.insert_one({
         "id":             uuid.uuid4().hex,
         "user_id":        user.user_id,
         "role":           "cortex",
-        "message":        intent_data["ack"],
-        "intent":         intent_data["intent"],
-        "params":         intent_data.get("params"),
+        "message":        stage_data["ack"],
+        "stage":          stage_data["stage"],
+        "intent":         stage_data.get("intent"),
+        "params":         stage_data.get("params"),
+        "clarifying_questions": stage_data.get("clarifying_questions"),
+        "findings":       stage_data.get("findings"),
+        "recommendation_summary": stage_data.get("recommendation_summary"),
+        "alternatives":   stage_data.get("alternatives"),
         "recommendation": rec,
         "created_at":     now,
     })
@@ -253,9 +278,10 @@ async def console_chat(payload: ChatPayload, request: Request):
     # ---- Embed into Qdrant (best-effort) ----
     try:
         await cmem.record_turn(user.user_id, "user", payload.message,
-                                meta={"intent": intent_data["intent"]})
-        await cmem.record_turn(user.user_id, "cortex", intent_data["ack"],
-                                meta={"intent": intent_data["intent"],
+                                meta={"stage": stage_data["stage"]})
+        await cmem.record_turn(user.user_id, "cortex", stage_data["ack"],
+                                meta={"stage": stage_data["stage"],
+                                       "intent": stage_data.get("intent"),
                                        "rec_id": (rec or {}).get("id")})
     except Exception:
         logger.exception("cortex chat: memory record_turn failed (non-fatal)")
@@ -269,10 +295,19 @@ async def console_chat(payload: ChatPayload, request: Request):
         logger.exception("cortex chat: strategy refresh failed (non-fatal)")
 
     return {
-        "intent":         intent_data["intent"],
-        "params":         intent_data.get("params") or {},
-        "ack":            intent_data["ack"],
-        "recommendation": rec,
+        "stage":                   stage_data["stage"],
+        "discovery_complete":      stage_data["discovery_complete"],
+        "analysis_complete":       stage_data["analysis_complete"],
+        "recommendation_accepted": stage_data["recommendation_accepted"],
+        "explicit_execution_request": stage_data["explicit_execution_request"],
+        "intent":                  stage_data.get("intent"),
+        "params":                  stage_data.get("params") or {},
+        "ack":                     stage_data["ack"],
+        "clarifying_questions":    stage_data.get("clarifying_questions") or [],
+        "findings":                stage_data.get("findings") or [],
+        "recommendation_summary":  stage_data.get("recommendation_summary") or "",
+        "alternatives":            stage_data.get("alternatives") or [],
+        "recommendation":          rec,
         "memory": {
             "strategy_summary": (strategy or {}).get("summary", "") if strategy else "",
             "recalled_count":   len(recalled),
