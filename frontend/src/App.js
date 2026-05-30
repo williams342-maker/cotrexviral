@@ -29,6 +29,7 @@ import AccountSettings from './pages/dashboard/AccountSettings';
 import AgentWorkspace from './pages/dashboard/AgentWorkspace';
 import AITeam from './pages/dashboard/AITeam';
 import CommandCenter from './pages/dashboard/CommandCenter';
+import LegacyCommandCenter from './pages/dashboard/LegacyCommandCenter';
 import CampaignDetail from './pages/dashboard/CampaignDetail';
 import ActiveCampaigns from './pages/dashboard/ActiveCampaigns';
 import Missions from './pages/dashboard/Missions';
@@ -101,8 +102,9 @@ function AppRouter() {
       <Route path="/tools/:slug" element={<NicheToolPage />} />
       <Route path="/blog" element={<BlogIndex />} />
       <Route path="/blog/:slug" element={<BlogPost />} />
-      <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/dashboard/team-performance" replace /></ProtectedRoute>} />
+      <Route path="/dashboard" element={<ProtectedRoute><CommandCenter /></ProtectedRoute>} />
       <Route path="/dashboard/command-center" element={<ProtectedRoute><CommandCenter /></ProtectedRoute>} />
+      <Route path="/dashboard/legacy" element={<ProtectedRoute><LegacyCommandCenter /></ProtectedRoute>} />
       <Route path="/dashboard/missions" element={<ProtectedRoute><Missions /></ProtectedRoute>} />
       <Route path="/dashboard/cortex" element={<ProtectedRoute><Missions /></ProtectedRoute>} />
       <Route path="/dashboard/cortex/:id" element={<ProtectedRoute><CortexWorkspace /></ProtectedRoute>} />

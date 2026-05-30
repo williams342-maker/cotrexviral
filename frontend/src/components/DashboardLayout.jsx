@@ -30,7 +30,8 @@ import CommandPalette from './CommandPalette';
    Everything else lives in the Ctrl+K palette.
 */
 const SECTIONS = [
-  { id: 'home',     label: 'Command Center', icon: LayoutDashboard, to: '/dashboard/missions' },
+  { id: 'home',     label: 'Command Center', icon: Brain, to: '/dashboard' },
+  { id: 'missions', label: 'Mission Control', icon: LayoutDashboard, to: '/dashboard/missions' },
   {
     id: 'campaigns', label: 'Campaigns', icon: Rocket,
     children: [
@@ -39,7 +40,7 @@ const SECTIONS = [
       { to: '/dashboard/approvals',        label: 'Approvals', icon: CheckSquare },
     ],
   },
-  { id: 'cortex',       label: 'Cortex',       icon: Brain,    to: '/dashboard/cortex' },
+  { id: 'cortex',       label: 'Cortex Brief', icon: Brain,    to: '/dashboard/cortex' },
   { id: 'scout',        label: 'Scout',        icon: Compass,  to: '/dashboard/teams/scout' },
   { id: 'creator',      label: 'Creator',      icon: Sparkles, to: '/dashboard/teams/creator' },
   { id: 'operator',     label: 'Operator',     icon: Send,     to: '/dashboard/teams/operator' },

@@ -495,7 +495,9 @@ def _card(
         "estimated_timeline_days": int(estimated_timeline_days),
         "estimated_cost_usd": float(estimated_cost_usd),
         "autonomy_impact": _autonomy_impact_string(type),
-        "autonomy_behavior": AUTONOMY_BEHAVIOR.get(type, {}),
+        # Stringify the int keys (0-5 → "0"-"5") so the card is
+        # BSON-safe when persisted into cortex_conversations.
+        "autonomy_behavior": {str(k): v for k, v in AUTONOMY_BEHAVIOR.get(type, {}).items()},
         "action_payload": action_payload,
         "actions": ["explain", "preview", "execute", "automate"],
     }

@@ -91,32 +91,36 @@ Intent catalogue:
 If the user mentions a number, set `target`. If they mention a niche/category/vertical (woodworking, candle-makers, jewelry, etc.), set `niche`. If they mention a deadline ("by Father's Day", "this month", "in 14 days"), convert to `deadline_days` (integer days from today, best estimate)."""
 
 
-async def _classify_intent(message: str, user_id: str) -> dict:
-    """Run the message through the LLM intent classifier. Falls back
-    to a deterministic regex when EMERGENT_LLM_KEY is missing or LLM
-    errors — keeps the chat endpoint working offline / on key outage."""
+async def _classify_intent(message: str, user_id: str,
+                            memory_block: str = "") -> dict:
+    """Run the message through the LLM intent classifier via the
+    provider-abstracted cortex_chat (Claude Sonnet 4.5 primary, GPT-5.2
+    fallback). Falls back to a deterministic regex when EMERGENT_LLM_KEY
+    is missing or every provider errors — keeps the chat endpoint
+    working offline / on key outage.
+
+    `memory_block` is the optional strategic+semantic memory snapshot
+    rendered by `cortex.memory.render_memory_block()`; injected into the
+    system prompt so Cortex's classification & ack reference the user's
+    long-term goals rather than starting from scratch every turn."""
     fallback = _regex_intent(message)
     if not EMERGENT_LLM_KEY:
         return fallback
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        from routes.ai import send_with_usage
-        import json, re
+        import json
+        from cortex.llm_provider import cortex_chat
         system = INTENT_PROMPT % {"intents": ", ".join(INTENT_TYPES)}
-        chat = (
-            LlmChat(api_key=EMERGENT_LLM_KEY,
-                    session_id=f"cortex-intent-{user_id}-{uuid.uuid4().hex[:8]}",
-                    system_message=system)
-            .with_model("openai", "gpt-5")
+        if memory_block:
+            system = f"{system}\n\n---\n{memory_block}"
+        raw, _label = await cortex_chat(
+            system=system,
+            user_text=message,
+            session_id=f"cortex-intent-{user_id}-{uuid.uuid4().hex[:8]}",
+            user_id=user_id,
+            prefer="claude",
+            json_mode=True,
         )
-        raw, _ = await send_with_usage(
-            chat, UserMessage(text=message),
-            agent_id="cortex", user_id=user_id, model="gpt-5",
-        )
-        text = (raw or "").strip()
-        if text.startswith("```"):
-            text = re.sub(r"^```[a-zA-Z]*\n?|```$", "", text.strip(), flags=re.MULTILINE)
-        data = json.loads(text)
+        data = json.loads(raw)
         intent = data.get("intent")
         if intent not in INTENT_TYPES:
             return fallback
@@ -204,22 +208,36 @@ async def console_opportunities(request: Request, limit: int = 20):
 @api.post("/cortex/console/chat")
 async def console_chat(payload: ChatPayload, request: Request):
     """Natural-language conversation. Returns a recommendation card —
-    NOT executed. The user must hit Execute (which honors autonomy)."""
+    NOT executed. The user must hit Execute (which honors autonomy).
+
+    Memory: pulls (a) the user's strategic-memory doc and (b) the top
+    semantically-similar prior turns, injects both into the classifier
+    prompt so Cortex references prior context. Both user + cortex turns
+    are recorded into the Qdrant vector store for future recall."""
     user = await get_current_user(request)
-    intent_data = await _classify_intent(payload.message, user.user_id)
+
+    # ---- Memory snapshot before classification ----
+    from cortex import memory as cmem
+    strategy = await cmem.get_strategy(user.user_id)
+    recalled = await cmem.recall_semantic(user.user_id, payload.message, k=5)
+    memory_block = cmem.render_memory_block(strategy, recalled)
+
+    intent_data = await _classify_intent(payload.message, user.user_id,
+                                          memory_block=memory_block)
     rec = await build_recommendation_from_intent(
         user_id=user.user_id,
         intent=intent_data["intent"],
         params=intent_data.get("params") or {},
         user_message=payload.message,
     )
+    now = datetime.now(timezone.utc)
     # Persist the chat turn so the Conversations history works.
     await db.cortex_conversations.insert_one({
         "id":         uuid.uuid4().hex,
         "user_id":    user.user_id,
         "role":       "user",
         "message":    payload.message[:1000],
-        "created_at": datetime.now(timezone.utc),
+        "created_at": now,
     })
     await db.cortex_conversations.insert_one({
         "id":             uuid.uuid4().hex,
@@ -229,13 +247,36 @@ async def console_chat(payload: ChatPayload, request: Request):
         "intent":         intent_data["intent"],
         "params":         intent_data.get("params"),
         "recommendation": rec,
-        "created_at":     datetime.now(timezone.utc),
+        "created_at":     now,
     })
+
+    # ---- Embed into Qdrant (best-effort) ----
+    try:
+        await cmem.record_turn(user.user_id, "user", payload.message,
+                                meta={"intent": intent_data["intent"]})
+        await cmem.record_turn(user.user_id, "cortex", intent_data["ack"],
+                                meta={"intent": intent_data["intent"],
+                                       "rec_id": (rec or {}).get("id")})
+    except Exception:
+        logger.exception("cortex chat: memory record_turn failed (non-fatal)")
+
+    # ---- Periodic strategy refresh (every 8 turns) ----
+    try:
+        if await db.cortex_conversations.count_documents(
+            {"user_id": user.user_id}) % 8 == 0:
+            await cmem.update_strategy_summary(user.user_id)
+    except Exception:
+        logger.exception("cortex chat: strategy refresh failed (non-fatal)")
+
     return {
         "intent":         intent_data["intent"],
         "params":         intent_data.get("params") or {},
         "ack":            intent_data["ack"],
         "recommendation": rec,
+        "memory": {
+            "strategy_summary": (strategy or {}).get("summary", "") if strategy else "",
+            "recalled_count":   len(recalled),
+        },
     }
 
 

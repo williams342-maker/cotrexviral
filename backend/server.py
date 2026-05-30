@@ -73,6 +73,8 @@ from routes import (  # noqa: F401
     missions,        # Mission-driven autonomous marketing OS
     teams,           # 4 agent-team façade endpoints (Scout/Creator/Operator/Intelligence)
     cortex,          # Master orchestrator — single entry-point for user goals
+    cortex_console,  # AI Command Center — conversational chat + briefing + execute
+    cortex_memory,   # Hybrid memory (Mongo strategy + Qdrant semantic) + exec log
     mission_loop,    # Event-driven relay: scout→creator→operator→intelligence
     seller_leads,        # Seller Acquisition OS — leads pipeline
     seller_discovery,    # Seller Acquisition OS — Discovery Scout
