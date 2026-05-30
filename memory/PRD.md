@@ -35,6 +35,27 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-25 (part 89) **🧠 Cortex Conversational Command Center (Phase 1+2) — major architectural shift**
+  - `/dashboard` is now the **Conversational Command Center** — Cortex (AI executive) chats with the user, plans missions with structured reasoning, and executes through the autonomy engine. The previous card dashboard is preserved at `/dashboard/legacy`; Mission Control moved to `/dashboard/missions`.
+  - **LLM provider abstraction** (`/app/backend/cortex/llm_provider.py`): `cortex_chat()` routes through Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`) primary → GPT-5.2 (`gpt-5.2`) fallback via emergentintegrations + Emergent LLM key. Decoupled from any single model.
+  - **Hybrid memory** (`/app/backend/cortex/memory.py`):
+    • Strategic memory → Mongo `cortex_strategy` doc per user (LLM-distilled summary + goals + bottlenecks + themes, refreshed every 8 chat turns).
+    • Semantic memory → Qdrant **local mode** at `/app/backend/.qdrant_data/` with `BAAI/bge-small-en-v1.5` embeddings (384-dim, in-process via fastembed, no separate server). `record_turn()`, `recall_semantic()`, `render_memory_block()` API.
+    • Memory block (strategy + top-K similar turns) is injected into the LLM system prompt on every chat call → "Based on our previous conversations" continuity.
+  - **New endpoints** (`/app/backend/routes/cortex_memory.py`):
+    • `GET /api/cortex/memory/strategy` (`?refresh=true` re-distills)
+    • `POST /api/cortex/memory/recall` (semantic K-NN search)
+    • `GET /api/cortex/memory/health` (qdrant + provider chain)
+    • `GET /api/cortex/execution-log?limit=N` (unified feed: launched missions, queued plans, drafts, agent ticks)
+  - **Frontend** (`/app/frontend/src/pages/dashboard/CommandCenter.jsx` + `cortex/`):
+    • Layout — Top: conversation thread · Center: inline plan cards · Right: OpportunityRail (strategic memory + opportunities + starter prompts) · Bottom: ExecutionLog drawer.
+    • **PlanCard**: Reasoning bullets · Confidence bar · Expected outcome · Cost · Timeline · Risk badge · [Preview] [Launch Mission] [Automate] buttons. Automate forces autonomy override = L5.
+    • Plan cards render inline with the cortex message; clicking Launch dispatches to `/api/cortex/console/execute` which respects user's autonomy level (L0=draft, L1/L2=queue, L3/L4=launch, L5=autopilot).
+  - **Backend wiring fix**: `cortex_console.py` was previously written but never registered in `server.py` — added. `autonomy_behavior` int keys in recommendations broke BSON persistence; stringified before save in `cortex_recommendations.py:498`.
+  - **Sidebar**: Command Center (Brain icon, /dashboard) is now first; Mission Control second (/dashboard/missions).
+  - **iteration_12.json**: 11/11 backend tests pass, frontend reviews 100%. Live verified: Claude Sonnet 4.5 generates plan cards (~5-15s); cross-turn semantic recall returns scored hits (recalled_count>=1 on turn 2); L3 launch creates real missions; L5 Automate triggers autopilot.
+
+
 - 2026-02-25 (part 88) **✅ Conversations UI verified end-to-end (iteration_11)**
   - `_shared.js` EVENT_TONE map extended with `clicked → text-violet-300` so SendGrid click webhooks now render with a distinct tone (previously fell through to default).
   - Testing agent seeded 1 mission + 1 outreached lead + 5 outreach events (sent/delivered/opened/clicked/sent+artifact) + 1 PDF artifact, validated 8/8 review checks (100%):

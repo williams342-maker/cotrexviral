@@ -108,9 +108,9 @@ export const OpportunityRail = ({ opportunities = [], loading, onPrompt, strateg
             "What are my top growth opportunities right now?",
             "Find sellers at risk of churning",
             "Build a content plan for next week",
-          ].map((q) => (
+          ].map((q, idx) => (
             <button key={q} onClick={() => onPrompt?.({ prompt: q })}
-                    data-testid={`starter-prompt-${q.slice(0, 8)}`}
+                    data-testid={`starter-prompt-${idx}`}
                     className="w-full text-left text-[11.5px] text-zinc-400 hover:text-white px-2.5 py-1.5 rounded-md bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 transition">
               {q}
             </button>
