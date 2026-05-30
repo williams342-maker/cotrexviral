@@ -9,6 +9,7 @@ export const EVENT_TONE = {
   sent:            'text-blue-300',
   delivered:       'text-blue-300',
   opened:          'text-amber-300',
+  clicked:         'text-violet-300',
   replied:         'text-emerald-300',
   interested:      'text-emerald-300',
   bounced:         'text-rose-300',
