@@ -38,6 +38,7 @@ from deps import get_current_user
 from cortex.asset_storage import storage, MAX_ASSET_BYTES, ALLOWED_MIME
 from cortex.asset_extraction import extract, kind_from_mime
 from cortex.asset_intelligence import analyze_asset
+from cortex.creative_brief import generate_brief
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,14 @@ async def _serialize(asset: dict) -> dict:
                 if isinstance(v, datetime):
                     review[k] = v.isoformat()
             out["review"] = review
+        brief = await db.cortex_creative_briefs.find_one(
+            {"asset_id": aid}, {"_id": 0})
+        if brief:
+            for k in ("created_at",):
+                v = brief.get(k)
+                if isinstance(v, datetime):
+                    brief[k] = v.isoformat()
+            out["brief"] = brief
 
     # Public URL (file streaming) — only for stored binaries.
     if out.get("storage_key"):
@@ -127,6 +136,22 @@ async def _run_pipeline(asset_id: str) -> None:
                            "user_id": asset.get("user_id")}},
                 upsert=True,
             )
+
+        # 3b. Creative Brief — synthesize the executable campaign brief
+        # on top of the intelligence + review. Phase-A2 layer. Best-effort:
+        # if the LLM is down we skip rather than fail the whole pipeline.
+        try:
+            brief = await generate_brief(asset, intel, review)
+            if brief:
+                await db.cortex_creative_briefs.update_one(
+                    {"asset_id": asset_id},
+                    {"$set": {**brief, "asset_id": asset_id,
+                               "user_id": asset.get("user_id")}},
+                    upsert=True,
+                )
+        except Exception:
+            logger.exception("asset pipeline: creative brief failed for %s",
+                              asset_id)
 
         # 4. Flip status → complete
         await db.cortex_assets.update_one(
@@ -308,3 +333,84 @@ async def stream_asset_file(key: str, request: Request):
     ext = "." + key.rsplit(".", 1)[-1].lower() if "." in key else ""
     mime = {"."+v.lstrip("."): k for k, v in ALLOWED_MIME.items()}.get(ext, "application/octet-stream")
     return StreamingResponse(iter([data]), media_type=mime)
+
+
+# ---------------------------------------------------------- briefs (A2)
+@api.post("/cortex/assets/{asset_id}/brief")
+async def regenerate_brief(asset_id: str, request: Request):
+    """Force a fresh Creative Brief synthesis. Useful when the asset's
+    first brief is too vague or the user wants a second take."""
+    user = await get_current_user(request)
+    asset = await db.cortex_assets.find_one(
+        {"id": asset_id, "user_id": user.user_id}, {"_id": 0})
+    if not asset or asset.get("deleted_at"):
+        raise HTTPException(404, "Asset not found.")
+    if asset.get("status") != "complete":
+        raise HTTPException(409,
+                            f"Asset must be fully analyzed first (status={asset.get('status')}).")
+
+    intel = await db.cortex_asset_intelligence.find_one(
+        {"asset_id": asset_id}, {"_id": 0})
+    review = await db.cortex_asset_reviews.find_one(
+        {"asset_id": asset_id}, {"_id": 0})
+
+    brief = await generate_brief(asset, intel, review)
+    if not brief:
+        raise HTTPException(500, "Brief synthesis failed.")
+    await db.cortex_creative_briefs.update_one(
+        {"asset_id": asset_id},
+        {"$set": {**brief, "asset_id": asset_id, "user_id": user.user_id}},
+        upsert=True,
+    )
+    brief.pop("_id", None)
+    return brief
+
+
+@api.get("/cortex/assets/{asset_id}/brief")
+async def get_brief(asset_id: str, request: Request):
+    """Fetch the Creative Brief for an asset. Lazily generates one if
+    missing (older assets created before Phase A2 shipped)."""
+    user = await get_current_user(request)
+    asset = await db.cortex_assets.find_one(
+        {"id": asset_id, "user_id": user.user_id}, {"_id": 0})
+    if not asset or asset.get("deleted_at"):
+        raise HTTPException(404, "Asset not found.")
+    brief = await db.cortex_creative_briefs.find_one(
+        {"asset_id": asset_id, "user_id": user.user_id}, {"_id": 0})
+    if brief:
+        return brief
+    # Lazy backfill for legacy assets.
+    if asset.get("status") != "complete":
+        raise HTTPException(409,
+                            f"Asset still {asset.get('status')} — brief is generated when analysis completes.")
+    intel = await db.cortex_asset_intelligence.find_one(
+        {"asset_id": asset_id}, {"_id": 0})
+    review = await db.cortex_asset_reviews.find_one(
+        {"asset_id": asset_id}, {"_id": 0})
+    brief = await generate_brief(asset, intel, review)
+    if not brief:
+        raise HTTPException(500, "Brief synthesis failed.")
+    await db.cortex_creative_briefs.update_one(
+        {"asset_id": asset_id},
+        {"$set": {**brief, "asset_id": asset_id, "user_id": user.user_id}},
+        upsert=True,
+    )
+    brief.pop("_id", None)
+    return brief
+
+
+@api.get("/cortex/briefs")
+async def list_briefs(request: Request, limit: int = 30):
+    """List the user's most recent Creative Briefs (newest first) —
+    feeds the future 'Campaign Library' panel."""
+    user = await get_current_user(request)
+    limit = max(1, min(int(limit or 30), 100))
+    cur = db.cortex_creative_briefs.find(
+        {"user_id": user.user_id}, {"_id": 0}
+    ).sort("created_at", -1).limit(limit)
+    rows = [r async for r in cur]
+    for r in rows:
+        v = r.get("created_at")
+        if isinstance(v, datetime):
+            r["created_at"] = v.isoformat()
+    return {"briefs": rows, "count": len(rows)}

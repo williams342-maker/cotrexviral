@@ -8,6 +8,7 @@ import {
   Lightbulb, Users, Tag, Megaphone, X, ChevronRight, AlertTriangle, CheckCircle2,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
+import CreativeBriefPanel from './cortex/CreativeBriefPanel';
 import { API } from '../../context/AuthContext';
 
 /* Marketing Asset Upload Center — Phase A1.
@@ -373,6 +374,10 @@ function AssetDetail({ asset, onBack, onChanged }) {
           <IntelligencePanel intel={intel} pending={animate} />
         </div>
       </div>
+
+      {/* Creative Brief — Phase A2. Full-width below intelligence + review
+          since it's the actionable strategy output the user works from. */}
+      <CreativeBriefPanel asset={asset} onChanged={onChanged} />
     </div>
   );
 }
