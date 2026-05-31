@@ -1,0 +1,140 @@
+{
+  "hero_subhead": "CortexViral's Intelligence team deploys competitor analysis AI that crawls storefronts, scores pricing and engagement, then delivers a one-page strategic brief with three concrete actions every Monday. No analysts. No spreadsheets. Just automated competitive intelligence that tells you exactly where to strike next.",
+  "hero_bullets": [
+    "Weekly crawls across competitors",
+    "Assortment, pricing, engagement scoring",
+    "One-page brief, three actions",
+    "Zero human analyst hours"
+  ],
+  "sections": [
+    {
+      "kicker": "The sweep",
+      "heading": "How the Intelligence team crawls your category",
+      "body": "Every Sunday night, the Intelligence team kicks off a competitor sweep. You give it a list of URLs: competitor storefronts, brand pages, product directories. The agent crawls public product pages, images, descriptions, and published pricing. It captures SKU counts, category distribution, price ranges, and promo frequency. For social profiles, it pulls post volume, engagement rates, follower velocity, and top-performing content formats. The crawl runs headless, respects robots.txt, and finishes in under two hours for twenty competitors. Raw data lands in the Intelligence workspace by Monday morning. No browser tabs. No manual screenshots. No analyst pulling weekend shifts to build a deck.",
+      "bullets": []
+    },
+    {
+      "kicker": "The scoring engine",
+      "heading": "Assortment depth, pricing gaps, engagement velocity",
+      "body": "Raw HTML means nothing without context. The Intelligence team scores each competitor across three dimensions. Assortment depth: SKU count by category, new-product velocity, seasonal refresh rate. Pricing position: median price per category, discount frequency, bundle prevalence. Engagement velocity: social post cadence, average likes per post, comment sentiment, share rate. Each dimension gets a 0 to 100 score. The system benchmarks your brand against the category median and flags outliers. If a competitor just launched forty new SKUs while you shipped three, you see it. If someone dropped prices fifteen percent across a category, you see it Monday morning. Marketing competitor analysis becomes a weekly reflex, not a quarterly scramble.",
+      "bullets": []
+    },
+    {
+      "kicker": "The brief",
+      "heading": "One page, three actions, zero fluff",
+      "body": "The Intelligence agent synthesizes crawl data into a single-page strategic brief. Top section: category snapshot with median assortment size, average price, and engagement benchmarks. Middle section: your position relative to median across all three dimensions, with red flags for gaps wider than twenty percent. Bottom section: three ranked actions for the next seven days. Action one might be launch a pricing test in the category where you are eighteen percent above median. Action two could be commission ten SKUs in the underserved segment where competitor X just added thirty. Action three might be double posting frequency on the channel where competitor Y is seeing forty percent higher engagement. Each action includes expected impact and effort estimate. The brief lands in Slack and email every Monday at 8 a.m.",
+      "bullets": []
+    },
+    {
+      "kicker": "The autonomy ladder",
+      "heading": "L0 review to L4 auto-execution",
+      "body": "You control how much the Intelligence team runs on its own. At L0, the agent crawls and scores but waits for you to approve the brief. At L1, the brief publishes automatically but actions still need a click. At L2, low-risk actions like updating an internal tracking sheet execute without approval. At L3, the system can trigger a Scout research mission or a Creator brief based on competitor movement. At L4, competitive intelligence software closes the loop: if a competitor launches a promo, the system drafts a counter-campaign, routes it to the Operator team, and queues it for publish pending your final review. Most teams start at L1 and climb to L3 within four weeks once they trust the quality of the actions.",
+      "bullets": [
+        "L0: manual review of every brief",
+        "L1: auto-publish brief, approve actions",
+        "L2: auto-execute low-risk tracking",
+        "L3: trigger Scout and Creator missions",
+        "L4: draft and queue counter-campaigns"
+      ]
+    },
+    {
+      "kicker": "The human overlay",
+      "heading": "When the Intelligence team escalates to you",
+      "body": "The agent knows what it does not know. If a competitor site blocks the crawl, the system flags it and suggests a manual check. If sentiment analysis confidence falls below seventy percent on a review batch, it surfaces the raw text for human review. If two competitors make contradictory moves in the same week, the brief presents both scenarios and asks you to pick a strategic direction. The Recommended Action layer ranks every escalation by leverage: high-leverage decisions that could shift quarterly revenue come first, low-stakes confirmation requests sit at the bottom. You spend ten minutes reviewing the brief, not ten hours building it. AI competitor tracking handles the grind so you handle the judgment calls.",
+      "bullets": []
+    },
+    {
+      "kicker": "Integration layer",
+      "heading": "Connect Intelligence to Scout, Creator, Operator",
+      "body": "The Intelligence team does not live in a silo. When it spots a competitor launching a new product line, it can trigger a Scout mission to research customer demand in that segment. When pricing data shows a gap, it can route a brief to the Creator team to draft messaging that justifies your premium or highlights your value. When a social engagement spike happens, the Operator team gets a signal to test similar content formats in your next publish batch. Brand monitoring AI becomes the input layer for your entire marketing operating system. Competitive insights flow directly into campaigns, content, and seller outreach. No copy-paste between tools. No deck forwarded to three teams hoping someone reads it. Intelligence findings become executable work in under sixty seconds.",
+      "bullets": []
+    }
+  ],
+  "comparison": {
+    "title": "Manual competitor tracking vs. automated Intelligence",
+    "left": {
+      "label": "Old way",
+      "items": [
+        "Analyst spends Friday afternoon crawling competitor sites manually",
+        "Data lands in a spreadsheet, stale by the time you read it",
+        "Quarterly reports sit in slide decks no one opens",
+        "No connection between insights and actual campaign execution",
+        "You discover competitor moves three weeks after they happen",
+        "Competitive analysis costs sixty analyst hours per month"
+      ]
+    },
+    "right": {
+      "label": "CortexViral Intelligence",
+      "items": [
+        "Autonomous weekly crawl across twenty competitors runs Sunday night",
+        "Scored brief with three concrete actions lands Monday morning",
+        "Real-time escalation when competitors make significant moves",
+        "Intelligence triggers Scout research and Creator briefs automatically",
+        "You see pricing or assortment changes within seven days maximum",
+        "Zero standing analyst cost, just review ten minutes per week"
+      ]
+    }
+  },
+  "internal_links": [
+    {
+      "slug": "marketing-os",
+      "title": "AI Marketing Operating System",
+      "blurb": "See how Scout, Creator, Operator, and Intelligence teams work together inside a single orchestrated platform."
+    },
+    {
+      "slug": "seller-acquisition",
+      "title": "AI Seller Acquisition Engine",
+      "blurb": "Use Intelligence competitor data to score and recruit sellers already moving volume in your category."
+    },
+    {
+      "slug": "ai-campaign-generator",
+      "title": "AI Campaign Generator",
+      "blurb": "Turn competitive intelligence findings into multi-channel campaigns in under five minutes with autonomous briefs."
+    }
+  ],
+  "faq": [
+    {
+      "q": "How does competitor analysis AI differ from manual tracking spreadsheets?",
+      "a": "Manual tracking requires an analyst to visit competitor sites, screenshot pricing, copy SKU counts, and update a spreadsheet every week. Competitor analysis AI runs autonomously: it crawls public storefronts, scores assortment depth and pricing position, and delivers a strategic brief with ranked actions every Monday. The AI system catches changes within seven days maximum, while manual tracking often misses moves for weeks. You get consistent coverage across twenty competitors without burning analyst hours on repetitive crawls."
+    },
+    {
+      "q": "Which competitors can the Intelligence team monitor automatically?",
+      "a": "The Intelligence team monitors any competitor with a public-facing storefront, product directory, or social profile. You provide URLs for competitor brand pages, category listings, or Instagram and LinkedIn accounts. The agent crawls product pages for SKU counts and pricing, social profiles for engagement rates and post cadence. It respects robots.txt and does not attempt to access gated content or login-required dashboards. Most teams track between ten and twenty direct competitors plus five to ten adjacent category players for peripheral signals."
+    },
+    {
+      "q": "How accurate is AI competitor tracking for pricing and assortment data?",
+      "a": "The Intelligence agent captures list prices, strikethrough pricing, and promo badges visible on public product pages. Accuracy matches what a human analyst would record during a manual crawl, typically above ninety-five percent for structured ecommerce sites. If a site uses heavy JavaScript rendering or blocks headless crawlers, the system flags the failure and suggests a manual check. Assortment counts reflect published SKUs; the agent cannot see unlisted or draft products. You review the raw data table inside the Intelligence workspace if you need to verify specific figures before acting."
+    },
+    {
+      "q": "Can competitive intelligence software trigger campaigns based on competitor moves?",
+      "a": "Yes, at autonomy level L3 and above. When the Intelligence team detects a significant competitor move like a category-wide price drop or new product launch, it can trigger a Scout research mission to validate demand or route a brief to the Creator team to draft counter-messaging. At L4, the system drafts a full campaign, assigns it to the Operator team for scheduling, and queues it in your review interface. You approve or edit before publish. This closes the loop from competitive signal to executable campaign in under ten minutes instead of days of internal coordination."
+    },
+    {
+      "q": "What does a weekly Intelligence brief include for marketing competitor analysis?",
+      "a": "Each Monday brief has three sections. Top section shows category benchmarks: median SKU count, average price, and engagement velocity across all tracked competitors. Middle section shows your brand position relative to those medians with red flags for gaps exceeding twenty percent. Bottom section lists three ranked actions for the next seven days, each with expected impact, effort estimate, and the specific competitor move that triggered the recommendation. The entire brief fits on one page, delivered as PDF to email and summary blocks in Slack."
+    },
+    {
+      "q": "How does brand monitoring AI handle sentiment and engagement scoring?",
+      "a": "The Intelligence agent pulls public engagement metrics like likes, shares, comments, and follower counts from competitor social profiles. It calculates average engagement rate per post, posting cadence, and follower velocity over rolling four-week windows. For comment sentiment, it runs a classifier trained on marketing and ecommerce language, flagging positive, neutral, or negative tone. If sentiment confidence falls below seventy percent on a batch, the system surfaces raw comment text for human review. Engagement scoring helps you see which content formats and posting rhythms drive the most interaction in your category."
+    }
+  ],
+  "final_cta_heading": "Stop guessing what your competitors are doing next week",
+  "final_cta_body": "Launch your first Intelligence sweep today. Twenty competitors crawled, scored, and briefed by Monday morning. No analyst hire required.",
+  "__meta__": {
+    "slug": "competitor-analysis",
+    "title": "AI Competitor Analysis Software | CortexViral",
+    "meta": "Track competitor positioning, pricing, content velocity, and social engagement with AI. CortexViral surfaces three concrete moves to beat your category every week.",
+    "h1_lead": "Competitive intelligence,",
+    "h1_accent": "weekly, automated.",
+    "kicker": "Competitor Analysis",
+    "primary_kw": "Competitor analysis AI",
+    "keywords": [
+      "Competitor Analysis AI",
+      "Competitive Intelligence Software",
+      "AI competitor tracking",
+      "Marketing competitor analysis",
+      "Brand monitoring AI"
+    ],
+    "generated_by": "claude"
+  }
+}

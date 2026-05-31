@@ -1,0 +1,160 @@
+{
+  "hero_subhead": "Turn a one-page brief into a complete multi-channel campaign in minutes. CortexViral's AI campaign generator reads your brief, extracts strategy, and builds social posts, email sequences, and landing copy—scheduled and ready to publish.",
+  "hero_bullets": [
+    "Upload brief, launch in 11 minutes",
+    "10+ posts, emails, landing copy",
+    "Auto-schedule across optimal windows",
+    "One brief becomes multi-channel campaign"
+  ],
+  "sections": [
+    {
+      "kicker": "How it works",
+      "heading": "From brief to live campaign in four steps",
+      "body": "Upload your campaign brief as a PDF, PPTX, video walkthrough, or URL. Cortex reads every word, slide, and frame. It extracts target audience, product claims, tone, and strategic goals. Then the Creator team composes a full campaign bundle: ten to fifteen social posts, a three-email nurture sequence, and landing page hero copy. The Operator team slots each asset into optimal posting windows based on audience time-zone clusters and historical engagement data. You review the bundle in a single staging view, approve or edit inline, and publish to all connected channels in one click. The entire process collapses three weeks of planning, copywriting, design collaboration, and manual scheduling into eleven minutes of machine work. No templates. No prompt gymnastics. Just upload your brief and watch Cortex build the campaign you would have built yourself if you had a week and a team of five.",
+      "bullets": [
+        "Upload PDF, PPTX, video, or URL brief",
+        "Cortex extracts audience, claims, tone, goals",
+        "Creator team writes 10+ posts, emails, landing copy",
+        "Operator auto-schedules across optimal windows",
+        "Review, edit, publish—all channels, one click"
+      ]
+    },
+    {
+      "kicker": "Intelligence layer",
+      "heading": "Cortex reads briefs the way a campaign lead reads them",
+      "body": "Most AI marketing tools ask you to fill out forms or paste prompts. CortexViral does the opposite. You upload the artifacts you already have: strategy decks, product briefs, recorded Loom walkthroughs, competitor landing pages. Cortex uses multi-modal intelligence to parse slides, transcribe video, and extract key claims, objections, and positioning statements. It identifies your target persona, the job-to-be-done, and the conversion event. It spots contradictions between your messaging and your competitive landscape. The Intelligence team cross-references your brief against live competitor data and flags positioning gaps before a single word of copy is written. By the time the Creator team starts writing, Cortex has already built a structured campaign map: audience segment, pain points, proof points, CTAs, and channel priorities. You get the strategic rigor of a senior campaign manager without the two-hour kickoff meeting.",
+      "bullets": [
+        "Parses slides, video, PDFs, URLs",
+        "Extracts persona, claims, objections, CTAs",
+        "Cross-references competitive intel before writing",
+        "Builds structured campaign map automatically"
+      ]
+    },
+    {
+      "kicker": "Campaign output",
+      "heading": "One brief becomes ten posts, three emails, landing copy",
+      "body": "Cortex does not write one piece of content and call it done. The Creator team composes a coordinated bundle. Social posts are split across awareness, consideration, and conversion stages. Each post is adapted for the platform: LinkedIn gets professional framing and case-study hooks, Twitter gets punchy claims and thread-starters, Instagram gets lifestyle framing and visual cues. The email sequence mirrors the social cadence: email one teases the problem, email two presents the solution with proof, email three delivers the CTA and urgency lever. Landing page hero copy is written in the same voice but optimized for search intent and conversion clarity. Every asset shares the same strategic spine but adapts format, length, and tone to its channel. You do not need to rewrite or rework. You review the bundle, tweak a headline or two, and publish. The campaign is coherent, on-brand, and ready to drive results the day you upload your brief.",
+      "bullets": [
+        "10–15 social posts across awareness, consideration, conversion",
+        "Platform-adapted: LinkedIn, Twitter, Instagram optimized",
+        "Three-email nurture sequence with proof and urgency",
+        "Landing page hero written for search and conversion",
+        "One strategic spine, multi-channel execution"
+      ]
+    },
+    {
+      "kicker": "Scheduling intelligence",
+      "heading": "Operator auto-slots every asset into optimal windows",
+      "body": "Writing the campaign is half the work. Scheduling it used to be the other half. Cortex eliminates that. The Operator team analyzes your audience timezone distribution, historical engagement curves, and platform-specific peak windows. It assigns each post to the hour and day with the highest expected reach. Email sends are spaced to avoid inbox fatigue but maintain momentum. Social posts are staggered so no two pieces compete for attention in the same feed. If you connect multiple brand accounts, Operator balances cross-posting to avoid redundancy while maximizing total impressions. You can override any slot with a drag-and-drop calendar view, but most users publish the Operator's recommendations as-is. The system learns from every campaign you run. Open rates, click-throughs, and engagement metrics feed back into the scheduling model. Your second campaign schedules smarter than your first. Your tenth campaign schedules like a veteran growth lead.",
+      "bullets": [
+        "Analyzes timezone, engagement curves, platform peaks",
+        "Auto-assigns posts to highest-reach windows",
+        "Spaces emails to avoid fatigue, maintain momentum",
+        "Learns from open rates, clicks, engagement every campaign"
+      ]
+    },
+    {
+      "kicker": "Time savings",
+      "heading": "Three weeks of campaign work becomes eleven minutes",
+      "body": "Before CortexViral, a mid-size campaign meant a kickoff meeting, a creative brief doc, a copywriter's first draft, a design pass, a review cycle, revisions, asset export, manual uploads to each platform, and scheduling in three separate tools. That process took fourteen to twenty-one days for a four-person team. With CortexViral, you upload your brief at 9:00 AM, review the campaign bundle at 9:08 AM, make two headline edits, and publish at 9:11 AM. The campaign goes live across LinkedIn, Twitter, Instagram, email, and your landing page before your second coffee. The quality does not drop. The strategy does not vanish. The voice stays consistent. You simply stop doing the repetitive translation work that machines handle better than humans. Your team shifts from execution mode to strategy mode. You spend time on positioning, offer design, and conversion optimization instead of copywriting fifteen variations of the same message and uploading JPEGs one by one.",
+      "bullets": [
+        "Traditional process: 14–21 days, four people",
+        "CortexViral process: 11 minutes, one upload",
+        "Same strategic rigor, zero repetitive work",
+        "Team shifts from execution to strategy and optimization"
+      ]
+    },
+    {
+      "kicker": "Built for teams",
+      "heading": "Marketing managers, in-house teams, consultancies love this",
+      "body": "If you run marketing for a B2B SaaS company, you know the brief-to-launch cycle is your bottleneck. CortexViral turns that bottleneck into a straight shot. Marketing managers use it to launch product campaigns, event promotions, and thought-leadership series without waiting on freelancers or agencies. In-house teams use it to maintain velocity when headcount is frozen and launch calendars keep growing. Consultancies use it to deliver finished campaigns to clients in the first week instead of billing for a month of copywriting and coordination. The Asset Upload Center accepts the artifacts clients already send: slide decks, recorded briefs, product demo videos. Cortex extracts what it needs, composes the campaign, and hands you a ready-to-publish bundle. You look like a team of ten. You bill like a senior strategist. Your clients get speed and quality at the same time, which used to be impossible. CortexViral is not a tool for one person. It is a marketing operating system for teams that want to move faster without hiring faster."
+    }
+  ],
+  "comparison": {
+    "title": "Old campaign process vs. AI campaign generator speed",
+    "left": {
+      "label": "Traditional campaign workflow",
+      "items": [
+        "Kickoff meeting, creative brief doc, alignment emails",
+        "Copywriter drafts posts, emails, landing copy separately",
+        "Design pass, review cycle, revision requests back and forth",
+        "Manual asset export, upload to each platform one by one",
+        "Scheduling in three tools, timezone math, calendar conflicts",
+        "Total time: 14–21 days, four people, endless Slack threads"
+      ]
+    },
+    "right": {
+      "label": "CortexViral AI campaign generator",
+      "items": [
+        "Upload one brief: PDF, PPTX, video, or URL",
+        "Cortex extracts audience, claims, strategy, tone automatically",
+        "Creator team writes 10+ posts, emails, landing copy in bundle",
+        "Operator auto-schedules across optimal engagement windows",
+        "Review, edit inline, publish all channels in one click",
+        "Total time: 11 minutes, one person, zero meetings"
+      ]
+    }
+  },
+  "internal_links": [
+    {
+      "slug": "marketing-os",
+      "title": "AI Marketing Operating System",
+      "blurb": "See how Cortex orchestrates Scout, Creator, Operator, and Intelligence teams to run your entire marketing engine autonomously."
+    },
+    {
+      "slug": "asset-analysis",
+      "title": "AI Marketing Asset Analysis",
+      "blurb": "Upload competitor landing pages, ad creatives, and email sequences. Cortex extracts positioning, messaging, and strategic gaps you can exploit."
+    },
+    {
+      "slug": "seller-acquisition",
+      "title": "AI Seller Acquisition Engine",
+      "blurb": "Automate cold outreach to sellers with confidence-scored leads, personalized messaging, and a review queue that keeps you in control."
+    }
+  ],
+  "faq": [
+    {
+      "q": "What file types can I upload to the AI campaign generator?",
+      "a": "CortexViral accepts PDF briefs, PowerPoint decks, video files (MP4, MOV, WebM), and URLs pointing to Google Docs, Notion pages, Loom recordings, or competitor landing pages. The Intelligence team uses multi-modal parsing to read slides, transcribe video, and extract text from linked pages. You do not need to reformat your brief. Upload the artifact you already have and Cortex handles the extraction."
+    },
+    {
+      "q": "How long does it take to generate a full campaign?",
+      "a": "Cortex typically generates a complete campaign bundle in eight to twelve minutes. That includes reading your brief, extracting strategic elements, composing ten to fifteen social posts, writing a three-email sequence, drafting landing page hero copy, and auto-scheduling every asset into optimal posting windows. Most users spend another two to three minutes reviewing the bundle and making minor edits before publishing."
+    },
+    {
+      "q": "Can I edit the campaign copy before publishing?",
+      "a": "Yes. Every asset appears in a staging view where you can edit headlines, body copy, CTAs, and images inline. Changes sync instantly across the campaign bundle. If you edit the core positioning statement, Cortex offers to propagate that change to related assets so your messaging stays coherent. You can also override the Operator's scheduling recommendations with a drag-and-drop calendar. Most users approve ninety percent of the generated copy as-is and tweak a few headlines."
+    },
+    {
+      "q": "Does the AI campaign generator work for multiple channels?",
+      "a": "Yes. CortexViral publishes to LinkedIn, Twitter, Instagram, Facebook, email (via connected ESP), and exports landing page copy for your CMS. Each post is adapted for its platform: LinkedIn gets professional framing and long-form hooks, Twitter gets punchy claims and thread structures, Instagram gets lifestyle language and visual cues. Email sequences mirror the social cadence but use longer narrative arcs. You connect your accounts once and publish everywhere in one click."
+    },
+    {
+      "q": "What makes CortexViral different from other marketing campaign AI tools?",
+      "a": "Most AI marketing tools require you to fill out forms or paste prompts. CortexViral reads the artifacts you already have: strategy decks, video briefs, competitor pages. It uses a four-team agent architecture (Scout, Creator, Operator, Intelligence) instead of a single prompt chain, so output quality stays high even for complex campaigns. The Operator team auto-schedules based on engagement data, not guesswork. And the Intelligence layer cross-references competitive intel before writing a single word of copy."
+    },
+    {
+      "q": "Who should use an AI campaign generator like CortexViral?",
+      "a": "Marketing managers who need to launch campaigns without waiting on agencies. In-house teams at startups and scale-ups where headcount is frozen but launch calendars keep growing. Consultancies that want to deliver finished campaigns to clients in week one instead of billing for a month of copywriting. Anyone who has a clear brief and needs a multi-channel campaign bundle fast. If you currently spend two to three weeks coordinating copywriters, designers, and schedulers, CortexViral collapses that into eleven minutes."
+    }
+  ],
+  "final_cta_heading": "Upload your brief. Launch your campaign in eleven minutes.",
+  "final_cta_body": "Stop waiting on copywriters, designers, and scheduling spreadsheets. CortexViral reads your brief and builds the entire campaign while you finish your coffee. Start free today.",
+  "__meta__": {
+    "slug": "ai-campaign-generator",
+    "title": "AI Marketing Campaign Generator | CortexViral",
+    "meta": "Generate full marketing campaigns — social posts, email sequences, and landing pages — from a single creative brief. CortexViral's AI campaign builder ships in minutes, not weeks.",
+    "h1_lead": "AI Campaigns,",
+    "h1_accent": "brief to launch.",
+    "kicker": "Campaign Builder",
+    "primary_kw": "AI campaign generator",
+    "keywords": [
+      "AI Campaign Generator",
+      "Marketing campaign AI",
+      "Campaign planning software",
+      "Multi-channel campaign builder",
+      "AI marketing assistant"
+    ],
+    "generated_by": "claude"
+  }
+}

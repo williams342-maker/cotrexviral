@@ -1,0 +1,149 @@
+{
+  "hero_subhead": "CortexViral is the AI Marketing Operating System that replaces your entire marketing stack with one orchestrated brain. Cortex routes missions to specialized agent teams, publishes content, scores sellers, and surfaces your next highest-leverage move automatically.",
+  "hero_bullets": [
+    "Replace 8–12 tools with one OS",
+    "Mission-driven agent execution, not prompts",
+    "Autonomous campaigns from upload to publish",
+    "L0–L5 autonomy you control"
+  ],
+  "sections": [
+    {
+      "kicker": "The orchestrator",
+      "heading": "Cortex is the brain that runs your entire marketing motion",
+      "body": "Most AI tools are wrappers around ChatGPT. CortexViral is different. Cortex is the orchestrator, a meta-agent that interprets your mission, selects the right model (Claude, GPT, or open-weight), routes work to four specialized agent teams, and loops back with results. You upload a pitch deck. Cortex dispatches Scout to extract competitive positioning, Creator to draft five LinkedIn posts, Operator to schedule them across three accounts, and Intelligence to log asset metadata. You never write a prompt. Cortex converts your goal into an event-driven workflow, coordinates agents, and delivers finished work in minutes. This is not automation. It is orchestration. The difference is that Cortex thinks about what to do next, not just how to execute a fixed script. Every action is tied to a mission, every output is logged, and every result flows into the Recommended Action layer so you always know the single most valuable move you can make right now.",
+      "bullets": [
+        "Meta-agent routing across Claude, GPT, and open models",
+        "Event-driven loops, not static workflows",
+        "Mission context preserved across all four agent teams",
+        "Recommended Action surfaces your next highest-leverage step"
+      ]
+    },
+    {
+      "kicker": "Four agent teams",
+      "heading": "Scout, Creator, Operator, and Intelligence work in concert",
+      "body": "Scout handles research. It crawls competitor sites, extracts ICP signals from review data, and maps positioning gaps. Creator writes. LinkedIn threads, email sequences, ad variants, landing page copy. All trained on your voice, brand guidelines, and past winners. Operator executes. It publishes to LinkedIn, Twitter, and Facebook in bulk, schedules posts across time zones, and manages approval queues when you run L2 autonomy. Intelligence observes. Every asset you upload (PDF, PPTX, video, URL) is parsed, tagged, and cross-referenced so future missions can pull the right context automatically. These four teams do not work in silos. Cortex orchestrates handoffs. Scout findings feed Creator briefs. Creator output is queued by Operator. Intelligence indexes everything so the next mission starts smarter. The result is a feedback loop that tightens every time you run a campaign. You get consistency without rigidity, speed without sloppiness, and scale without losing your brand voice.",
+      "bullets": [
+        "Scout: competitive research, ICP extraction, positioning analysis",
+        "Creator: multi-format content in your voice",
+        "Operator: bulk publish, auto-schedule, approval workflows",
+        "Intelligence: asset indexing, metadata tagging, context retrieval"
+      ]
+    },
+    {
+      "kicker": "One upload, full campaign",
+      "heading": "Autonomous Campaign Builder turns assets into live campaigns",
+      "body": "The Asset Upload Center accepts PDFs, PowerPoints, videos, and URLs. You drop in a product walkthrough deck. The Autonomous Campaign Builder kicks in. Scout extracts key benefits, objections, and proof points. Creator drafts a five-post LinkedIn sequence, three email variants, and two ad concepts. Operator stages them in the publishing calendar with smart spacing (post one on Monday 9am, post two on Wednesday 2pm). Intelligence logs every asset so the next campaign can reference this deck without you re-uploading. You review the queue, approve or edit in-line, and hit publish. The entire flow, from upload to scheduled posts, takes under eight minutes. No prompt engineering. No copying and pasting between tools. No forgetting which version of the deck you used last quarter. The AI Marketing Operating System keeps every asset, every brief, and every output in one graph so your campaigns build on each other instead of starting from scratch every time.",
+      "bullets": []
+    },
+    {
+      "kicker": "Real autonomy levels",
+      "heading": "L0 to L5 autonomy means you stay in control as you scale",
+      "body": "Most platforms are all-or-nothing. CortexViral gives you six autonomy levels. L0 is full manual: you write prompts, review every output, publish yourself. L1 is agent-assisted: Cortex drafts, you edit and approve. L2 is supervised autonomy: Cortex drafts and schedules, you review a queue before publish. L3 is conditional autonomy: Cortex publishes automatically if confidence scores hit your threshold. L4 is high autonomy: Cortex runs campaigns end-to-end, you audit weekly. L5 is full autonomy: the system self-optimizes, you set strategy and review outcomes. You choose the level per mission type. Seller outreach might run at L4 because the Seller Acquisition Engine has three-band confidence scoring and a review queue. Thought-leadership posts might stay at L2 because you want final say on voice. The Marketing OS adapts to your risk tolerance and team maturity. You can start at L1 and graduate to L4 as trust builds, or run different levels across different channels. Autonomy is not a feature. It is a dial you turn up as your operation matures.",
+      "bullets": []
+    },
+    {
+      "kicker": "Direct social publishing",
+      "heading": "Publish to LinkedIn, Twitter, and Facebook without leaving the OS",
+      "body": "CortexViral connects directly to your social accounts. Operator posts in bulk, schedules across time zones, and respects platform-specific formatting (LinkedIn carousels, Twitter threads, Facebook link previews). You can queue 30 posts in one session, assign them to different accounts, stagger publish times, and let the system handle the rest. The Review Queue shows pending posts with confidence scores. High-confidence posts (green band) publish automatically if you are running L3 or higher. Medium-confidence (yellow band) wait for your thumbs-up. Low-confidence (red band) get flagged for rewrite. This is not Zapier. This is not Buffer. This is integrated publishing inside the same OS that generated the content, scored the leads, and logged the assets. No export, no re-upload, no context lost between tools. The Marketing OS owns the entire loop from idea to impression, so every post is traceable back to the mission, the asset, and the agent team that created it.",
+      "bullets": [
+        "Bulk upload and auto-schedule across LinkedIn, Twitter, Facebook",
+        "Platform-specific formatting (threads, carousels, link previews)",
+        "Three-band confidence scoring drives L3+ autonomy",
+        "Review Queue shows pending posts with edit-in-place"
+      ]
+    },
+    {
+      "kicker": "Recommended Action",
+      "heading": "The OS surfaces your single highest-leverage next move",
+      "body": "Every morning you open CortexViral and see one card: Recommended Action. It might say upload your new case study and launch a nurture sequence, or review 14 yellow-band seller leads in the acquisition queue, or approve this week's LinkedIn posts and publish. The Intelligence agent scores every possible action by impact, effort, and timing. Cortex picks the winner and puts it at the top. You are not staring at a dashboard full of widgets. You are seeing the one move that will unlock the most revenue, engagement, or pipeline right now. The Recommended Action layer is why CortexViral is an operating system, not a toolkit. Toolkits make you think about what to do next. Operating systems tell you. If you only have 20 minutes today, you spend them on the action that matters most. The rest can wait. This is how a two-person growth team out-executes a ten-person marketing department. They let the OS decide what to do, then do it.",
+      "bullets": []
+    }
+  ],
+  "comparison": {
+    "title": "Traditional marketing stack vs. the Marketing OS",
+    "left": {
+      "label": "Old stack (8–12 tools)",
+      "items": [
+        "Separate tools for research, writing, scheduling, analytics",
+        "Copy-paste workflows between platforms, context lost every handoff",
+        "Manual prompt engineering for every new campaign",
+        "No unified mission tracking or agent coordination",
+        "Autonomy means 'set it and forget it' with no control dial",
+        "Dashboards show metrics, not next actions"
+      ]
+    },
+    "right": {
+      "label": "CortexViral Marketing OS",
+      "items": [
+        "One OS orchestrates research, creation, publishing, intelligence",
+        "Event-driven agent loops preserve context across every step",
+        "Mission-driven execution, no prompts required from you",
+        "Cortex meta-agent coordinates four specialized teams",
+        "L0–L5 autonomy lets you control risk and scale progressively",
+        "Recommended Action tells you the highest-leverage move now"
+      ]
+    }
+  },
+  "internal_links": [
+    {
+      "slug": "seller-acquisition",
+      "title": "AI Seller Acquisition Engine",
+      "blurb": "Three-band confidence scoring, review queue, and autonomous outreach to high-intent sellers at scale."
+    },
+    {
+      "slug": "ai-campaign-generator",
+      "title": "AI Campaign Generator",
+      "blurb": "Turn one asset upload into a full multi-channel campaign with agent-driven briefs and scheduling."
+    },
+    {
+      "slug": "asset-analysis",
+      "title": "AI Marketing Asset Analysis",
+      "blurb": "Parse PDFs, decks, videos, and URLs into structured metadata that every future mission can reference."
+    }
+  ],
+  "faq": [
+    {
+      "q": "What makes CortexViral an AI Marketing Operating System instead of another tool?",
+      "a": "CortexViral orchestrates your entire marketing motion through Cortex, a meta-agent that interprets missions, routes work to four specialized teams (Scout, Creator, Operator, Intelligence), and loops back with results. Traditional tools require you to connect, configure, and copy-paste between platforms. The Marketing OS keeps every asset, brief, workflow, and output in one unified graph. You upload a deck, set a mission, and Cortex coordinates research, content creation, publishing, and metadata tagging without you writing a single prompt. This is orchestration, not automation."
+    },
+    {
+      "q": "How does the L0–L5 autonomy system work in the Marketing OS?",
+      "a": "CortexViral offers six autonomy levels you control per mission type. L0 is full manual. L1 is agent-assisted drafting. L2 adds supervised scheduling with a review queue. L3 publishes automatically when confidence scores hit your threshold. L4 runs end-to-end campaigns you audit weekly. L5 is full self-optimization. You might run seller outreach at L4 because the three-band confidence scoring is reliable, while keeping thought-leadership posts at L2 for final voice approval. Autonomy is a dial, not a binary switch, so you scale control as your operation matures."
+    },
+    {
+      "q": "Which agent teams are included in the AI Marketing Operating System?",
+      "a": "Four specialized teams work inside CortexViral. Scout handles competitive research, ICP extraction, and positioning analysis. Creator writes LinkedIn posts, email sequences, ad copy, and landing pages in your brand voice. Operator publishes content in bulk, schedules across time zones, and manages approval queues. Intelligence indexes every uploaded asset (PDF, PPTX, video, URL) so future missions pull the right context automatically. Cortex orchestrates handoffs between teams, so Scout findings feed Creator briefs, Creator output is queued by Operator, and Intelligence logs everything for the next campaign."
+    },
+    {
+      "q": "Can the Marketing OS publish directly to social channels?",
+      "a": "Yes. CortexViral connects to LinkedIn, Twitter, and Facebook. Operator posts in bulk, auto-schedules across time zones, and respects platform-specific formatting like LinkedIn carousels and Twitter threads. The Review Queue shows pending posts with three-band confidence scores. High-confidence (green) posts publish automatically at L3+ autonomy. Medium-confidence (yellow) wait for your approval. Low-confidence (red) get flagged for rewrite. You never export CSV files or toggle between tools. Publishing lives inside the same OS that generated the content and scored the leads."
+    },
+    {
+      "q": "What is the Recommended Action layer in the Marketing OS?",
+      "a": "Every time you open CortexViral, the Intelligence agent scores all possible actions by impact, effort, and timing. Cortex picks the single highest-leverage move and surfaces it as your Recommended Action. It might prompt you to upload a new case study and launch a nurture sequence, review seller leads in the yellow-band queue, or approve and publish this week's LinkedIn posts. You are not scanning a dashboard. You are seeing the one move that will unlock the most revenue or pipeline right now. This is how small teams out-execute large departments."
+    },
+    {
+      "q": "How does the Autonomous Campaign Builder turn assets into live campaigns?",
+      "a": "You upload a PDF, PPTX, video, or URL to the Asset Upload Center. The Autonomous Campaign Builder dispatches Scout to extract benefits and objections, Creator to draft a multi-post sequence and email variants, Operator to schedule them with smart timing, and Intelligence to log metadata. You review the queue, approve or edit in-line, and publish. The entire flow takes under eight minutes. No prompt engineering, no copying between tools, no lost context. Every asset and output stays in one graph so your next campaign builds on this one instead of starting from scratch."
+    }
+  ],
+  "final_cta_heading": "Replace your marketing stack with one orchestrated operating system",
+  "final_cta_body": "Start a mission, upload an asset, and watch Cortex coordinate four agent teams to research, create, publish, and optimize. Book a demo to see the Marketing OS in action.",
+  "__meta__": {
+    "slug": "marketing-os",
+    "title": "AI Marketing Operating System | CortexViral",
+    "meta": "CortexViral is an AI Marketing Operating System that plans campaigns, generates content, recruits sellers, and executes growth workflows from one command center.",
+    "h1_lead": "The AI Marketing",
+    "h1_accent": "Operating System.",
+    "kicker": "Marketing OS",
+    "primary_kw": "AI Marketing Operating System",
+    "keywords": [
+      "AI Marketing Operating System",
+      "Marketing OS",
+      "Marketing automation platform",
+      "Unified marketing platform",
+      "AI marketing platform"
+    ],
+    "generated_by": "claude"
+  }
+}

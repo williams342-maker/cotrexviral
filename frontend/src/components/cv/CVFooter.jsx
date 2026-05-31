@@ -3,6 +3,14 @@ import { Link } from 'react-router-dom';
 import { Twitter, Linkedin, Github } from 'lucide-react';
 import CVLogo from './CVLogo';
 
+const platformLinks = [
+  { label: 'Marketing OS',         to: '/marketing-os' },
+  { label: 'Seller Acquisition',   to: '/seller-acquisition' },
+  { label: 'AI Campaign Generator', to: '/ai-campaign-generator' },
+  { label: 'Competitor Analysis',  to: '/competitor-analysis' },
+  { label: 'Asset Analysis',       to: '/asset-analysis' },
+];
+
 const productLinks = [
   { label: 'AI TikTok Generator', to: '/ai-tiktok-post-generator' },
   { label: 'Viral Content Ideas', to: '/viral-content-ideas-generator' },
@@ -25,7 +33,7 @@ const CVFooter = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid md:grid-cols-12 gap-10">
           {/* Brand */}
-          <div className="md:col-span-4">
+          <div className="md:col-span-3">
             <div className="flex items-center gap-2.5">
               <CVLogo size="sm" />
               <span className="cv-display font-semibold text-[15px] text-white">
@@ -33,7 +41,7 @@ const CVFooter = () => {
               </span>
             </div>
             <p className="text-[13px] text-zinc-400 mt-4 max-w-xs leading-relaxed">
-              AI viral content generator + growth automation platform for creators, startups, and brands building compounding social media reach.
+              The AI Marketing Operating System — plan campaigns, generate content, recruit sellers, and analyze competitors from one command center.
             </p>
             <div className="flex items-center gap-3 mt-5">
               {[
@@ -48,8 +56,20 @@ const CVFooter = () => {
             </div>
           </div>
 
+          {/* Platform — Phase 6: footer-wide SEO internal linking */}
+          <div className="md:col-span-3" data-testid="footer-platform-links">
+            <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-500 font-semibold mb-4">Platform</div>
+            <ul className="space-y-2.5">
+              {platformLinks.map((l) => (
+                <li key={l.to}>
+                  <Link to={l.to} className="text-[13.5px] text-zinc-400 hover:text-white transition-colors" data-testid={`footer-link-${l.to.replace('/','')}`}>{l.label}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
           {/* Product */}
-          <div className="md:col-span-4">
+          <div className="md:col-span-2">
             <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-500 font-semibold mb-4">AI tools</div>
             <ul className="space-y-2.5">
               {productLinks.map((l) => (

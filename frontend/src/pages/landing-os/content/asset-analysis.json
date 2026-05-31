@@ -1,0 +1,164 @@
+{
+  "hero_subhead": "Your slide decks, PDFs, and videos already hold every hook, stat, and proof point you need. CortexViral's marketing asset analysis extracts that intelligence, maps it to audience segments, and generates ready-to-run campaigns in minutes—so your best collateral finally does the work it was meant to do.",
+  "hero_bullets": [
+    "Upload PDF, PPTX, video, or URL",
+    "Extract text, slides, and transcripts",
+    "Get audience and hook intelligence",
+    "Generate multi-channel campaigns instantly"
+  ],
+  "sections": [
+    {
+      "kicker": "Asset Upload Center",
+      "heading": "Turn dormant collateral into live campaigns",
+      "body": "Most marketing teams sit on gigabytes of pitch decks, case studies, webinar recordings, and sales PDFs. None of it ships. CortexViral's Asset Upload Center accepts PDF, PPTX, MP4, MOV, and URLs up to 50 MB. The moment you drop a file, the Intelligence team parses text, extracts images from slides, runs video through Whisper transcription, and scrapes hero images from URLs. Every asset becomes a structured knowledge graph: key messages, proof points, audience signals, and hook angles. You no longer dig through file folders. You upload once and let the system mine the gold. The Intelligence layer tags industry verticals, pain points, objections, and positioning themes. That metadata feeds the Autonomous Campaign Builder so every campaign is grounded in real collateral, not generic prompts. Upload cost is metered and transparent: video transcription runs OpenAI Whisper pricing, PDFs and slides are parsed locally at near-zero marginal cost, and URL scrapes use headless Playwright with predictable token budgets. You see the estimate before you commit. No surprise bills. No wasted cycles rewriting what you already own.",
+      "bullets": [
+        "PDF and PPTX: full-text extraction plus slide-level image capture",
+        "Video (MP4, MOV): Whisper transcription with cost preview",
+        "URLs: headless scrape, hero-image pull, and metadata tagging",
+        "50 MB per-asset limit keeps processing fast and costs visible"
+      ]
+    },
+    {
+      "kicker": "Intelligence Layer",
+      "heading": "Map every asset to audience and angle",
+      "body": "Creative analysis AI only matters if it tells you what to do next. After upload, the Intelligence team runs a five-pass decomposition. Pass one identifies the core offer and the problem it solves. Pass two extracts quantifiable results, testimonials, and proof mechanisms. Pass three tags buyer personas, job titles, and decision triggers. Pass four surfaces competing narratives and objection-handling threads. Pass five generates hook angles: curiosity gaps, before-after contrasts, stat-led openings, and story arcs. Every finding is timestamped and linked back to the source asset, so you can audit the chain of reasoning. The output is a structured intelligence brief that sits inside the asset card. When you open the campaign builder, that brief auto-populates audience segments, headline variations, and content pillars. You are not starting from a blank prompt. You are remixing proven material that already closed deals or earned applause in a conference room. The intelligence layer also flags content gaps. If your deck has strong problem framing but weak social proof, the system tells you. If your video nails the demo but skips the ROI story, you see that gap before you publish. This is marketing asset analysis that improves your source material, not just repurposes it.",
+      "bullets": [
+        "Five-pass decomposition: offer, proof, personas, objections, hooks",
+        "Timestamped findings linked to exact slides or transcript markers",
+        "Auto-populates campaign builder with audience and angle data",
+        "Flags content gaps so you strengthen source assets over time"
+      ]
+    },
+    {
+      "kicker": "One-Click Campaigns",
+      "heading": "From asset intelligence to published posts in four clicks",
+      "body": "Upload. Review intelligence. Generate campaign. Publish. That is the full loop. Once the Intelligence team has parsed your asset, you click into the Autonomous Campaign Builder and choose a mission: Product Launch, Thought Leadership, Event Promotion, or Seller Acquisition. The system drafts a 30-day campaign with post copy, image prompts, CTA variations, and publish schedules across LinkedIn, Twitter, and Facebook. Every post is anchored in a specific slide, quote, or proof point from your original asset. You see the source annotation inline, so you know which deck slide inspired which LinkedIn carousel. The Creator team writes in your brand voice if you have uploaded past posts or a style guide. If not, it defaults to clear, benefit-driven copy with no jargon. The Operator team schedules posts to hit peak engagement windows and spaces them to avoid saturation. You can bulk-approve the entire calendar or edit individual posts in a modal. Changes sync instantly. When you hit Publish, the Direct Social Publishing engine pushes content to native APIs. No third-party tools. No export-and-paste workflow. The same asset that lived in your Google Drive for six months is now driving 120 touches across three platforms. That is the leverage of real marketing asset analysis.",
+      "bullets": [
+        "Choose mission: Launch, Thought Leadership, Event, or Seller Acquisition",
+        "30-day campaign with post copy, images, CTAs, and schedule",
+        "Every post annotated with source slide or transcript timestamp",
+        "Bulk approve or edit inline, then publish to LinkedIn, Twitter, Facebook"
+      ]
+    },
+    {
+      "kicker": "Video Analysis",
+      "heading": "Turn webinar recordings into written campaigns",
+      "body": "Video marketing analysis inside CortexViral starts with Whisper transcription. Drop an MP4 or MOV file up to 50 MB. The system estimates transcription cost before you proceed. Typical 20-minute webinar costs about 8 cents at current Whisper API rates. Once transcribed, the Intelligence team timestamps every speaker turn, identifies topic shifts, and extracts quotable moments. If your CEO said something memorable at minute 12, that quote becomes a standalone LinkedIn post with a link back to the video timestamp. The system also generates a written summary, a bullet-point takeaway list, and three hook angles for social promotion. You can export the full transcript as a text file or use it to brief the Creator team for blog posts and email sequences. Video used to be a publishing dead-end. You recorded it, uploaded it to YouTube, and hoped someone watched. Now every recorded demo, panel discussion, or customer interview becomes a content library. The Intelligence layer treats video as structured data, not a black box. You get the same five-pass decomposition you would from a PDF: offer, proof, personas, objections, hooks. The only difference is the input format. The output is always actionable campaign fuel.",
+      "bullets": [
+        "Whisper transcription with upfront cost estimate (example: 8¢ for 20 min)",
+        "Speaker-turn timestamps and topic-shift detection",
+        "Quotable moments auto-extracted and linked to video markers",
+        "Summary, takeaways, and three social hook angles generated"
+      ]
+    },
+    {
+      "kicker": "URL Scraping",
+      "heading": "Analyze competitor pages and your own site",
+      "body": "Paste any public URL into the Asset Upload Center. CortexViral spins up a headless Playwright browser, renders the page, extracts visible text, captures the hero image, and pulls OpenGraph metadata. The Intelligence team then runs the same analysis it would on a PDF: core offer, proof mechanisms, audience signals, and positioning themes. This workflow powers two use cases. First, you can analyze your own landing pages to see how the AI reads your messaging. If the system cannot identify a clear value proposition or call to action, neither can your visitors. Second, you can feed competitor URLs into the system and compare their messaging to yours. The Intelligence layer will flag overlapping claims, differentiation gaps, and hook angles they use that you do not. URL scraping respects robots.txt and rate limits. Processing typically completes in under 15 seconds. The extracted content is stored as a versioned asset, so you can re-run analysis after a page update and diff the changes. This is not web monitoring. This is competitive and self-audit intelligence that feeds directly into your campaign builder. You see how your story compares, then you build campaigns that sharpen the contrast.",
+      "bullets": [
+        "Headless Playwright render captures text, hero image, and metadata",
+        "Same five-pass intelligence analysis as PDF or video",
+        "Audit your own pages or analyze competitor messaging",
+        "Versioned snapshots let you diff changes over time"
+      ]
+    },
+    {
+      "kicker": "Pricing Transparency",
+      "heading": "Know the cost before you upload anything",
+      "body": "CortexViral meters asset processing and shows you the price before you commit. PDF and PPTX parsing runs on local extraction pipelines with negligible per-file cost, usually under a cent for documents up to 50 MB. Video transcription uses OpenAI Whisper and is billed at pass-through API rates. A 10-minute video typically costs 4 to 6 cents. A 60-minute webinar runs 25 to 30 cents. You see the estimate in the upload modal. If the cost exceeds your comfort threshold, you can trim the video or skip transcription and upload a manual transcript instead. URL scraping is flat-rate per page, around 2 cents, covering Playwright compute and token usage for the intelligence pass. There are no platform fees, no hidden markup, and no monthly minima for asset uploads. You pay only for what you process. Every asset upload is logged in your account dashboard with a timestamp, file name, processing cost, and a link to the intelligence brief. This is the same transparency you expect from infrastructure providers like AWS or Stripe. Marketing tools should not hide their unit economics. When you know the cost of every input, you can model the ROI of every campaign before you ship.",
+      "bullets": [
+        "PDF/PPTX: under 1¢ per file up to 50 MB",
+        "Video: pass-through Whisper API rates, 4–6¢ per 10 minutes",
+        "URL scrape: ~2¢ per page including Playwright and intelligence pass",
+        "Cost estimate shown before upload, itemized log in dashboard"
+      ]
+    }
+  ],
+  "comparison": {
+    "title": "Old collateral workflow versus CortexViral asset analysis",
+    "left": {
+      "label": "Traditional Creative Analysis",
+      "items": [
+        "Manually skim dozens of PDFs and slide decks for usable content",
+        "Copy-paste quotes into a Google Doc and lose source context",
+        "Rewrite the same value props for every new campaign from scratch",
+        "Video recordings sit unwatched because transcription is too slow",
+        "No systematic way to extract hooks or map assets to audiences",
+        "Campaign ideas based on gut feel, not proven collateral"
+      ]
+    },
+    "right": {
+      "label": "CortexViral Asset Analysis",
+      "items": [
+        "Upload PDF, PPTX, video, or URL and get structured intelligence in seconds",
+        "Every quote, stat, and proof point tagged and linked to source",
+        "Intelligence layer auto-populates campaign builder with angles and audience",
+        "Whisper transcription turns video into quotable text with timestamps",
+        "Five-pass decomposition surfaces hooks, objections, and content gaps",
+        "Launch 30-day campaigns grounded in material that already converted"
+      ]
+    }
+  },
+  "internal_links": [
+    {
+      "slug": "marketing-os",
+      "title": "AI Marketing Operating System",
+      "blurb": "See how the Cortex orchestrator, four agent teams, and autonomy levels L0 to L5 power every CortexViral workflow."
+    },
+    {
+      "slug": "ai-campaign-generator",
+      "title": "AI Campaign Generator",
+      "blurb": "Turn asset intelligence into 30-day multi-channel campaigns with one click and publish directly to LinkedIn, Twitter, Facebook."
+    },
+    {
+      "slug": "competitor-analysis",
+      "title": "AI Competitor Analysis",
+      "blurb": "Scrape competitor URLs, extract messaging and positioning, and compare their hooks to yours in a structured intelligence brief."
+    }
+  ],
+  "faq": [
+    {
+      "q": "What file types does CortexViral marketing asset analysis support?",
+      "a": "CortexViral accepts PDF, PPTX, MP4, MOV, and any public URL. PDFs and PowerPoint files are parsed for text and slide-level images. Video files are transcribed using OpenAI Whisper with speaker-turn timestamps. URLs are scraped with headless Playwright to extract visible text, hero images, and OpenGraph metadata. Every asset type flows into the same five-pass Intelligence decomposition: offer, proof, personas, objections, and hook angles. The 50 MB per-file limit ensures fast processing and transparent costs. If your asset exceeds that size, compress the video, split the PDF, or upload a manual transcript."
+    },
+    {
+      "q": "How does creative analysis AI extract hooks and angles from my assets?",
+      "a": "After upload, the Intelligence team runs a five-pass analysis. Pass one identifies the core offer and problem solved. Pass two pulls quantifiable results, testimonials, and proof mechanisms. Pass three tags buyer personas and decision triggers. Pass four surfaces competing narratives and objection-handling threads. Pass five generates hook angles: curiosity gaps, before-after contrasts, stat-led openings, and story arcs. Every finding is timestamped and linked to the exact slide, transcript marker, or webpage section that inspired it. This chain of reasoning is auditable. You can click any hook angle and see the source quote. The output is a structured intelligence brief that auto-populates the campaign builder with audience segments and headline variations."
+    },
+    {
+      "q": "What does PDF marketing analysis inside CortexViral actually extract?",
+      "a": "CortexViral parses the full text of your PDF, including headers, body copy, footnotes, and captions. It also captures embedded images if the PDF contains slides or diagrams. The Intelligence layer then tags key messages, proof points, audience signals, and positioning themes. If your case study PDF mentions a 40 percent reduction in churn, that stat becomes a quotable data point linked to the page number. If a customer testimonial appears on page five, the system extracts the quote and the company name. The output is a knowledge graph you can search, filter, and feed into campaign generation. PDF marketing analysis is not OCR or keyword counting. It is semantic extraction that understands offer, proof, and audience context."
+    },
+    {
+      "q": "How accurate is video marketing analysis and transcription?",
+      "a": "CortexViral uses OpenAI Whisper for transcription, which delivers near-human accuracy on clear audio in major languages. Speaker-turn detection and timestamp alignment are handled by the Intelligence team post-transcription. Typical accuracy is above 95 percent for studio-quality recordings and around 85 to 90 percent for conference-room captures with background noise. If accuracy matters for compliance or attribution, you can upload a professionally transcribed VTT or SRT file instead of running Whisper. The Intelligence layer will still parse the text for hooks, quotes, and topic shifts. Transcription cost is shown upfront: a 20-minute video runs about 8 cents at current API rates. You approve the spend before processing starts."
+    },
+    {
+      "q": "Can I use marketing asset analysis to audit competitor content?",
+      "a": "Yes. Paste any public URL into the Asset Upload Center. CortexViral scrapes the page with headless Playwright, extracts visible text and hero images, then runs the same five-pass Intelligence analysis it would on your own assets. You see the competitor's core offer, proof mechanisms, audience signals, and hook angles in a structured brief. You can compare that brief to your own messaging and spot differentiation gaps or overlapping claims. The system also flags objection-handling threads and content gaps. URL scraping respects robots.txt and rate limits. Processing completes in under 15 seconds. The extracted content is versioned, so you can re-run analysis after a page update and diff the changes over time."
+    },
+    {
+      "q": "What happens to my uploaded assets after analysis is complete?",
+      "a": "All uploaded files and extracted intelligence are stored encrypted in your CortexViral account. You can re-open any asset card to review the intelligence brief, edit tags, or generate new campaigns from the same source material. Assets remain accessible until you delete them manually. There is no automatic expiration. You can also export the full-text extraction, transcript, or intelligence summary as a JSON or Markdown file. CortexViral does not train models on your proprietary content. Your slide decks, case studies, and webinar recordings stay private. The Intelligence layer reads and tags your assets, but that analysis never leaves your account or contributes to shared training data."
+    }
+  ],
+  "final_cta_heading": "Upload your first asset and see the intelligence in 60 seconds",
+  "final_cta_body": "Drop a deck, a video, or a URL. Watch CortexViral extract hooks, proof points, and audience angles. Then generate a 30-day campaign with one click.",
+  "__meta__": {
+    "slug": "asset-analysis",
+    "title": "AI Marketing Asset Analysis | CortexViral",
+    "meta": "Drop a PDF, PPTX, video, or URL — get marketing-grade analysis in seconds. CortexViral extracts positioning, audience, hooks, and converts every asset into a campaign-ready brief.",
+    "h1_lead": "Drop an asset.",
+    "h1_accent": "Get a campaign.",
+    "kicker": "Asset Intelligence",
+    "primary_kw": "Marketing asset analysis",
+    "keywords": [
+      "Marketing Asset Analysis",
+      "Creative Analysis AI",
+      "PDF Marketing Analysis",
+      "Video marketing analysis",
+      "PPTX to campaign"
+    ],
+    "generated_by": "claude"
+  }
+}

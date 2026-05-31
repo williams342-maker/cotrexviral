@@ -12,6 +12,10 @@ import SitemapPage from './pages/Sitemap';
 import DataDeletion from './pages/DataDeletion';
 import NicheToolPage from './pages/programmatic/NicheToolPage';
 import { TikTokGenerator, ViralIdeas, InstagramCaption, ShortFormVideo, ContentAutomation } from './pages/landing';
+import {
+  MarketingOSLanding, SellerAcquisitionLanding, AICampaignGeneratorLanding,
+  CompetitorAnalysisLanding, AssetAnalysisLanding,
+} from './pages/landing-os';
 import { BlogIndex, BlogPost } from './pages/blog/Blog';
 import AuthCallback from './pages/AuthCallback';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -102,6 +106,14 @@ function AppRouter() {
       <Route path="/instagram-caption-ai-generator" element={<InstagramCaption />} />
       <Route path="/short-form-video-ideas-ai" element={<ShortFormVideo />} />
       <Route path="/content-automation-tool" element={<ContentAutomation />} />
+
+      {/* Phase 3 — Core SEO landing pages (AI Marketing OS positioning) */}
+      <Route path="/marketing-os" element={<MarketingOSLanding />} />
+      <Route path="/seller-acquisition" element={<SellerAcquisitionLanding />} />
+      <Route path="/ai-campaign-generator" element={<AICampaignGeneratorLanding />} />
+      <Route path="/competitor-analysis" element={<CompetitorAnalysisLanding />} />
+      <Route path="/asset-analysis" element={<AssetAnalysisLanding />} />
+
       <Route path="/tools/:slug" element={<NicheToolPage />} />
       <Route path="/blog" element={<BlogIndex />} />
       <Route path="/blog/:slug" element={<BlogPost />} />

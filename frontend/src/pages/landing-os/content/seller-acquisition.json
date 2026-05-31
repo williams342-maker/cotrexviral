@@ -1,0 +1,140 @@
+{
+  "hero_subhead": "CortexViral's Seller Acquisition Engine discovers, scores, and onboards indie sellers at scale. Replace spreadsheet outreach with AI-powered discovery, three-band confidence scoring, personalized audit attachments, and automated lifecycle tracking. Ship more seller acquisition campaigns in one week than most teams manage in a quarter.",
+  "hero_bullets": [
+    "AI discovers qualified sellers automatically",
+    "Three-band confidence scoring validates prospects",
+    "Personalized audits attached to every message",
+    "Human review queue before send"
+  ],
+  "sections": [
+    {
+      "kicker": "The old playbook",
+      "heading": "Manual seller scouting doesn't scale past twenty contacts",
+      "body": "Most marketplaces recruit sellers the hard way. Someone searches Etsy, Instagram, or Google for three hours. They copy seventy URLs into a spreadsheet. They draft a generic pitch. They send it from a personal Gmail account and hope for a four percent reply rate.\n\nThe process breaks when you need two hundred sellers instead of twenty. Your team burns weekends building lists that go stale in days. Half the contacts are inactive. A quarter are already selling on a competitor platform. Nobody tracks who replied, who ghosted, or who needs a follow-up in two weeks.\n\nScaling seller acquisition software beyond manual outreach requires three capabilities: discovery that runs while you sleep, confidence scoring that separates real prospects from noise, and lifecycle tracking that remembers every conversation. Without all three, you are hiring interns to copy and paste.",
+      "bullets": []
+    },
+    {
+      "kicker": "How it works",
+      "heading": "Discovery, scoring, review, send. One engine, zero spreadsheets.",
+      "body": "CortexViral's Seller Acquisition Engine replaces the entire manual workflow. You define your ideal seller profile once. Product category, revenue signal, social follower range, location, marketplace presence. The Scout team searches across Etsy, Shopify, Instagram, TikTok, and Google in parallel.\n\nEvery discovered profile lands in the Review Queue with a three-band confidence score. Green means strong product-market fit, active inventory, and verified contact info. Yellow flags minor gaps like sparse social proof or unclear fulfillment capacity. Red surfaces mismatches: wrong category, dormant shop, or duplicate outreach risk.\n\nYou approve green prospects in bulk or drill into yellow cases one by one. Once approved, the Creator team generates a personalized audit for each seller. Product photography grade, SEO opportunity count, comparable bestseller revenue estimate. The audit attaches to the outreach message as a PDF. Send happens on your schedule or auto-releases at the optimal day and hour.",
+      "bullets": [
+        "Scout finds sellers across five platforms simultaneously",
+        "Three-band scoring ranks every prospect before you see them",
+        "Personalized audits show sellers exactly what they gain",
+        "Review Queue lets you approve in bulk or inspect edge cases",
+        "Lifecycle tracker remembers reply status and next follow-up date"
+      ]
+    },
+    {
+      "kicker": "Three-band confidence",
+      "heading": "Green, yellow, red. Know which prospects deserve your time.",
+      "body": "Not every discovered seller is worth contacting. CortexViral scores each prospect across eight dimensions: product category match, inventory freshness, contact data validity, social proof volume, competitive marketplace presence, fulfillment signals, brand consistency, and duplicate risk.\n\nGreen prospects score seventy-five or higher out of one hundred. They match your ideal seller profile, maintain active inventory, and show no signs of dormancy. Approve fifty green prospects in one click and the system queues personalized outreach for all fifty.\n\nYellow prospects score forty to seventy-four. Maybe the shop launched six months ago and lacks reviews. Maybe the contact email bounced once but a backup exists. You decide whether to approve, skip, or request more Intelligence research.\n\nRed prospects score below forty. Wrong product vertical, zero inventory updates in ninety days, already selling on your platform, or flagged as a known bad actor. The system hides red by default so you never waste time on junk leads.",
+      "bullets": []
+    },
+    {
+      "kicker": "Personalized audits",
+      "heading": "Every message includes a custom audit the seller actually wants to read",
+      "body": "Generic cold emails die in the inbox. CortexViral attaches a one-page seller audit to every outreach message. The Intelligence team analyzes the prospect's existing storefront, product photography, pricing strategy, SEO metadata, and competitive positioning.\n\nThe audit calls out three to five high-impact opportunities. Better hero images could lift conversion eleven percent. Keyword optimization might double organic search traffic. Comparable bestsellers in the same category earn four times current revenue. Each opportunity includes a concrete next step.\n\nSellers open these messages because the subject line references their shop by name and the attachment solves a real problem. Reply rates jump from four percent to nineteen percent when the first sentence proves you studied their business. The audit costs you zero extra time because Creator generates it automatically from the same data Scout collected during discovery.",
+      "bullets": []
+    },
+    {
+      "kicker": "Human-in-the-loop",
+      "heading": "Review Queue ensures quality before any message leaves the platform",
+      "body": "Full autonomy sounds appealing until a bad prospect damages your brand. CortexViral defaults to L3 autonomy for seller acquisition: the system discovers and scores prospects, drafts personalized outreach, and queues everything in the Review Queue. You click approve and messages send. You maintain control without doing the research.\n\nThe Review Queue surfaces Prospect Intelligence Cards for every candidate. Confidence score, discovery source, contact validation status, competitive overlap check, and generated audit preview. Sort by score, filter by category, bulk-approve green prospects, or drill into individual yellow cases.\n\nRecommended Action sits at the top of the queue. It calculates which fifty prospects offer the highest expected value based on confidence score, category demand, and reply probability. Approve the top fifty in one click and you just launched a campaign that would have taken your team two weeks to build manually. The Queue remembers your approval patterns and surfaces better recommendations over time.",
+      "bullets": []
+    },
+    {
+      "kicker": "Lifecycle tracking",
+      "heading": "From cold prospect to active seller, one dashboard tracks the entire journey",
+      "body": "Seller acquisition does not end when the first message sends. CortexViral tracks reply status, follow-up cadence, onboarding progress, and first-sale milestones inside a unified Lifecycle Tracker. You see which prospects opened the audit, which replied with questions, which agreed to a call, and which went dark after initial interest.\n\nThe Operator team auto-schedules follow-ups based on engagement signals. No reply after five days triggers a gentle check-in. A reply asking about commission structure routes to your sales queue with full context attached. A seller who completes onboarding but hasn't listed a product gets a activation nudge on day fourteen.\n\nThis closed-loop tracking integrates with the same AI Marketing Operating System that runs your content calendar and competitor monitoring. Seller data flows into campaign targeting, Creator references new seller success stories in social posts, and Intelligence flags when a recruited seller launches a breakout product. Manual CRMs force you to rebuild context every time you switch tools. CortexViral remembers everything because seller acquisition lives inside the same brain that runs the rest of your marketing.",
+      "bullets": []
+    }
+  ],
+  "comparison": {
+    "title": "Manual scouting vs. the Seller Acquisition Engine",
+    "left": {
+      "label": "Without CortexViral",
+      "items": [
+        "Intern spends eight hours searching Etsy and Instagram for leads",
+        "Seventy prospects copied into a spreadsheet with no validation",
+        "Generic pitch sent from personal Gmail to entire list",
+        "No idea which sellers are active, qualified, or already competitors",
+        "Four percent reply rate because the message proves you did not research",
+        "Follow-ups forgotten, no lifecycle tracking, opportunities lost in inbox chaos"
+      ]
+    },
+    "right": {
+      "label": "CortexViral way",
+      "items": [
+        "Scout discovers two hundred qualified sellers across five platforms overnight",
+        "Three-band confidence scoring validates prospects before you see them",
+        "Personalized audit attached to every message, proving you studied their shop",
+        "Review Queue surfaces top fifty prospects with Recommended Action guidance",
+        "Nineteen percent reply rate because outreach solves a real problem",
+        "Lifecycle Tracker auto-schedules follow-ups and flags onboarding blockers"
+      ]
+    }
+  },
+  "internal_links": [
+    {
+      "slug": "marketing-os",
+      "title": "AI Marketing Operating System",
+      "blurb": "Seller acquisition lives inside the same orchestrator that runs campaigns, content calendars, and competitive intelligence. One brain, zero context switching."
+    },
+    {
+      "slug": "ai-campaign-generator",
+      "title": "AI Campaign Generator",
+      "blurb": "Turn recruited sellers into campaign assets. Creator auto-generates launch announcements, seller spotlight posts, and category collection pages from Intelligence data."
+    },
+    {
+      "slug": "competitor-analysis",
+      "title": "AI Competitor Analysis",
+      "blurb": "Know which sellers your competitors recruited last month. Intelligence monitors rival marketplaces and flags poaching risks before you lose top performers."
+    }
+  ],
+  "faq": [
+    {
+      "q": "What makes CortexViral seller acquisition software different from a CRM or email tool?",
+      "a": "CortexViral does not just store contacts or send emails. The platform discovers prospects, validates them with three-band confidence scoring, generates personalized audits, queues outreach for human review, and tracks the entire lifecycle from cold contact to active seller. Traditional CRMs require you to find leads, research them, write messages, and remember follow-ups manually. CortexViral automates discovery and personalization while keeping you in control through the Review Queue. It is the only seller acquisition software that operates as part of an AI Marketing Operating System, so recruited seller data flows directly into campaign targeting and content generation."
+    },
+    {
+      "q": "How does three-band confidence scoring decide if a prospect is green, yellow, or red?",
+      "a": "The Intelligence team scores every discovered seller across eight dimensions: product category match, inventory freshness, contact data validity, social proof volume, competitive marketplace presence, fulfillment signals, brand consistency, and duplicate outreach risk. Green prospects score seventy-five or higher, meaning strong fit and verified contact info. Yellow prospects score forty to seventy-four and may need a judgment call. Red prospects score below forty due to category mismatch, dormancy, or duplicate risk. You set the category and revenue thresholds when you define your ideal seller profile. The system applies those rules to every prospect automatically."
+    },
+    {
+      "q": "Can I use CortexViral for Etsy seller outreach specifically, or does it work across platforms?",
+      "a": "Scout searches Etsy, Shopify, Instagram, TikTok, and Google in parallel. If you only want Etsy seller outreach, configure the Discovery parameters to search Etsy shops matching your category and follower criteria. The same three-band scoring and personalized audit generation works regardless of source platform. Many marketplace operators start with Etsy because shop data is public and structured, then expand to Instagram makers and Shopify independents once the first campaign proves ROI. The Review Queue shows discovery source for every prospect so you can approve Etsy leads separately if you want to test messaging by platform."
+    },
+    {
+      "q": "What does the personalized audit include, and how long does Creator take to generate one?",
+      "a": "Each audit analyzes the prospect's storefront and calls out three to five high-impact opportunities: product photography quality, SEO keyword gaps, pricing strategy versus comparable bestsellers, social proof volume, and conversion friction points. Creator pulls public data during discovery, so audit generation adds zero extra research time. The system produces one audit in eight to twelve seconds. If you approve fifty green prospects, all fifty audits generate in parallel and attach to outreach messages before send. The PDF is branded with your marketplace logo and includes a clear call to action linking to your seller application page."
+    },
+    {
+      "q": "How does the Review Queue integrate with Recommended Action, and can I skip review entirely?",
+      "a": "Recommended Action sits at the top of the Review Queue and calculates which prospects offer the highest expected value based on confidence score, category demand, and historical reply probability. You can approve the top fifty in one click or review each prospect individually using Prospect Intelligence Cards. CortexViral defaults to L3 autonomy, meaning the system queues outreach for your approval. If you want full autonomy, switch to L4 and green prospects send automatically without review. Most operators keep L3 during the first two campaigns to calibrate scoring thresholds, then move to L4 once they trust the system's judgment."
+    },
+    {
+      "q": "Does lifecycle tracking work if a seller replies outside the platform, like via personal email?",
+      "a": "Yes. Forward any seller reply to your unique CortexViral inbox address and the Operator team parses the message, matches it to the correct prospect record, updates lifecycle status, and surfaces the conversation in your dashboard. If a seller texts you or messages on Instagram, paste the conversation into the prospect's Intelligence Card and the system logs it as a touch point. The goal is zero manual CRM data entry. Lifecycle Tracker remembers every interaction whether it happens inside the platform, in your inbox, or on a call. You focus on closing deals, and CortexViral handles the record-keeping."
+    }
+  ],
+  "final_cta_heading": "Replace spreadsheet scouting with an engine that recruits while you sleep.",
+  "final_cta_body": "Define your ideal seller profile once. CortexViral discovers hundreds of qualified prospects, scores them, generates personalized audits, and queues outreach for your review. Start your first campaign today.",
+  "__meta__": {
+    "slug": "seller-acquisition",
+    "title": "AI Seller Acquisition Software | CortexViral",
+    "meta": "Find, qualify, and onboard high-fit marketplace sellers with AI. CortexViral discovers Etsy, Shopify, and indie sellers — then scores, drafts personalized outreach, and tracks every reply.",
+    "h1_lead": "Seller Acquisition,",
+    "h1_accent": "fully automated.",
+    "kicker": "Seller Acquisition Engine",
+    "primary_kw": "Seller acquisition software",
+    "keywords": [
+      "Seller acquisition software",
+      "Etsy seller outreach",
+      "Marketplace growth software",
+      "AI seller discovery",
+      "Maker recruiting tool"
+    ],
+    "generated_by": "claude"
+  }
+}
