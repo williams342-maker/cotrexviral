@@ -20,6 +20,12 @@ const LANDING_TITLES = {
   'ai-campaign-generator': 'AI Campaign Generator',
   'competitor-analysis':   'AI Competitor Analysis',
   'asset-analysis':        'AI Marketing Asset Analysis',
+  'instagram-marketing-ai': 'Instagram Marketing AI',
+  'facebook-marketing-ai':  'Facebook Marketing AI',
+  'linkedin-marketing-ai':  'LinkedIn Marketing AI',
+  'reddit-marketing-ai':    'Reddit Marketing AI',
+  'youtube-marketing-ai':   'YouTube Marketing AI',
+  'tiktok-marketing-ai':    'TikTok Marketing AI',
 };
 
 const fmt = (iso) => {

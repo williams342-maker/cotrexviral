@@ -35,6 +35,17 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 123) **🔎 SEO Sprint v1 — Round 4: /insights Blog (Index + 10 Articles)**
+  - **/insights index** (`InsightsIndex.jsx`): operator-essay positioning ("Operator essays on the Marketing OS."), 6 category chips (All/Playbooks/Strategy/Operations/Automation/Intelligence), featured-card hero (page 1 only), 6-per-page grid, Newer/Older pagination. Filtering resets to page 1 cleanly.
+  - **/insights/<slug> article template** (`InsightsArticle.jsx`): full-bleed hero with breadcrumbs, kicker badge, dek, author meta (gradient avatar + jobTitle + published date), boxed Key Takeaways callout, lede, 6-7 body sections with optional bullets, pull-quote with quote icon, related-landing CTA card, 3 related-article cards, FAQ, and final-takeaway closing block with "Start Your First Mission" + "Back to Insights" CTAs. Unknown slugs `<Navigate to="/insights" replace />`.
+  - **Schemas per article**: 4 JSON-LD blocks — Organization, **Article** (with `author.@type=Person`, `publisher.@type=Organization`, `datePublished`, `dateModified`, `mainEntityOfPage`, `keywords`), BreadcrumbList, FAQPage. All Google Article-rich-result requirements satisfied.
+  - **Content**: 10 articles generated via `backend/scripts/generate_insights.py` (Claude Sonnet 4.5 + json_repair). One article (`ai-competitive-intelligence`) hand-authored after a mid-run LLM budget hit at 62.46/62.4 — follows identical JSON shape, ships seamlessly. Slugs: how-to-recruit-etsy-sellers, ai-marketing-operating-systems-explained, reddit-marketing-automation, marketplace-growth-strategies, campaign-planning-frameworks, ai-competitive-intelligence, social-media-automation-guide, asset-analysis-for-marketers, multi-channel-campaign-management, seller-acquisition-playbook.
+  - **Sitemap**: `routes/seo.py` extended — `/insights` + 10 article URLs registered. Total sitemap now 84 URLs.
+  - **react-snap config**: `package.json.reactSnap.include` extended to all 11 SEO landings + `/insights` + 10 articles. Build pipeline `yarn build:seo` will prerender every public route into crawler-perfect HTML once you redeploy.
+  - **Footer**: "Insights" link added to Company column.
+  - **Auxiliary fix**: `SITE` constant in `CVSeo.jsx` promoted to a named export (needed for `Article.mainEntityOfPage.@id`).
+  - **iter33 tests**: 100% frontend pass — all 10 articles render, schemas validate, category filtering + pagination + related-landing + related-article + back-link + nonexistent-slug redirect all work. One cosmetic nit (missing `LANDING_TITLES` entries for platform-AI slugs) fixed post-test.
+
 - 2026-02-28 (part 122) **🔎 SEO Sprint v1 — Round 3: 6 Platform Pages**
   - **6 new per-platform AI marketing pages**: `/instagram-marketing-ai`, `/facebook-marketing-ai`, `/linkedin-marketing-ai`, `/reddit-marketing-ai`, `/youtube-marketing-ai`, `/tiktok-marketing-ai`. All reuse the Round-2 `SeoLandingTemplate.jsx` — no JSX duplicated, just new content JSON.
   - **Content generator** at `backend/scripts/generate_platform_pages.py` mirrors Round 2 architecture (Claude Sonnet 4.5 via `cortex_chat`, `json_repair` fallback). Each spec includes `platform_specifics` (formats, algo behavior, posting mechanics) which Claude weaves into 6 sections of 130-180 words. Body word count ~750-870/page; FAQ adds ~400 more. Re-run: `cd /app/backend && python -m scripts.generate_platform_pages`.
