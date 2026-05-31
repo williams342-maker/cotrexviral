@@ -114,7 +114,12 @@ async def send_with_usage(chat, user_message, *,
     messages = await chat.get_messages()
     await chat._add_user_message(messages, user_message)
     try:
-        response = await chat._execute_completion(messages)
+        # _execute_completion → litellm.completion (sync, blocks the
+        # uvicorn event loop for 2-3 min on long LLM calls). Push it to
+        # a thread so other HTTP requests stay responsive.
+        import asyncio as _asyncio
+        response = await _asyncio.to_thread(
+            lambda: _asyncio.run(chat._execute_completion(messages)))
         text = await chat._extract_response_text(response)
         await chat._add_assistant_message(messages, text)
     except Exception as e:

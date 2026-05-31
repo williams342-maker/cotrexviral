@@ -60,14 +60,24 @@ class GeminiNanoBananaProvider:
     name = "gemini"
     model_id = "gemini-3.1-flash-image-preview"
 
-    async def generate(self, prompt: str, *, size: str = "square") -> bytes:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
+    async def generate(self, prompt: str, *, size: str = "square",
+                          reference_image_b64: Optional[str] = None) -> bytes:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
         from core import EMERGENT_LLM_KEY
         if not EMERGENT_LLM_KEY:
             raise RuntimeError("EMERGENT_LLM_KEY missing")
 
         preset = SIZE_PRESETS.get(size, SIZE_PRESETS["square"])
         sized_prompt = f"{prompt}\n\nAspect: {preset['hint']}."
+        if reference_image_b64:
+            # Tell Gemini the attached image is a STYLE/brand reference
+            # — not a literal redraw target. Without this hint the
+            # model occasionally just outputs a near-copy.
+            sized_prompt = (
+                f"{sized_prompt}\n\nThe attached image is a brand "
+                "reference — match its overall palette, mood, and "
+                "visual identity, but generate a NEW composition "
+                "from scratch following the description above.")
 
         # New chat per generation so sessions don't bleed prompt context.
         chat = LlmChat(api_key=EMERGENT_LLM_KEY,
@@ -77,8 +87,11 @@ class GeminiNanoBananaProvider:
         chat.with_model("gemini", self.model_id) \
              .with_params(modalities=["image", "text"])
 
-        _text, images = await chat.send_message_multimodal_response(
-            UserMessage(text=sized_prompt))
+        msg = UserMessage(text=sized_prompt)
+        if reference_image_b64:
+            msg.file_contents = [ImageContent(image_base64=reference_image_b64)]
+
+        _text, images = await chat.send_message_multimodal_response(msg)
         if not images:
             raise RuntimeError("Gemini returned no images")
         return base64.b64decode(images[0]["data"])
@@ -92,7 +105,11 @@ class OpenAIGPTImageProvider:
     name = "openai"
     model_id = "gpt-image-1"
 
-    async def generate(self, prompt: str, *, size: str = "square") -> bytes:
+    async def generate(self, prompt: str, *, size: str = "square",
+                          reference_image_b64: Optional[str] = None) -> bytes:
+        # OpenAI GPT Image 1 doesn't accept reference images via this
+        # SDK path. Ignore the hint silently so the orchestrator can
+        # pass it unconditionally without provider-specific branching.
         from emergentintegrations.llm.openai.image_generation import OpenAIImageGeneration
         from core import EMERGENT_LLM_KEY
         if not EMERGENT_LLM_KEY:
