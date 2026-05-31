@@ -33,8 +33,8 @@ const Marketing = () => {
   return (
     <div className="min-h-screen cv-dark antialiased">
       <CVSeo
-        title="AI Viral Content Generator for Fast Social Media Growth"
-        description="Generate viral TikTok, Instagram, and X posts in seconds with CortexViral's AI viral content generator. Schedule, publish, and grow across 38+ social channels — free to start."
+        title="AI Marketing Operating System for Growth Teams"
+        description="CortexViral is an AI Marketing Operating System that plans campaigns, generates content, recruits sellers, analyzes competitors, and executes growth workflows from one command center."
         path="/"
         schema={[ORG_SCHEMA, SOFTWARE_SCHEMA, buildFaqSchema(DEFAULT_FAQS.map((f) => ({ question: f.q, answer: f.a })))]}
       />

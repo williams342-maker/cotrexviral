@@ -27,7 +27,7 @@ const CVHero = ({ onGetStarted }) => {
             data-testid="cv-hero-badge"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 cv-pulse" />
-            Hire your AI marketing employees
+            The AI Marketing Operating System
           </motion.div>
 
           <motion.h1
@@ -36,8 +36,8 @@ const CVHero = ({ onGetStarted }) => {
             transition={{ duration: 0.7, delay: 0.05 }}
             className="cv-display text-5xl sm:text-6xl lg:text-7xl font-semibold text-white leading-[0.95]"
           >
-            Your AI Growth Team,{' '}
-            <span className="cv-gradient-text">working 24/7.</span>
+            The AI Marketing{' '}
+            <span className="cv-gradient-text">Operating System.</span>
           </motion.h1>
 
           <motion.p
@@ -46,9 +46,9 @@ const CVHero = ({ onGetStarted }) => {
             transition={{ duration: 0.7, delay: 0.15 }}
             className="mt-6 max-w-2xl text-[17px] leading-relaxed text-zinc-400"
           >
-            CortexViral gives you <strong className="text-zinc-200">six AI marketing employees</strong> — Strategy, Research, Content, SEO, Social, Email —
-            that plan campaigns, research trends, write posts, and publish across TikTok, Instagram, LinkedIn, Pinterest, and Facebook.
-            One inbox. Compounding growth. No new hires.
+            <strong className="text-zinc-200">Plan campaigns. Generate assets. Recruit sellers. Analyze competitors. Execute growth.</strong>{' '}
+            CortexViral runs every layer of your marketing — strategy, content, distribution, intelligence — from one command center.
+            No more stitching ten tools together.
           </motion.p>
 
           <motion.div
@@ -62,7 +62,7 @@ const CVHero = ({ onGetStarted }) => {
               className="cv-btn-primary inline-flex items-center gap-2 text-[14px] font-semibold px-6 h-12 rounded-full"
               data-testid="cv-hero-cta-primary"
             >
-              Start Growing <ArrowRight size={15} />
+              Start Your First Mission <ArrowRight size={15} />
             </button>
             <button
               onClick={() => document.querySelector('#results')?.scrollIntoView({ behavior: 'smooth' })}

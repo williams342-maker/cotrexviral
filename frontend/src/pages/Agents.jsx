@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import CVNavbar from '../components/cv/CVNavbar';
 import CVBackdrop from '../components/cv/CVBackdrop';
 import CVFooter from '../components/cv/CVFooter';
+import CVSeo, { ORG_SCHEMA, buildBreadcrumbSchema } from '../components/cv/CVSeo';
 import { SelectAgentModal, AgentChatModal } from '../components/Modals';
 import { ArrowRight } from 'lucide-react';
 
@@ -68,6 +69,15 @@ const AgentsPage = () => {
 
   return (
     <div className="min-h-screen cv-dark">
+      <CVSeo
+        title="Meet the AI Marketing Team — Nova, Sam, Kai & Angela"
+        description="CortexViral's four specialist AI agents: Nova writes copy, Sam handles SEO, Kai listens to social trends, and Angela owns email. The always-on marketing team behind every mission."
+        path="/agents"
+        schema={[ORG_SCHEMA, buildBreadcrumbSchema([
+          { label: 'Home', path: '/' },
+          { label: 'AI Marketing Team', path: '/agents' },
+        ])]}
+      />
       <CVNavbar onGetStarted={() => setSelectOpen(true)} />
 
       <section className="relative pt-32 pb-20 overflow-hidden">

@@ -77,7 +77,7 @@ export const ORG_SCHEMA = {
   url: SITE,
   logo: DEFAULT_OG,
   description:
-    'AI viral content generator and growth automation platform for creators, startups, and brands.',
+    'CortexViral is an AI Marketing Operating System that plans campaigns, generates content, recruits sellers, analyzes assets, and executes growth workflows from one command center.',
   sameAs: [
     'https://twitter.com/cortexviral',
     'https://www.linkedin.com/company/cortexviral',
@@ -89,10 +89,11 @@ export const SOFTWARE_SCHEMA = {
   '@type': 'SoftwareApplication',
   name: 'CortexViral',
   applicationCategory: 'BusinessApplication',
+  applicationSubCategory: 'MarketingApplication',
   operatingSystem: 'Web',
   url: SITE,
   description:
-    'AI viral content generator — create, schedule, and grow across TikTok, Instagram, X, LinkedIn, YouTube and more from one inbox.',
+    'AI Marketing Operating System — plan campaigns, generate content, recruit sellers, analyze competitors and assets, and execute multi-channel growth workflows from one command center.',
   offers: {
     '@type': 'Offer',
     price: '0',

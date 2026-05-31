@@ -35,6 +35,14 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 120) **🔎 SEO Sprint v1 — Round 1: Foundation & Repositioning**
+  - **Homepage repositioned** as "The AI Marketing Operating System" (`CVHero` headline + subheadline, primary CTA "Start Your First Mission", badge updated). `Marketing.jsx` CVSeo title → `AI Marketing Operating System for Growth Teams | CortexViral` (60 chars). Meta description rewritten for the OS positioning.
+  - **Static HTML head** (`public/index.html`) `<title>` + `<meta name="description">` updated to match — these are the values Google sees before React mounts.
+  - **Schemas refined** (`CVSeo.jsx`): `ORG_SCHEMA.description` and `SOFTWARE_SCHEMA.description` rewritten around the Marketing OS positioning. `SOFTWARE_SCHEMA.applicationSubCategory='MarketingApplication'` added (passes Google Rich Results validation alongside the existing `applicationCategory='BusinessApplication'`).
+  - **CVSeo coverage**: `Agents.jsx` was the only public page without `<CVSeo>` — added with focused title + Org + BreadcrumbList schema. All other public pages already covered.
+  - **Sitemap pre-registration** (`routes/seo.py`): added 12 placeholder routes for Round 2-4 (`/marketing-os`, `/seller-acquisition`, `/ai-campaign-generator`, `/competitor-analysis`, `/asset-analysis`, `/instagram-marketing-ai`, `/facebook-marketing-ai`, `/linkedin-marketing-ai`, `/reddit-marketing-ai`, `/youtube-marketing-ai`, `/tiktok-marketing-ai`, `/insights`). Sitemap now exposes 74 URLs at `/sitemap.xml` (root) and `/api/seo/sitemap.xml` (backend alias).
+  - **What's next**: Round 2 — write the 5 core 1,500-word SEO landing pages via Claude (auto-generated, committed as static JSX). Round 3 — 6 × 1,000-word platform pages. Round 4 — internal footer linking + 10 seed `/insights` blog posts + react-snap prerender pipeline.
+
 - 2026-02-28 (part 119) **🎯 Mission Dashboard — Recommended Action hero (P2)**
   - **New backend endpoint** `GET /api/cortex/mission-dashboard/recommended-action` in `routes/cortex_recommendation_bridge.py`. Picks the single highest-signal next action: (1) newest un-consumed bridge with `confidence ≥ 60` within `_BRIDGE_FRESHNESS_DAYS=14`, hydrated through `build_recommendation_from_intent()`; (2) fallback to `build_briefing().top_recommendation`. Returns `{has_recommendation, source, bridge_id?, title, summary, reasoning, confidence (0-100), expected_outcome, estimated_timeline_days, estimated_cost_usd, mission_intent, recommendation}` — the embedded `recommendation` is the same plan-card shape `/cortex/console/execute` consumes, so the Launch CTA is one round-trip.
   - **Bridge "consumed" logic** — `_bridge_consumed()` skips bridges that already have a mission linked (`missions.auto_optimize_meta.bridge_id == bridge.id`) OR have been dismissed (`cortex_dismissed_plans.rec_id == bridge.id`), so the hero rotates forward as users act.

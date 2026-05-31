@@ -30,6 +30,22 @@ SEO_LANDING_PATHS = [
     ("/", "1.0", "weekly"),
     ("/pricing", "0.95", "weekly"),
     ("/roadmap", "0.8", "weekly"),
+    # ----- Phase 3: Core SEO landing pages (AI Marketing OS positioning) -----
+    ("/marketing-os", "0.95", "weekly"),
+    ("/seller-acquisition", "0.9", "weekly"),
+    ("/ai-campaign-generator", "0.9", "weekly"),
+    ("/competitor-analysis", "0.9", "weekly"),
+    ("/asset-analysis", "0.9", "weekly"),
+    # ----- Phase 4: Per-platform marketing-AI pages -----
+    ("/instagram-marketing-ai", "0.85", "weekly"),
+    ("/facebook-marketing-ai", "0.85", "weekly"),
+    ("/linkedin-marketing-ai", "0.85", "weekly"),
+    ("/reddit-marketing-ai", "0.85", "weekly"),
+    ("/youtube-marketing-ai", "0.85", "weekly"),
+    ("/tiktok-marketing-ai", "0.85", "weekly"),
+    # ----- Insights (SEO blog index) -----
+    ("/insights", "0.85", "weekly"),
+    # ----- Existing programmatic tool pages -----
     ("/ai-tiktok-post-generator", "0.9", "weekly"),
     ("/viral-content-ideas-generator", "0.9", "weekly"),
     ("/instagram-caption-ai-generator", "0.9", "weekly"),
