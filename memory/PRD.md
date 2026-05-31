@@ -35,6 +35,14 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 121) **🔎 SEO Sprint v1 — Round 2: 5 Core Landing Pages**
+  - **5 new SEO landing pages** live at `/marketing-os`, `/seller-acquisition`, `/ai-campaign-generator`, `/competitor-analysis`, `/asset-analysis`. Each uses a shared `SeoLandingTemplate.jsx` (data-driven from a `__meta__`-stamped JSON file under `pages/landing-os/content/`).
+  - **Content generation**: `backend/scripts/generate_seo_landings.py` calls Claude Sonnet 4.5 via `cortex_chat` (Emergent LLM key) once per page with a structured prompt + JSON schema. Falls back to `json_repair` if the model adds prose. Re-runnable: `cd /app/backend && python -m scripts.generate_seo_landings`. `SEO_SKIP_EXISTING=1` env var to skip already-generated files.
+  - **Each page** renders: kicker + gradient H1 + subhead + 4 hero bullets + 2 CTAs (primary "Start Your First Mission" → `/dashboard`, secondary "Read the FAQ") + 6 body sections (kicker, heading, body, optional bullets) + Old-way vs CortexViral-way comparison table + 3 internal-link cards to OTHER landing slugs + 6-question FAQ (rendered through existing `CVFaq`) + final CTA pair. Footer-wide nav added too.
+  - **SEO head per page**: unique title, meta description (canonical only — duplicate static one removed from `public/index.html`), canonical URL, full OG + Twitter cards, and 4 JSON-LD blocks: Organization, SoftwareApplication, BreadcrumbList, FAQPage. All verified valid via DOM JSON parse.
+  - **Phase 6 footer linking** (partial): new "Platform" column in `CVFooter.jsx` with 5 links to the new landing pages. Brand blurb rewritten to the Marketing OS positioning.
+  - **iter31 tests**: 100% frontend pass — all 5 routes reachable, schemas valid, internal links navigate to OTHER slugs (never to self), footer Platform column complete, CTAs route to `/dashboard`. One tidy-up nit (duplicate static meta description) fixed.
+
 - 2026-02-28 (part 120) **🔎 SEO Sprint v1 — Round 1: Foundation & Repositioning**
   - **Homepage repositioned** as "The AI Marketing Operating System" (`CVHero` headline + subheadline, primary CTA "Start Your First Mission", badge updated). `Marketing.jsx` CVSeo title → `AI Marketing Operating System for Growth Teams | CortexViral` (60 chars). Meta description rewritten for the OS positioning.
   - **Static HTML head** (`public/index.html`) `<title>` + `<meta name="description">` updated to match — these are the values Google sees before React mounts.
