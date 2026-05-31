@@ -35,6 +35,19 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 125) **🚨 P0 — Cortex "Connection closed before completion" on production (round 2)**
+  - **Symptom**: After redeploying the concurrency fix from part 124, cortexviral.com still failed — but now with a fast "Cortex failed to respond" toast instead of hanging. With the improved error reporting (frontend + backend) deployed, the real toast read: **"Connection closed before completion."** That message only fires when EventSource throws a *native* connection error — i.e., the SSE connection was killed by an intermediary before any payload arrived (or mid-stream). User confirmed LLM key balance is 108.98 credits with auto-recharge enabled, so budget was ruled out.
+  - **RCA**: Production traffic flows through Cloudflare + K8s ingress before uvicorn. The `cortex_chat_stream` pipeline goes silent for 5-15 seconds during the `planning` LLM call between the `phase: planning` and `ready` events. **Aggressive idle-timeout proxies drop the connection during that silent window**, and the response was also vulnerable to header-buffering by proxies that don't flush until the body starts.
+  - **Fix** in `backend/routes/cortex_stream.py`: completely rewrote the SSE generator using a queue-based pattern with a background heartbeat task:
+    1. **Header-flush comment** emitted as the first byte of the response (`: cortex-stream open\n\n`) forces buffering proxies to flush headers immediately, fixing the "EventSource never sees any event" failure mode.
+    2. **Background heartbeat task** pushes `: heartbeat` SSE comments to a shared queue every 5 seconds. The generator drains the queue and yields to the wire, so even during the longest Claude call the connection has bytes flowing within the 5-second window.
+    3. **Pipeline task** decoupled from the yielding loop — runs independently, pushes events to the queue, signals completion via a sentinel.
+    4. `Cache-Control: no-cache, no-transform` (added `no-transform` to defend against transformative proxies).
+    5. Cleanup-safe — heartbeat is cancelled when DONE arrives or on connection close.
+  - **Verified in preview**: 20.7s end-to-end stream. Output shows `: cortex-stream open` → phase events → memory event → `phase planning` → `: heartbeat` (mid-stream, during Claude call) → `ready`. Heartbeats kept bytes flowing through the silent planning window.
+  - **Bonus** in `frontend/src/pages/dashboard/CommandCenter.jsx` (already shipped this round but related): SSE error toast now parses the server's `{message}` payload and logs detail to console, ending the "blind debug" failure mode for future errors.
+  - **Next step**: redeploy preview → production. The heartbeat fix should resolve the "Connection closed before completion" symptom on cortexviral.com.
+
 - 2026-02-28 (part 124) **🚨 P0 — Cortex production-timeout root-caused & fixed**
   - **Symptom**: After deploy, Cortex AI timing out on `cortexviral.com`. User rolled back.
   - **RCA**: Commit `f59b949` (~15h ago) had wrapped the already-async `chat._execute_completion(messages)` inside `await asyncio.to_thread(lambda: asyncio.run(_execute_completion(messages)))`. The comment justified it as preventing "event-loop blocking", but the call was already async (`litellm.acompletion` under the hood). The wrap created a fresh event loop per call inside Python's default thread-pool executor (~32 threads). Under concurrent production load, the pool exhausted, every new Cortex request stalled waiting for a thread, and K8s ingress killed them after the timeout window. Single-user preview tests never reproduced it because there was no concurrency pressure.

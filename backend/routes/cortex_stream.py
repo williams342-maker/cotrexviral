@@ -23,6 +23,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -49,31 +50,57 @@ async def cortex_chat_stream(request: Request, message: str = "",
                                conversation_id: str = ""):
     """SSE-streamed Cortex chat. Browsers can only send GET via
     EventSource so the message is passed as a query param (capped
-    server-side at 1000 chars to match the POST endpoint)."""
+    server-side at 1000 chars to match the POST endpoint).
+
+    Implementation note — proxy survival:
+      Production traffic flows through Cloudflare + K8s ingress before
+      reaching uvicorn. Both layers can buffer responses or drop
+      idle connections during long-running awaits (the `planning`
+      Claude call takes 5-15s with zero bytes on the wire). To keep
+      the stream alive:
+        1. We emit an SSE comment immediately to force header flush.
+        2. A background heartbeat task pushes `: heartbeat` comments
+           every 5s onto the same queue the pipeline pushes events.
+        3. The generator drains the queue until the pipeline signals
+           completion (or error), then closes cleanly.
+      EventSource silently ignores comment lines, so this is invisible
+      to the client but prevents the "Connection closed before
+      completion" failure mode on production.
+    """
     user = await get_current_user(request)
     msg = (message or "").strip()[:1000]
     if not msg:
         raise HTTPException(400, "message is required")
     conv_id = (conversation_id or "").strip() or "legacy"
 
-    async def gen():
+    queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
+    DONE = None  # sentinel
+
+    async def _heartbeat():
+        try:
+            while True:
+                await asyncio.sleep(5)
+                await queue.put(": heartbeat\n\n")
+        except asyncio.CancelledError:
+            return
+
+    async def _pipeline():
         try:
             # ----- Phase 1: classifying ------------------------
-            yield _sse("phase", {
+            await queue.put(_sse("phase", {
                 "phase": "classifying",
                 "label": "Understanding your goal…",
-            })
-            await asyncio.sleep(0)
+            }))
 
             # ----- Phase 2: recalling memory -------------------
-            yield _sse("phase", {
+            await queue.put(_sse("phase", {
                 "phase": "recalling",
                 "label": "Recalling our prior conversations…",
-            })
+            }))
             strategy = await cmem.get_strategy(user.user_id)
             recalled = await cmem.recall_semantic(user.user_id, msg, k=5)
             memory_block = cmem.render_memory_block(strategy, recalled)
-            yield _sse("memory", {
+            await queue.put(_sse("memory", {
                 "strategy_summary": (strategy or {}).get("summary", ""),
                 "recalled_count":   len(recalled),
                 "recalled_preview": [
@@ -81,15 +108,14 @@ async def cortex_chat_stream(request: Request, message: str = "",
                      "when": (r.get("created_at") or "")[:10]}
                     for r in recalled[:3]
                 ],
-            })
+            }))
 
             # ----- Phase 3: planning (LLM stage classifier) ----
-            yield _sse("phase", {
+            await queue.put(_sse("phase", {
                 "phase": "planning",
                 "label": "Cortex is thinking through your goal…",
-            })
+            }))
 
-            # Pull last ~10 turns of conversation for stage continuity.
             hist_cur = db.cortex_conversations.find(
                 {"user_id": user.user_id},
                 {"_id": 0, "role": 1, "message": 1, "stage": 1},
@@ -105,7 +131,6 @@ async def cortex_chat_stream(request: Request, message: str = "",
                 intent_types=INTENT_TYPES,
             )
 
-            # Plan card gated on the consultant funnel.
             rec = None
             if should_render_plan_card(stage_data) and stage_data.get("intent"):
                 rec = await build_recommendation_from_intent(
@@ -115,7 +140,6 @@ async def cortex_chat_stream(request: Request, message: str = "",
                     user_message=msg,
                 )
 
-            # Persist conversation history (same as POST endpoint).
             now = datetime.now(timezone.utc)
             await db.cortex_conversations.insert_one({
                 "id": uuid.uuid4().hex, "user_id": user.user_id,
@@ -147,7 +171,7 @@ async def cortex_chat_stream(request: Request, message: str = "",
                 logger.exception("stream: record_turn failed (non-fatal)")
 
             # ----- Phase 4: ready ------------------------------
-            yield _sse("ready", {
+            await queue.put(_sse("ready", {
                 "conversation_id":         conv_id,
                 "stage":                   stage_data["stage"],
                 "discovery_complete":      stage_data["discovery_complete"],
@@ -166,14 +190,12 @@ async def cortex_chat_stream(request: Request, message: str = "",
                     "recalled_count":   len(recalled),
                     "strategy_summary": (strategy or {}).get("summary", ""),
                 },
-            })
+            }))
         except Exception as e:
             logger.exception("cortex_chat_stream: pipeline failed")
-            # Translate the most common production failure modes into
-            # user-actionable messages instead of raw stack-trace strings.
             err_msg = str(e)
-            friendly: str
-            if "Budget has been exceeded" in err_msg or "BadRequestError" in err_msg and "Budget" in err_msg:
+            if ("Budget has been exceeded" in err_msg
+                    or ("BadRequestError" in err_msg and "Budget" in err_msg)):
                 friendly = ("Emergent LLM key budget exhausted. "
                             "Go to Profile → Universal Key → Add Balance "
                             "(or enable auto top-up) to keep Cortex running.")
@@ -184,14 +206,44 @@ async def cortex_chat_stream(request: Request, message: str = "",
                 friendly = "Hit an upstream rate limit. Wait a moment and try again."
             else:
                 friendly = err_msg[:300]
-            yield _sse("error", {"message": friendly})
+            await queue.put(_sse("error", {"message": friendly}))
+        finally:
+            await queue.put(DONE)
+
+    async def gen():
+        # Force the proxy to flush response headers immediately. This
+        # alone fixes most "Connection closed before completion"
+        # failures caused by buffering proxies (Cloudflare etc.).
+        yield ": cortex-stream open\n\n"
+
+        pipeline_task = asyncio.create_task(_pipeline())
+        heartbeat_task = asyncio.create_task(_heartbeat())
+        try:
+            while True:
+                item = await queue.get()
+                if item is DONE:
+                    break
+                yield item
+        finally:
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            # Pipeline should already be done by the time DONE was
+            # enqueued, but await defensively to surface any late
+            # cancellation cleanly.
+            try:
+                await pipeline_task
+            except Exception:
+                logger.exception("cortex_chat_stream: pipeline_task tail")
 
     return StreamingResponse(
         gen(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control":     "no-cache, no-transform",
             "X-Accel-Buffering": "no",   # disable nginx buffering
-            "Connection": "keep-alive",
+            "Connection":        "keep-alive",
         },
     )
