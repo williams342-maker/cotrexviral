@@ -169,7 +169,22 @@ async def cortex_chat_stream(request: Request, message: str = "",
             })
         except Exception as e:
             logger.exception("cortex_chat_stream: pipeline failed")
-            yield _sse("error", {"message": str(e)[:300]})
+            # Translate the most common production failure modes into
+            # user-actionable messages instead of raw stack-trace strings.
+            err_msg = str(e)
+            friendly: str
+            if "Budget has been exceeded" in err_msg or "BadRequestError" in err_msg and "Budget" in err_msg:
+                friendly = ("Emergent LLM key budget exhausted. "
+                            "Go to Profile → Universal Key → Add Balance "
+                            "(or enable auto top-up) to keep Cortex running.")
+            elif "EMERGENT_LLM_KEY" in err_msg:
+                friendly = ("Emergent LLM key is missing on the server. "
+                            "Contact Emergent Support to restore it.")
+            elif "rate limit" in err_msg.lower():
+                friendly = "Hit an upstream rate limit. Wait a moment and try again."
+            else:
+                friendly = err_msg[:300]
+            yield _sse("error", {"message": friendly})
 
     return StreamingResponse(
         gen(),

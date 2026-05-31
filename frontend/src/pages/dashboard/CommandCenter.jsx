@@ -360,8 +360,26 @@ const CommandCenter = () => {
           loadOpps(); loadStrategy();
         }
       });
-      es.addEventListener('error', () => {
-        toast({ title: 'Cortex failed to respond', variant: 'destructive' });
+      es.addEventListener('error', (ev) => {
+        // EventSource fires native 'error' events for connection
+        // drops AND we also dispatch them server-side via SSE for
+        // pipeline exceptions. The server-sent ones carry a useful
+        // {message: "..."} payload — surface that to the user so we
+        // stop debugging blind.
+        let detail = '';
+        try {
+          const data = ev?.data ? JSON.parse(ev.data) : null;
+          detail = data?.message || '';
+        } catch { /* native error, no payload */ }
+        toast({
+          title: 'Cortex failed to respond',
+          description: detail || 'Connection closed before completion. Check console for details.',
+          variant: 'destructive',
+        });
+        if (detail) {
+          // eslint-disable-next-line no-console
+          console.error('[cortex/stream/error]', detail);
+        }
         es.close(); esRef.current = null;
         setSending(false); setPhase(null);
       });
