@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 from typing import Optional, List
 
 from fastapi import HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core import api, db
 from deps import get_current_user
@@ -412,7 +412,7 @@ async def preview_lead_score(lead_id: str, request: Request,
 # ---------------------------------------------------------------------
 class ReviewDecision(BaseModel):
     decision: str        # 'promote' | 'reject'
-    note:     Optional[str] = None
+    note:     Optional[str] = Field(default=None, max_length=2000)
 
 
 @api.get("/seller-qualification/review-queue")
@@ -476,13 +476,14 @@ async def recommended_action(request: Request, mission_id: str):
     # Counts per band among NOT-yet-contacted qualified leads.
     pipeline = [
         {"$match": {"user_id": user.user_id, "mission_id": mission_id,
-                     "stage":   {"$in": ["qualified", "review"]}}},
+                     "stage":   {"$in": ["qualified", "review", "rejected"]}}},
         {"$group": {"_id": "$confidence_band", "count": {"$sum": 1},
                       "top_score": {"$max": "$seller_score"}}},
     ]
     counts = {r["_id"]: r async for r in db.seller_leads.aggregate(pipeline)}
     high   = counts.get("high",   {"count": 0, "top_score": 0})
     medium = counts.get("medium", {"count": 0, "top_score": 0})
+    low    = counts.get("low",    {"count": 0, "top_score": 0})
 
     target_niche = mission.get("seller_target_niche") or mission.get("metric") or "your target niche"
 
@@ -520,5 +521,6 @@ async def recommended_action(request: Request, mission_id: str):
         "summary":    f"{verb} {what}",
         "reason":     reason,
         "counts":     {"high":   high["count"],
-                        "medium": medium["count"]},
+                        "medium": medium["count"],
+                        "low":    low["count"]},
     }

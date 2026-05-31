@@ -35,6 +35,25 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-27 (part 117) **🎯 Seller Acquisition Engine — Review Queue · Confidence Scoring · Prospect Cards · Recommended Actions**
+  - **3-band confidence routing** (`routes/seller_qualification.py`): one binary cutoff replaced with `_confidence_band()` returning `high|medium|low`. Thresholds: `composite ≥ DEFAULT_THRESHOLD (60)` → high → `stage='qualified'`; `composite ≥ REVIEW_THRESHOLD (45)` and `< threshold` → medium → `stage='review'`; otherwise → low → `stage='rejected'`. `seller_leads.STAGES` now includes `'review'` between qualified and outreached.
+  - **Confidence scoring with itemized signals** — `score_lead()` returns: `confidence` (alias for seller_score 0–100), `confidence_band`, `signals[]` (label/weight/verdict/value tuples for the Signal Breakdown), `prospect_card` (next bullet).
+  - **Prospect Intelligence Card** (`_build_prospect_card`) — deterministic heuristics produce:
+    - `why_match[]` — up to 4 strongest qualifying reasons (niche alignment, activity level, branding signals, product breadth, multi-channel presence).
+    - `pain_points[]` — source-specific platform pain (Etsy fees, Shopify app stack, IG reach decline, etc).
+    - `outreach_angle` — picks the single strongest signal and frames it as the recommended opener ("Lead with niche match…", "Lead with scale…", "Lead with brand setup…", "Lead with platform-fee pain…").
+    - `likelihood_to_convert` — composite × 100 plus +5pt bonuses for high activity and ≥80 niche match, clamped to 0–1.
+  - **Three new endpoints**:
+    - `GET  /api/seller-qualification/review-queue?mission_id=` — newest-first list of stage='review' leads.
+    - `POST /api/seller-qualification/review/{lead_id}` — operator `{decision:'promote'|'reject', note?}` (note capped at 2 KB via Pydantic) → flips lead stage and records reviewer/timestamp/note for future training data.
+    - `GET  /api/seller-qualification/recommended-action?mission_id=` — executive summary: returns `{action, verb, count, summary, reason, counts:{high,medium,low}}` with 3 branches: `contact_high_confidence` (≥3 high), `review_medium_queue` (else ≥3 high+medium), `expand_discovery` (sparse funnel).
+  - **Frontend** (`QualifiedSellers.jsx` — full rewrite):
+    - `RecommendedActionCard` — color-coded banner with verb-led summary + reason + per-band counts.
+    - `ReviewQueuePanel` — amber surface, per-lead row with Promote/Reject buttons (`data-testid: review-promote-{id}` / `review-reject-{id}`) and the recommended outreach angle quoted inline.
+    - Per-row HIGH/MEDIUM/LOW band badge (`data-testid: qualified-band-{id}`).
+    - Expanded row shows the full `ProspectIntelCard`: Why-they-match checklist · Pain-points detected · Recommended outreach angle quote · Likelihood-to-convert progress bar · collapsible Signal breakdown.
+  - **iter28 tests**: **14/14 backend pytest pass** + **frontend 100%** + **zero bugs**. Live verified: 5 leads → 2 high/2 medium/1 low → Recommended Action correctly chooses `review_medium_queue` (since 2 high < 3); after promoting, fresh run with 4 high + 1 low correctly switches to `contact_high_confidence`. Four LOW code-review comments — applied two (added `low` to recommended-action counts; 2 KB cap on review note); two deferred to backlog.
+
 - 2026-02-26 (part 116) **🔐 Production polish batch — signed URLs · WS tickets · DELETE-cancel · Whisper cost · PPTX→Campaign**
   - **Externally-fetchable signed creative URLs** (`make_signed_asset_url` / `_verify_signed_asset_token` in `routes/cortex_assets.py`) — HMAC-SHA256(secret, `key|exp`) token stamped on every campaign `media_url`. Social dispatchers (Meta/IG/LinkedIn/Pinterest) can fetch images at publish time WITHOUT the user's session cookie. TTL clamped 60s ≤ ttl ≤ 7 days. Signing secret derives from `EMERGENT_LLM_KEY` (or `ASSET_SIGNING_SECRET` override). `_abs_media_url()` in cortex_campaigns.py mints these on every push.
   - **WebSocket auth via single-use tickets** — new `POST /api/auth/ws-ticket` returns `{ticket, expires_at}` (90s, persisted in `user_sessions` with `single_use: true`). `_auth_websocket` deletes ticket on first use → replay fails. Frontend `useHitlInbox.js` always mints a ticket (HttpOnly cookies are unreadable client-side in production browsers).
