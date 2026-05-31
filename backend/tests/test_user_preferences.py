@@ -111,10 +111,10 @@ class TestPutPreferences:
         detail = (r.json().get("detail") or "").lower()
         assert "random_key" in detail or "unknown" in detail
 
-    def test_empty_body_returns_400(self):
+    def test_empty_body_returns_422(self):
         r = requests.put(f"{BASE_URL}/api/user/preferences",
                          headers=H, json={}, timeout=20)
-        assert r.status_code == 400, r.text
+        assert r.status_code == 422, r.text
 
     def test_requires_auth(self):
         r = requests.put(f"{BASE_URL}/api/user/preferences",

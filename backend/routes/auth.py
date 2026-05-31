@@ -193,7 +193,7 @@ async def update_user_preferences(request: Request):
     user = await get_current_user(request)
     payload = await request.json()
     if not isinstance(payload, dict) or not payload:
-        raise HTTPException(400, "Body must be a non-empty {key: value} dict.")
+        raise HTTPException(422, "Body must be a non-empty {key: value} dict.")
     update: dict = {}
     for k, v in payload.items():
         validator = _PREF_VALIDATORS.get(k)
