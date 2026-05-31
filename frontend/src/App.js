@@ -16,6 +16,10 @@ import {
   MarketingOSLanding, SellerAcquisitionLanding, AICampaignGeneratorLanding,
   CompetitorAnalysisLanding, AssetAnalysisLanding,
 } from './pages/landing-os';
+import {
+  InstagramMarketingAI, FacebookMarketingAI, LinkedInMarketingAI,
+  RedditMarketingAI, YouTubeMarketingAI, TikTokMarketingAI,
+} from './pages/platform-ai';
 import { BlogIndex, BlogPost } from './pages/blog/Blog';
 import AuthCallback from './pages/AuthCallback';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -113,6 +117,14 @@ function AppRouter() {
       <Route path="/ai-campaign-generator" element={<AICampaignGeneratorLanding />} />
       <Route path="/competitor-analysis" element={<CompetitorAnalysisLanding />} />
       <Route path="/asset-analysis" element={<AssetAnalysisLanding />} />
+
+      {/* Phase 4 — Per-platform AI marketing landing pages */}
+      <Route path="/instagram-marketing-ai" element={<InstagramMarketingAI />} />
+      <Route path="/facebook-marketing-ai" element={<FacebookMarketingAI />} />
+      <Route path="/linkedin-marketing-ai" element={<LinkedInMarketingAI />} />
+      <Route path="/reddit-marketing-ai" element={<RedditMarketingAI />} />
+      <Route path="/youtube-marketing-ai" element={<YouTubeMarketingAI />} />
+      <Route path="/tiktok-marketing-ai" element={<TikTokMarketingAI />} />
 
       <Route path="/tools/:slug" element={<NicheToolPage />} />
       <Route path="/blog" element={<BlogIndex />} />

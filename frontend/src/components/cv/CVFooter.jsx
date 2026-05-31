@@ -11,6 +11,15 @@ const platformLinks = [
   { label: 'Asset Analysis',       to: '/asset-analysis' },
 ];
 
+const channelLinks = [
+  { label: 'Instagram Marketing AI', to: '/instagram-marketing-ai' },
+  { label: 'TikTok Marketing AI',    to: '/tiktok-marketing-ai' },
+  { label: 'LinkedIn Marketing AI',  to: '/linkedin-marketing-ai' },
+  { label: 'YouTube Marketing AI',   to: '/youtube-marketing-ai' },
+  { label: 'Facebook Marketing AI',  to: '/facebook-marketing-ai' },
+  { label: 'Reddit Marketing AI',    to: '/reddit-marketing-ai' },
+];
+
 const productLinks = [
   { label: 'AI TikTok Generator', to: '/ai-tiktok-post-generator' },
   { label: 'Viral Content Ideas', to: '/viral-content-ideas-generator' },
@@ -31,17 +40,17 @@ const CVFooter = () => {
   return (
     <footer className="relative cv-dark border-t border-white/5 pt-16 pb-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid md:grid-cols-12 gap-10">
+        <div className="grid md:grid-cols-12 gap-8">
           {/* Brand */}
-          <div className="md:col-span-3">
+          <div className="md:col-span-2">
             <div className="flex items-center gap-2.5">
               <CVLogo size="sm" />
               <span className="cv-display font-semibold text-[15px] text-white">
                 Cortex<span className="cv-gradient-text">Viral</span>
               </span>
             </div>
-            <p className="text-[13px] text-zinc-400 mt-4 max-w-xs leading-relaxed">
-              The AI Marketing Operating System — plan campaigns, generate content, recruit sellers, and analyze competitors from one command center.
+            <p className="text-[12.5px] text-zinc-400 mt-4 leading-relaxed">
+              The AI Marketing Operating System.
             </p>
             <div className="flex items-center gap-3 mt-5">
               {[
@@ -57,10 +66,22 @@ const CVFooter = () => {
           </div>
 
           {/* Platform — Phase 6: footer-wide SEO internal linking */}
-          <div className="md:col-span-3" data-testid="footer-platform-links">
+          <div className="md:col-span-2" data-testid="footer-platform-links">
             <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-500 font-semibold mb-4">Platform</div>
             <ul className="space-y-2.5">
               {platformLinks.map((l) => (
+                <li key={l.to}>
+                  <Link to={l.to} className="text-[13.5px] text-zinc-400 hover:text-white transition-colors" data-testid={`footer-link-${l.to.replace('/','')}`}>{l.label}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Channels — Phase 4 platform AI pages */}
+          <div className="md:col-span-2" data-testid="footer-channel-links">
+            <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-500 font-semibold mb-4">Channels</div>
+            <ul className="space-y-2.5">
+              {channelLinks.map((l) => (
                 <li key={l.to}>
                   <Link to={l.to} className="text-[13.5px] text-zinc-400 hover:text-white transition-colors" data-testid={`footer-link-${l.to.replace('/','')}`}>{l.label}</Link>
                 </li>

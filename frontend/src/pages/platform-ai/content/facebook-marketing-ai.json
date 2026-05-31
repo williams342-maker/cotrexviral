@@ -1,0 +1,147 @@
+{
+  "hero_subhead": "Facebook marketing AI that deploys Reels, seeds Groups, schedules posts in optimal windows, and manages ad creative—so your local business or ecommerce brand builds community and drives conversions without burning hours on the Meta platform.",
+  "hero_bullets": [
+    "Reels + Stories on auto-publish",
+    "Group seeding for organic lift",
+    "Ad creative batch-generated, tested",
+    "Optimal-window scheduling built in"
+  ],
+  "sections": [
+    {
+      "kicker": "Why Facebook still owns local",
+      "heading": "Groups, Marketplace, and Reels keep this platform vital",
+      "body": "Facebook delivers 2.9 billion monthly users and the highest intent surface outside of Google: Marketplace. Local businesses see 60% of their discovery traffic from Groups and Marketplace listings. Reels now command 20 billion plays per day, rivaling TikTok's reach inside a single walled garden. The feed may be pay-to-play, but Reels and Group posts still earn organic distribution if you ship content daily. Community-driven brands thrive when they reply to comments in under two hours and post native video three to five times per week. That cadence breaks most in-house teams. Facebook marketing AI handles the production, the posting clock, and the Group seeding so you show up where your audience actually scrolls.",
+      "bullets": [
+        "Reels at 20 billion daily plays unlock organic reach",
+        "Groups drive 3× higher engagement than Page posts",
+        "Marketplace listings convert local searchers into buyers",
+        "Two-hour reply windows keep algorithm favor high"
+      ]
+    },
+    {
+      "kicker": "How the system works",
+      "heading": "Scout finds trends, Creator ships Reels, Operator publishes and monitors",
+      "body": "CortexViral is an AI Marketing Operating System built on four agent teams. Scout crawls trending audio, competitor Reels, and Group discussions to surface hooks your audience already engages with. Creator generates Reels scripts, carousel copy, and Story frames in your brand voice, then renders video or static assets through the Asset Upload Center. Operator schedules every piece into the optimal two-hour window—mornings for B2C, lunch for service trades, evenings for ecommerce—and auto-publishes to your Page, cross-posts to Groups you manage, and queues Stories. Intelligence tracks which Reels hit 10,000 plays in 48 hours, which Group posts spark 50-plus comments, and which ad creatives hold cost-per-click under one dollar. You set autonomy L0 for manual approval or L4 to let the system publish, test, and iterate without a single Slack ping.",
+      "bullets": [
+        "Scout pulls trending audio and competitor hooks daily",
+        "Creator renders Reels, carousels, Stories in brand voice",
+        "Operator publishes at optimal windows, cross-posts to Groups",
+        "Intelligence flags winners: 10k plays, sub-dollar CPC, 50 comments"
+      ]
+    },
+    {
+      "kicker": "Reels and Groups",
+      "heading": "The two levers that still earn organic reach on Facebook",
+      "body": "Page post reach without spend sits around 2% of your follower count. Reels break that ceiling: a 15-second clip with trending audio and a strong hook can reach 10× your Page size in the first 72 hours. Groups multiply engagement because the algorithm prioritizes member-to-member replies over brand broadcasts. When you seed a Reel or a carousel into three niche Groups per week, you capture warm audiences who trust peer recommendations more than ads. CortexViral auto-identifies Groups by keyword and engagement velocity, drafts native comments that add value instead of spam, and tracks which seeds convert into profile visits or Marketplace inquiries. You also publish two to three Stories daily to stay top-of-mind; Stories vanish in 24 hours but feed the algorithm's recency bias. The platform rewards brands that show up every single day, and agents never miss a publishing window.",
+      "bullets": [
+        "Reels reach 10× Page size when hooks + audio align",
+        "Group posts earn 3× more comments than Page feed",
+        "Seed into three niche Groups weekly for warm traffic",
+        "Two Stories daily maintain algorithm recency favor"
+      ]
+    },
+    {
+      "kicker": "Ad creative at scale",
+      "heading": "Generate, test, and kill underperformers inside one sprint",
+      "body": "Meta's auction rewards fresh creative. Ads fatigue after four to seven days at scale, so you need a pipeline that ships five new variants per week. Creator builds carousel ads, single-image feed units, Reels ads, and Story verticals from a single creative brief. Each variant tests a different hook, opening frame, or call-to-action. Operator launches all five into a campaign budget optimization structure, allocates 20 dollars per day per variant for 48 hours, then kills any creative above two-dollar cost-per-click or below 1% click-through rate. Winners graduate to 100-dollar daily budgets. Intelligence logs every data point so next month's brief incorporates winning hooks and losing patterns. You skip the Canva grind and the spreadsheet math. The system iterates faster than any freelancer because it never sleeps and never second-guesses a kill decision.",
+      "bullets": [
+        "Five creative variants per week prevent fatigue",
+        "48-hour test at twenty dollars, kill above two-dollar CPC",
+        "Winners scale to hundred-dollar daily budgets immediately",
+        "Intelligence archives hooks, frames, CTAs for next sprint"
+      ]
+    },
+    {
+      "kicker": "Autonomy you control",
+      "heading": "L0 for approval gates, L4 for lights-out publishing",
+      "body": "At L0 every Reel script, Group comment, and ad creative lands in your review queue. You approve, edit, or reject. At L2 the system publishes organic posts and Stories but holds paid creative for sign-off. L4 means full autonomy: agents write, render, schedule, publish, test, scale, and pause without human input. Most brands start L0 for the first two weeks to train tone and hook style, then move to L2 once they trust the voice. Ecommerce sellers running eight-figure Meta spend often jump straight to L4 because speed beats perfection when you're testing 40 creatives per month. You toggle autonomy per content type, so Reels might run L4 while Group seeding stays L1. The marketing-os architecture lets you dial risk and speed independently, and every asset remains editable before publish if you want the final say.",
+      "bullets": []
+    },
+    {
+      "kicker": "Mission-driven campaigns",
+      "heading": "One brief becomes 30 days of Reels, posts, and ad tests",
+      "body": "You define a Mission: launch a new product, grow Marketplace inquiries by 40%, or build a local Group to 5,000 members. The Autonomous Campaign Builder breaks that Mission into weekly content themes, assigns Creator to generate 12 Reels, six carousels, 20 Stories, and 10 ad variants, then hands Operator a 30-day publishing calendar with optimal post times pre-filled. Scout monitors competitor pages and trending hashtags daily, feeding new hooks into Creator's queue when a topic spikes. Intelligence tracks leading indicators like Reel save rate, Group join velocity, and ad frequency cap, so you know by day ten whether you'll hit the 40% lift. The entire loop runs inside one dashboard. No Trello cards, no Slack threads, no hoping your contractor remembered to post at 7 a.m. You set the goal, the agents execute the plan, and you review performance in a single weekly report.",
+      "bullets": [
+        "One Mission brief produces 30 days of content",
+        "12 Reels, six carousels, 20 Stories, 10 ad variants per month",
+        "Scout injects trending hooks mid-campaign automatically",
+        "Weekly report shows save rate, joins, frequency, lift to goal"
+      ]
+    }
+  ],
+  "comparison": {
+    "title": "Manual Facebook hustle versus agent-driven execution",
+    "left": {
+      "label": "Posting manually",
+      "items": [
+        "Brainstorm Reels ideas every Sunday, hope one goes viral by Friday",
+        "Forget to post Stories for three days, lose algorithm favor",
+        "Manually join Groups, copy-paste the same promo, get flagged as spam",
+        "Launch one ad creative, run it for two weeks until cost doubles",
+        "Check Ads Manager at midnight, panic-pause the wrong campaign"
+      ]
+    },
+    "right": {
+      "label": "CortexViral + Facebook",
+      "items": [
+        "Scout delivers five trending hooks daily, Creator scripts and renders Reels automatically",
+        "Two Stories publish every morning at optimal window, never miss a day",
+        "Operator seeds valuable comments into three niche Groups weekly, tracks conversions",
+        "Five ad variants test in parallel, system kills losers in 48 hours",
+        "Intelligence monitors CPC and frequency, pauses fatigued ads while you sleep"
+      ]
+    }
+  },
+  "internal_links": [
+    {
+      "slug": "marketing-os",
+      "title": "AI Marketing Operating System",
+      "blurb": "Four agent teams, Mission-driven execution, and autonomy levels L0 through L5 for every social platform."
+    },
+    {
+      "slug": "instagram-marketing-ai",
+      "title": "Instagram Marketing AI",
+      "blurb": "Reels, Stories, and carousel posts scheduled and published by agents who never miss the optimal window."
+    },
+    {
+      "slug": "tiktok-marketing-ai",
+      "title": "TikTok Marketing AI",
+      "blurb": "Hook-first short video scripted, rendered, and posted three times daily to capture For You Page distribution."
+    }
+  ],
+  "faq": [
+    {
+      "q": "What makes Facebook marketing AI different from a scheduling tool like Buffer?",
+      "a": "Scheduling tools push content you already created at times you manually picked. Facebook marketing AI generates the Reels scripts, carousel copy, Story frames, and ad creatives, then uses Scout data to pick optimal windows and Group seeding opportunities. Intelligence tracks which formats earn 10,000 plays or sub-dollar CPC, so the system iterates creative strategy every week. You define the Mission, agents handle research, production, publishing, testing, and performance analysis in one closed loop."
+    },
+    {
+      "q": "How does CortexViral handle Facebook Group seeding without getting flagged as spam?",
+      "a": "Operator identifies Groups by keyword relevance and engagement velocity, then drafts comments that answer existing threads or add insight instead of dropping raw links. The system spaces seeds across three Groups per week and rotates messaging so no two comments read identically. Intelligence monitors reply sentiment and moderator warnings; if a seed earns negative reactions, that Group exits the rotation. The goal is peer-level contribution, not broadcast spam, so the algorithm and human moderators both treat your presence as legitimate."
+    },
+    {
+      "q": "Can Facebook marketing AI create and test multiple ad creatives in one campaign?",
+      "a": "Yes. Creator generates five variants from a single brief, testing different hooks, opening frames, and calls-to-action. Operator launches all five into a campaign budget optimization structure at 20 dollars per day per variant for 48 hours. Any creative above two-dollar CPC or below 1% click-through rate gets paused automatically. Winners scale to 100-dollar daily budgets. Intelligence logs performance data so next month's creative brief incorporates proven hooks and eliminates losing patterns. You skip manual A/B test setup and spreadsheet tracking."
+    },
+    {
+      "q": "Which autonomy level should I use for Facebook if I want to approve ads but automate organic posts?",
+      "a": "Set organic content (Reels, Stories, Page posts, Group seeds) to L2 or L4 so the system publishes without approval, then keep paid creative at L0 or L1 to review every ad before budget flows. CortexViral lets you assign autonomy per content type, so Reels might run L4 while carousel ads stay L0. Most ecommerce brands start L0 across the board for two weeks to train tone, then move organic to L4 and leave ads at L1 for budget control."
+    },
+    {
+      "q": "How many Reels and Stories should Facebook marketing AI publish per week for a local business?",
+      "a": "Three to five Reels per week and two Stories per day keep you in the algorithm's favor without overwhelming your audience. Reels drive discovery and can reach 10× your Page size when hooks and audio align with trends. Stories maintain daily top-of-mind presence and feed recency signals. CortexViral's Operator schedules Reels in the optimal two-hour window for your vertical (mornings for B2C, lunch for service trades, evenings for ecommerce) and publishes Stories at consistent times so your audience builds a habit."
+    }
+  ],
+  "final_cta_heading": "Let agents run your Facebook marketing end to end",
+  "final_cta_body": "Define your Mission, set your autonomy level, and watch Scout, Creator, Operator, and Intelligence ship Reels, seed Groups, test ads, and scale winners while you focus on fulfillment and customer service.",
+  "__meta__": {
+    "slug": "facebook-marketing-ai",
+    "title": "Facebook Marketing AI | CortexViral",
+    "meta": "Run Facebook marketing with AI: pages, groups, Reels, ads, and Messenger flows. CortexViral plans the content and schedules it across audiences.",
+    "h1_lead": "Facebook marketing,",
+    "h1_accent": "agent-driven.",
+    "kicker": "Facebook Marketing AI",
+    "primary_kw": "Facebook marketing AI",
+    "platform": "Facebook",
+    "generated_by": "claude"
+  }
+}

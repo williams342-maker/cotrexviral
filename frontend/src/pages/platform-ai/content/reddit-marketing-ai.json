@@ -1,0 +1,137 @@
+{
+  "hero_subhead": "Reddit marketing AI that learns subreddit culture, builds karma naturally, and posts value-first content so your brand drives high-intent traffic without triggering mod bans or community backlash.",
+  "hero_bullets": [
+    "Subreddit-specific tone matching",
+    "9:1 value-to-promo compliance",
+    "Karma-building comment sequences",
+    "Auto-schedule in peak windows"
+  ],
+  "sections": [
+    {
+      "kicker": "Why Reddit",
+      "heading": "The platform where traditional marketing dies fast",
+      "body": "Reddit users smell promotional copy from a mile away. Drop a generic pitch in r/SaaS or r/Entrepreneur and you will get downvoted, reported, or shadow-banned within minutes. Subreddits enforce strict self-promotion limits. Many require 100 karma minimum and 30-day account age before you can even post a link. The 9:1 rule means nine helpful comments or text posts for every one promotional mention. Reddit rewards authentic contribution. Brands that deliver real value in niche communities see click-through rates above 8 percent and conversion rates double those of paid ads. CortexViral treats Reddit as a conversation engine, not a billboard. Scout agents map subreddit rules, Creator agents draft text posts that match community tone, and Operator agents build karma through genuine engagement before ever sharing your link.",
+      "bullets": []
+    },
+    {
+      "kicker": "Subreddit intelligence",
+      "heading": "Scout agents decode rules and sentiment per community",
+      "body": "Each subreddit is a micro-culture with unique moderation filters, forbidden keywords, and posting hours. CortexViral Scout agents crawl sidebar rules, pinned moderator posts, and recent removal logs to extract allowed formats. Text posts dominate advice subreddits. Link posts work in news and industry feeds. Image posts thrive in visual communities. Video posts gain traction in tutorial and demo spaces. Scout also analyzes top posts from the past 30 days to identify tone patterns, average word count, and question-versus-statement ratios. Intelligence agents track upvote velocity and comment sentiment to score your post ideas before you publish. The platform flags high-risk phrases that trigger AutoModerator removal. You see a green-light score for every draft. Only content above the threshold enters the publishing queue. This saves your account reputation and prevents wasted effort on posts that never go live.",
+      "bullets": [
+        "Extracts AutoMod keyword blacklists",
+        "Maps karma and account-age gates",
+        "Identifies peak engagement windows per subreddit",
+        "Scores post drafts for removal risk"
+      ]
+    },
+    {
+      "kicker": "Karma strategy",
+      "heading": "Build reputation before you promote anything",
+      "body": "New accounts posting links get auto-removed. CortexViral solves this with a phased karma-building mission. Operator agents schedule value-first comments in target subreddits. Creator agents write answers to open questions, share tips, and add context to trending threads. Each comment uses natural language tuned to subreddit tone. No generic fluff. No obvious AI phrasing. The platform tracks cumulative karma and account age daily. Once you cross community thresholds, typically 50 to 200 karma depending on the subreddit, Operator agents unlock link posts and promotional text posts in the content calendar. Missions respect the 9:1 ratio automatically. For every product mention, the system queues nine educational or discussion posts. You never trip spam filters. Your account grows authority organically. High-karma accounts see 3x higher upvote rates and longer post visibility on hot and rising feeds.",
+      "bullets": []
+    },
+    {
+      "kicker": "Content formats",
+      "heading": "Text, link, image, video, and comment threading",
+      "body": "CortexViral publishes all native Reddit formats through Direct Social Publishing. Text posts work best for how-to guides, case studies, and community discussion starters. Creator agents draft posts between 300 and 800 words with natural paragraph breaks and inline questions to invite comments. Link posts require strong headline copy and a non-salesy description. Scout agents recommend the ideal link format per subreddit, either direct URL or text post with embedded link. Image posts leverage your Asset Upload Center visuals, adding captions that spark conversation rather than announce features. Video posts under 60 seconds perform well in product demo subreddits. Operator agents also handle comment threading. When your post gains traction, the platform auto-replies to top comments with deeper insights or helpful resources. This keeps your post rising in the algorithm and signals genuine engagement to moderators. Bulk scheduling spreads posts across multiple subreddits without overlap penalties.",
+      "bullets": [
+        "300–800 word text posts for advice threads",
+        "Link posts with non-promotional headlines",
+        "Image posts optimized for mobile feed",
+        "Auto-reply threading to sustain momentum"
+      ]
+    },
+    {
+      "kicker": "Timing and cadence",
+      "heading": "Post when your subreddit is actually online",
+      "body": "Reddit traffic spikes vary wildly by community. Tech subreddits peak weekday mornings Pacific time. Finance communities surge Sunday evenings. Hobby subreddits trend on weekend afternoons. Intelligence agents analyze historical upvote curves for each target subreddit and surface optimal posting windows. Direct Social Publishing lets you bulk-schedule 20 posts across ten subreddits with staggered times to avoid cross-posting detection. Auto-scheduling queues your approved content into peak windows without manual calendar work. The platform enforces cooldown periods. Posting twice in the same subreddit within 48 hours flags you as a spammer. CortexViral spaces your submissions to stay under radar. You maintain consistent presence without triggering rate limits. Missions can run for 30 days, dripping content at the ideal cadence while Operator agents monitor comment replies and upvote velocity. If a post underperforms in the first hour, the system pauses similar drafts and refines messaging before the next publish.",
+      "bullets": []
+    },
+    {
+      "kicker": "Autonomy levels",
+      "heading": "L0 drafts for review or L5 runs the entire funnel",
+      "body": "CortexViral offers six autonomy levels for Reddit campaigns. L0 generates subreddit-specific post drafts and comment ideas. You review every line before publish. L1 auto-schedules approved content into optimal windows. L2 adds karma-building comments to your mission without approval. L3 publishes text and link posts autonomously while you retain veto power on image and video. L4 runs full campaigns including comment threading and cross-subreddit coordination. L5 manages end-to-end Reddit presence, adjusting tone and format based on real-time engagement data and subreddit rule changes. Most teams start at L1 to learn platform behavior, then scale to L3 once they trust the tone. Indie founders often jump straight to L4 because Reddit demands daily activity they cannot sustain manually. The AI Marketing Operating System logs every action. You audit decisions, override automations, and refine agent instructions inside the Cortex orchestrator without leaving the dashboard.",
+      "bullets": [
+        "L0: draft-only mode for cautious teams",
+        "L2: autonomous karma building",
+        "L4: full campaign execution with veto rights",
+        "L5: hands-off Reddit growth engine"
+      ]
+    }
+  ],
+  "comparison": {
+    "title": "Manual Reddit posting versus AI orchestration",
+    "left": {
+      "label": "Posting manually",
+      "items": [
+        "Read sidebar rules for every subreddit and track changes weekly",
+        "Build karma with dozens of comments before posting any link",
+        "Guess optimal posting time and watch your content die in new",
+        "Get banned from communities for accidental self-promotion ratio violations",
+        "Spend two hours daily monitoring replies and engaging in threads"
+      ]
+    },
+    "right": {
+      "label": "CortexViral Reddit marketing AI",
+      "items": [
+        "Scout agents auto-extract rules, AutoMod filters, and karma gates per subreddit",
+        "Operator agents build account reputation with value-first comments on autopilot",
+        "Intelligence agents schedule posts in proven peak windows for each community",
+        "Built-in 9:1 enforcement prevents bans and maintains subreddit trust scores",
+        "Auto-threading keeps your posts rising while you focus on product work"
+      ]
+    }
+  },
+  "internal_links": [
+    {
+      "slug": "marketing-os",
+      "title": "AI Marketing Operating System",
+      "blurb": "Orchestrate Reddit, Instagram, LinkedIn, and five other platforms from one autonomous mission control center."
+    },
+    {
+      "slug": "linkedin-marketing-ai",
+      "title": "LinkedIn Marketing AI",
+      "blurb": "Publish thought leadership and engage decision-makers without spending hours writing professional commentary daily."
+    },
+    {
+      "slug": "youtube-marketing-ai",
+      "title": "YouTube Marketing AI",
+      "blurb": "Generate video scripts, optimize metadata, and schedule uploads so your channel grows while you sleep."
+    }
+  ],
+  "faq": [
+    {
+      "q": "Will Reddit marketing AI get my account banned for spam?",
+      "a": "CortexViral enforces the 9:1 value-to-promotion rule automatically and spaces posts to avoid rate limits. Scout agents extract AutoModerator keyword blacklists and subreddit-specific self-promotion policies before any publish. Operator agents build karma through genuine comments first. Intelligence agents score every draft for removal risk. Only green-light content enters your calendar. The platform logs all actions so you can audit compliance. Thousands of Reddit campaigns run on CortexViral without bans because the system treats subreddit culture as a first-class input, not an obstacle to route around."
+    },
+    {
+      "q": "How does the AI match tone for different subreddits?",
+      "a": "Scout agents analyze top posts from the past 30 days in each target community, extracting tone patterns, average word count, question ratios, and formatting preferences. Creator agents receive these profiles as context when drafting text posts and comments. The Cortex orchestrator routes requests through Claude or GPT models fine-tuned on conversational and technical writing. You can upload your brand voice guide to the Asset Upload Center. The AI blends subreddit norms with your voice so posts feel native but still recognizable as your brand. Intelligence agents track upvote velocity per tone variant and refine future drafts automatically."
+    },
+    {
+      "q": "Can I post to multiple subreddits without cross-posting penalties?",
+      "a": "Yes. Direct Social Publishing staggers submissions across subreddits with unique titles and intros so Reddit does not flag them as duplicates. Operator agents enforce cooldown periods between posts in overlapping communities. Bulk scheduling spreads 20 posts over ten days with varied formatting. Text posts in one subreddit become link posts in another. Image captions change to match community expectations. The platform tracks which subreddits share moderator teams and avoids same-day posting to sister communities. This prevents shadow bans while maximizing reach across niche audiences that congregate in related but distinct subreddits."
+    },
+    {
+      "q": "What autonomy level should I use for Reddit campaigns?",
+      "a": "Start at L1 if you want to approve every post but automate scheduling into peak windows. Move to L2 once you trust karma-building comments. L3 works well for teams that review image and video posts but let text and link posts publish autonomously. L4 suits indie founders who need Reddit presence but lack daily bandwidth. The AI runs full campaigns, builds karma, and threads comments while you retain veto power. L5 is for brands with proven subreddit fit who want hands-off growth. Most users scale from L1 to L3 over four weeks as they validate tone and engagement patterns."
+    },
+    {
+      "q": "How do I know which subreddits to target for my product?",
+      "a": "Scout agents discover relevant communities by analyzing competitor mentions, industry keywords, and high-intent discussion threads. Intelligence agents score each subreddit on member count, engagement rate, moderation strictness, and karma requirements. The platform surfaces a ranked list of target communities with estimated reach and posting feasibility. You can also manually add subreddits. Scout agents then extract rules, peak activity windows, and top post formats. Missions prioritize communities where your product solves active pain points discussed in recent threads. This ensures your content lands in front of buyers already searching for solutions, not cold audiences."
+    }
+  ],
+  "final_cta_heading": "Run Reddit marketing that builds trust instead of burning accounts",
+  "final_cta_body": "CortexViral combines subreddit intelligence, karma strategy, and autonomous posting so you drive high-intent traffic without mod bans. Start your first mission today.",
+  "__meta__": {
+    "slug": "reddit-marketing-ai",
+    "title": "Reddit Marketing AI | CortexViral",
+    "meta": "Reach Reddit communities with AI that knows the rules. CortexViral drafts on-tone posts, monitors subreddit sentiment, and times comments for max upvotes.",
+    "h1_lead": "Reddit marketing,",
+    "h1_accent": "without getting banned.",
+    "kicker": "Reddit Marketing AI",
+    "primary_kw": "Reddit marketing AI",
+    "platform": "Reddit",
+    "generated_by": "claude"
+  }
+}

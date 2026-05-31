@@ -1,0 +1,122 @@
+{
+  "hero_subhead": "CortexViral's YouTube marketing AI handles long-form strategy, Shorts calendars, thumbnails, titles, and publishing while you focus on creation. Four agent teams execute campaigns that maximize CTR and watch-time across both feeds.",
+  "hero_bullets": [
+    "Titles and thumbnails tested for CTR",
+    "Long-form and Shorts calendars auto-built",
+    "Community posts scheduled between uploads",
+    "Publishing timed to your peak windows"
+  ],
+  "sections": [
+    {
+      "kicker": "Platform reality",
+      "heading": "YouTube runs on CTR times watch-time, not guesswork",
+      "body": "YouTube weighs click-through rate and average view duration above everything else. A thumbnail that earns 12% CTR but holds viewers for only 30% of a ten-minute video will lose to a 9% CTR video that keeps 55% watching. The algorithm treats long-form and Shorts as separate ecosystems; success in one feed does not boost the other. Long-form videos between eight and twenty minutes hit the sweet spot for mid-roll ads and sustained watch-time. Shorts cap at sixty seconds and favor vertical 9:16 framing. Community posts appear in the Subscriptions tab and can drive traffic back to new uploads if you post them within twenty-four hours of publishing. CortexViral's Intelligence team tracks which thumbnail styles, title patterns, and posting windows deliver the highest CTR in your niche, then feeds those insights to Creator agents who draft assets tuned to those benchmarks.",
+      "bullets": []
+    },
+    {
+      "kicker": "Mission architecture",
+      "heading": "One mission becomes calendars for both feeds plus community glue",
+      "body": "You assign a mission such as Launch Q2 course funnel or Build authority in SaaS onboarding. The Scout team researches trending topics, competitor upload cadence, and keyword search volume inside YouTube. Creator agents generate long-form scripts with hook-first intros, pattern-interrupt B-roll cues, and clear calls to action at the four-minute and eight-minute marks. Shorts scripts follow the three-second hook rule and loop-friendly closings. Operator agents draft five thumbnail concepts per video, write ten title variants, and schedule community posts that tease upcoming uploads or poll your audience on next topics. The Autonomous Campaign Builder assembles a fourteen or twenty-one day calendar mixing two long-form videos, five Shorts, and three community posts. You review everything in one canvas, approve with a click, or dial autonomy to L4 and let the system publish directly to your channel.",
+      "bullets": []
+    },
+    {
+      "kicker": "Thumbnail and title",
+      "heading": "Seventy percent of your success lives in the first impression",
+      "body": "Creator agents generate thumbnail concepts using high-contrast text overlays, face close-ups with clear emotion, and brand colors that pop in a crowded sidebar. Each concept pairs with a title variant that front-loads the keyword, includes a curiosity gap, or uses a number. Intelligence agents compare your historical CTR across similar formats and flag which combinations historically exceed 10%. You upload your raw video file to the Asset Upload Center; Operator agents extract three candidate frames, overlay text templates, and render five thumbnail options in under two minutes. The system tags each thumbnail with the best-match title so you can A/B test in future uploads. For Shorts, Creator agents write titles under fifty characters because mobile truncates aggressively. CortexViral tracks which emoji, capitalization style, and keyword placement yield the highest impressions-to-views ratio in your channel history.",
+      "bullets": []
+    },
+    {
+      "kicker": "Dual-feed strategy",
+      "heading": "Long-form builds authority while Shorts feed the algorithm daily",
+      "body": "Publishing one ten-minute video per week gives the algorithm enough watch-time data to recommend your content in Browse and Suggested. Adding five Shorts per week keeps your channel active in the Shorts shelf and can attract subscribers who later convert to long-form viewers. CortexViral's Operator team schedules long-form uploads on days when your audience retention peaks, typically mid-week between 2 PM and 4 PM in your primary time zone. Shorts publish daily at staggered intervals to test morning commute, lunch, and evening windows. Community posts go live within six hours after a long-form upload to recapture subscribers who missed the notification. The Intelligence team monitors which Shorts topics drive the most profile visits, then signals Creator agents to expand those hooks into full long-form scripts. This closed-loop feedback means your Shorts become research for your next high-watch-time video.",
+      "bullets": []
+    },
+    {
+      "kicker": "Autonomy scaling",
+      "heading": "Start at L1 review, climb to L5 autonomous publishing",
+      "body": "Level one puts every thumbnail, title, and script in your review queue. You approve, edit, or reject. Level two auto-approves community posts and Shorts titles that match your brand voice template. Level three publishes Shorts automatically if the Intelligence team scores CTR probability above 8% based on your history. Level four schedules both long-form and Shorts across a twenty-one day calendar, notifying you only when a video underperforms the predicted watch-time threshold. Level five runs continuous campaigns; the system drafts, schedules, and publishes while you monitor a weekly summary dashboard. Most creators start at L1 for the first thirty days, move to L3 once they trust the title patterns, then settle at L4 for ongoing content. Course businesses and agencies often jump to L5 after validating that Creator agents match their messaging guidelines and Operator agents respect brand-safe thumbnail rules.",
+      "bullets": []
+    },
+    {
+      "kicker": "Operating system advantage",
+      "heading": "CortexViral connects YouTube execution to every other growth channel",
+      "body": "Because CortexViral is a full AI Marketing Operating System, the same mission that builds your YouTube calendar also generates LinkedIn thought-leadership posts, Instagram Reels cut-downs, and Reddit discussion threads. Scout agents identify a high-search keyword on YouTube, then check if that topic trends on TikTok or sparks debate on Reddit. Creator agents repurpose your long-form video script into a carousel for Instagram, a text post for LinkedIn, and a Short for TikTok. Operator agents upload the master video file once; the system renders vertical 9:16 clips for Shorts, square 1:1 for Instagram feed, and pulls quote cards for Twitter. Intelligence tracks which platform drives the most traffic back to your YouTube channel, then adjusts cross-promotion frequency. You stop juggling five browser tabs and three scheduling tools. One mission, one approval loop, and your content lives everywhere that matters.",
+      "bullets": []
+    }
+  ],
+  "comparison": {
+    "title": "Manual YouTube workflow versus AI orchestration",
+    "left": {
+      "label": "Posting manually",
+      "items": [
+        "Research trending topics in three browser tabs and guess at keywords.",
+        "Write script, film, edit, then realize the hook falls flat at second four.",
+        "Design five thumbnails in Canva, poll your team, pick based on gut feeling.",
+        "Schedule upload for Tuesday morning because that worked six months ago.",
+        "Forget to post a community update and lose seventy percent of subscriber reach."
+      ]
+    },
+    "right": {
+      "label": "CortexViral + YouTube",
+      "items": [
+        "Scout agents deliver keyword search volume and competitor upload cadence in one brief.",
+        "Creator agents draft script with timed hooks and B-roll cues; you approve or tweak.",
+        "Operator agents render five thumbnails, match ten titles, score each on historical CTR.",
+        "Intelligence identifies your peak window; system publishes long-form and five Shorts across the week.",
+        "Community posts auto-schedule twenty-four hours after upload to recapture subscriber attention."
+      ]
+    }
+  },
+  "internal_links": [
+    {
+      "slug": "marketing-os",
+      "title": "AI Marketing Operating System",
+      "blurb": "See how Cortex orchestrates missions across every channel, from strategy to publish, in one unified platform."
+    },
+    {
+      "slug": "tiktok-marketing-ai",
+      "title": "TikTok Marketing AI",
+      "blurb": "Repurpose your YouTube Shorts into TikTok posts or discover trending sounds that work across both platforms."
+    },
+    {
+      "slug": "linkedin-marketing-ai",
+      "title": "LinkedIn Marketing AI",
+      "blurb": "Turn your YouTube long-form insights into LinkedIn thought-leadership articles and carousels that drive profile views."
+    }
+  ],
+  "faq": [
+    {
+      "q": "How does YouTube marketing AI improve click-through rate on my videos?",
+      "a": "CortexViral's Creator agents generate multiple thumbnail and title combinations, then Intelligence agents score each variant against your channel's historical CTR data. The system identifies patterns such as face close-ups with high-contrast text or titles that front-load numbers and curiosity gaps. Operator agents render five thumbnail options per video and pair each with a matching title. You approve the highest-scoring combination or A/B test two variants across successive uploads. Over time the Intelligence team refines which visual styles and keyword placements consistently exceed your baseline CTR, feeding those insights back into every new campaign."
+    },
+    {
+      "q": "Can YouTube marketing AI handle both long-form videos and Shorts in one campaign?",
+      "a": "Yes. When you assign a mission, Scout agents research trending topics that work in both formats. Creator agents draft a long-form script optimized for eight to twenty minutes of watch-time and separate Shorts scripts that follow the three-second hook rule. The Autonomous Campaign Builder schedules one or two long-form uploads per week and five Shorts spread across daily windows. Operator agents publish to the correct format, apply vertical 9:16 framing for Shorts, and insert mid-roll ad markers in long-form videos. Intelligence tracks which Shorts topics drive the most channel visits, signaling Creator agents to expand those hooks into full episodes."
+    },
+    {
+      "q": "What autonomy level should I choose for YouTube publishing?",
+      "a": "Start at L1 if you want to review every thumbnail, title, and community post before it goes live. Move to L2 once you trust the system to auto-approve Shorts titles that match your brand voice template. L3 auto-publishes Shorts when Intelligence predicts CTR above 8% and queues long-form for your review. L4 schedules both formats across a twenty-one day calendar and notifies you only if a video underperforms watch-time targets. L5 runs continuous campaigns with weekly summary dashboards. Most creators settle at L3 or L4 after thirty days of validation."
+    },
+    {
+      "q": "Does YouTube marketing AI optimize upload timing for my audience?",
+      "a": "Intelligence agents analyze your YouTube Studio analytics to identify days and hours when your subscribers show the highest activity and retention rates. Operator agents schedule long-form videos during those peak windows, typically mid-week afternoons in your primary time zone. Shorts publish at staggered intervals throughout the day to test morning commute, lunch, and evening performance. Community posts go live within six to twenty-four hours after a long-form upload to recapture subscribers who missed the notification. The system continuously refines timing based on real watch-time and CTR data from each publish cycle."
+    },
+    {
+      "q": "How does CortexViral repurpose YouTube content across other platforms?",
+      "a": "Because CortexViral operates as a unified AI Marketing Operating System, the same mission that builds your YouTube calendar also generates assets for Instagram, TikTok, LinkedIn, and Reddit. Operator agents upload your master video file once, then render vertical 9:16 clips for Shorts and TikTok, square 1:1 cuts for Instagram feed, and pull quote cards for LinkedIn carousels. Scout agents check if your YouTube keyword trends on Reddit or sparks discussion threads. Intelligence tracks which platform drives the most referral traffic back to your channel, adjusting cross-promotion frequency so you maximize reach without duplicating manual work."
+    }
+  ],
+  "final_cta_heading": "Let AI run your YouTube calendar while you focus on filming",
+  "final_cta_body": "Assign one mission. CortexViral's four agent teams research topics, draft scripts, design thumbnails, write titles, and publish long-form plus Shorts on your peak windows. Start today.",
+  "__meta__": {
+    "slug": "youtube-marketing-ai",
+    "title": "YouTube Marketing AI | CortexViral",
+    "meta": "Grow on YouTube with AI scripting, thumbnail testing, Shorts ideation, and SEO-rich descriptions. CortexViral manages every step of the channel.",
+    "h1_lead": "YouTube marketing,",
+    "h1_accent": "long-form and Shorts.",
+    "kicker": "YouTube Marketing AI",
+    "primary_kw": "YouTube marketing AI",
+    "platform": "YouTube",
+    "generated_by": "claude"
+  }
+}

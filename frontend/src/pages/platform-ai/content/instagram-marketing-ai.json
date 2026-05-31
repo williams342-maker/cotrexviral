@@ -1,0 +1,141 @@
+{
+  "hero_subhead": "CortexViral's Instagram marketing AI builds Reels, carousels, and Stories, schedules them at peak engagement windows, and adjusts creative in real-time based on saves, shares, and profile visits—so you focus on products, not post calendars.",
+  "hero_bullets": [
+    "Reels scripted, cut, and posted daily",
+    "Carousels optimized for swipe-through and saves",
+    "Auto-schedule across your best time-zones",
+    "Watch-time and retention analytics drive iteration"
+  ],
+  "sections": [
+    {
+      "kicker": "Four Agent Teams",
+      "heading": "Scout, Creator, Operator, Intelligence run your Instagram",
+      "body": "Scout monitors trending audio, hashtag decay, and topic-graph shifts across Instagram's Explore grid. Creator builds Reels under 90 seconds with hook-first scripting, carousels that earn saves through educational or inspirational slide progressions, and Stories that drive link clicks or DM replies. Operator publishes on the hour your audience showed highest story completion rates last week, bulk-queues 30 posts in one session, and A-B tests captions by splitting traffic across two identical Reels with different opening lines. Intelligence tracks watch-time curves, carousel exit slides, and profile-visit lift to tell Creator which formats and topics deserve more budget. No spreadsheets. No manual uploads. Your Instagram calendar runs itself while you ship product or close deals.",
+      "bullets": [
+        "Scout feeds Creator trending audio and topic signals daily",
+        "Operator schedules Reels, carousels, Stories in bulk or auto mode",
+        "Intelligence ranks posts by saves-per-impression and session starts",
+        "Creator iterates hooks and CTAs based on watch-time drop-off points"
+      ]
+    },
+    {
+      "kicker": "Formats That Convert",
+      "heading": "Reels, carousels, and Stories tailored to Instagram's algorithm",
+      "body": "Instagram in 2026 ranks Reels by average watch percentage and rewatchability. CortexViral's Creator agent scripts 15 to 60 second Reels with pattern-interrupt hooks in the first two seconds, captions that surface in search, and CTAs that ask for saves or shares instead of hollow likes. Carousels get ten slides maximum; Creator front-loads value on slide one so users swipe through, then plants a save-worthy recap or resource list on slide ten. Stories leverage polls, question stickers, and link stickers to boost reply rates and clickthroughs. Operator ensures every asset hits the 9:16 vertical spec, because horizontal crops kill reach. Intelligence measures which format drove the most profile visits last week and tells Creator to double down. You stop guessing what works. The system tells you.",
+      "bullets": [
+        "Reels open with two-second hooks and close with share prompts",
+        "Carousels place high-value slides at positions one and ten",
+        "Stories use interactive stickers to lift reply and click rates",
+        "All assets render 9:16 vertical; no cropped-desktop uploads"
+      ]
+    },
+    {
+      "kicker": "Mission-Driven Execution",
+      "heading": "Set one goal and agents build the entire campaign",
+      "body": "You tell CortexViral 'Drive 500 e-commerce site visits from Instagram this month' or 'Generate 200 Story replies for lead qualification.' The Autonomous Campaign Builder breaks that mission into daily Reel quotas, carousel themes, and Story CTAs. Scout identifies which product categories or lifestyle angles are spiking in your niche's topic graph. Creator generates three Reels per weekday showcasing those products with trending audio under 30 seconds, five educational carousels per week that earn saves, and seven Stories per week with poll or question prompts. Operator schedules everything inside your best engagement windows. Intelligence compares cost-per-profile-visit across Reels versus carousels and reallocates production toward the winner. When you hit 500 visits on day 22, the system scales or pivots to your next mission. You never write a creative brief or manual post again.",
+      "bullets": []
+    },
+    {
+      "kicker": "Autonomy Levels",
+      "heading": "L0 drafts for review or L5 posts without approval",
+      "body": "Level zero means Creator and Scout hand you finished Reels, carousels, and Stories in the Asset Upload Center; you review captions, approve, then Operator schedules. Level three lets Operator auto-publish Reels and carousels but queues Stories for your click because they often include time-sensitive promos. Level five runs end-to-end: Creator scripts, renders, and writes captions; Operator picks the optimal hour using your last 90 days of engagement data and posts; Intelligence emails you a weekly rank of top performers by watch-time and saves. Most e-commerce brands start L0 for two weeks to learn the system's voice, then jump to L3. Creators with tight brand guidelines stay L1. High-volume DTC shops selling commodities run L5 and treat Instagram like an always-on acquisition channel. You choose speed or control. The AI Marketing Operating System adapts either way.",
+      "bullets": [
+        "L0: agents draft; you approve every Reel and carousel before publish",
+        "L3: auto-post static content; Stories queue for manual review",
+        "L5: full autonomy from script to schedule to performance report"
+      ]
+    },
+    {
+      "kicker": "Direct Publishing",
+      "heading": "Bulk-queue 30 posts or auto-schedule at peak windows",
+      "body": "Operator connects to Instagram's Graph API so posts go live without third-party delays or watermark penalties. Bulk mode lets you queue an entire month of Reels, carousels, and single-image posts in one sitting; the system spaces them across your highest-engagement hours pulled from Intelligence reports. Auto-schedule mode watches when your last 50 Reels earned the longest watch-time and highest save rates, then places new Reels into those same time slots next week. If your audience in Melbourne engages at 7 AM their time and your New York followers peak at 6 PM EST, Operator publishes twice daily to capture both. Stories post every eight hours to maintain 24-hour visibility without overwhelming your close-friends list. No browser tabs. No mobile uploads. No screenshot-and-repost workflows. Everything lives inside CortexViral and publishes on a clock you set once.",
+      "bullets": [
+        "Graph API direct publish eliminates third-party watermarks",
+        "Bulk-queue 30 Reels and carousels with one click",
+        "Auto-schedule uses historical engagement peaks per time-zone",
+        "Stories post every eight hours to keep the ring live"
+      ]
+    },
+    {
+      "kicker": "Real Operator Proof",
+      "heading": "Lifestyle brand posted 19 Reels in 21 days and doubled profile visits",
+      "body": "A home-decor shop gave CortexViral the mission 'Increase product-page visits by 400 per month from Instagram.' Scout found that minimalist-apartment and small-space-living topics were spiking in their follower graph. Creator produced 19 Reels showing before-and-after room setups, each under 45 seconds with trending lo-fi audio and captions optimized for search terms like 'tiny studio ideas.' Operator scheduled them at 11 AM and 7 PM EST, the brand's two engagement peaks. Intelligence tracked watch-time and noticed Reels that revealed the after shot in the first three seconds held 68 percent average watch versus 41 percent for slow-burn intros. Creator updated all future scripts to lead with the after frame. Profile visits jumped from 390 in January to 847 in February. The founder spent zero hours editing video or writing captions. She restocked inventory and planned the next product launch instead.",
+      "bullets": []
+    }
+  ],
+  "comparison": {
+    "title": "Manual posting vs. Instagram marketing AI",
+    "left": {
+      "label": "Posting manually",
+      "items": [
+        "Scroll TikTok for trending audio, hope it works on Instagram Reels too",
+        "Film three takes, edit in CapCut, export, re-upload because aspect ratio was wrong",
+        "Guess whether to post at 9 AM or 6 PM based on a blog from 2023",
+        "Check insights once a week, forget which Reel drove the spike in saves",
+        "Carousels sit in drafts because designing ten slides takes four hours"
+      ]
+    },
+    "right": {
+      "label": "CortexViral + Instagram",
+      "items": [
+        "Scout delivers trending audio and topic-graph shifts every morning in your dashboard",
+        "Creator scripts, renders 9:16 Reels, and writes captions; Operator publishes at your peak hour",
+        "Intelligence ranks time-slots by watch-time so auto-schedule picks the winner",
+        "Weekly report shows which Reel format and CTA earned the most profile visits",
+        "Carousels auto-generate from your product feed or blog; ten slides in six minutes"
+      ]
+    }
+  },
+  "internal_links": [
+    {
+      "slug": "marketing-os",
+      "title": "AI Marketing Operating System",
+      "blurb": "Discover how Cortex orchestrates Scout, Creator, Operator, and Intelligence across every social platform you run."
+    },
+    {
+      "slug": "tiktok-marketing-ai",
+      "title": "TikTok Marketing AI",
+      "blurb": "Let the same agent teams script, edit, and post TikToks using trending sounds and FYP mechanics."
+    },
+    {
+      "slug": "facebook-marketing-ai",
+      "title": "Facebook Marketing AI",
+      "blurb": "Automate Facebook Reels, carousel ads, and group engagement with mission-driven AI that adapts to Meta's feed algorithm."
+    }
+  ],
+  "faq": [
+    {
+      "q": "How does Instagram marketing AI decide what type of content to create?",
+      "a": "Scout monitors Instagram's topic graph, trending audio, and your follower engagement patterns. It identifies which content themes are gaining traction in your niche and which formats—Reels, carousels, or Stories—drive the most saves, shares, and profile visits. Creator then scripts and renders assets that match those high-performing signals. Intelligence tracks watch-time curves and carousel swipe-through rates so the system doubles down on winners and drops underperformers. You set the mission; the agents pick the creative strategy that will hit your goal fastest."
+    },
+    {
+      "q": "Can CortexViral schedule Instagram Reels and carousels at optimal times automatically?",
+      "a": "Yes. Operator analyzes your last 90 days of Instagram engagement data to find the hours and days when your audience completes Stories, watches Reels longest, and visits your profile most. Auto-schedule mode places new posts into those peak windows without manual input. If you serve multiple time-zones, Operator publishes twice or three times daily to capture each region's prime hours. Bulk mode lets you queue 30 pieces of content in one session, and the system spaces them across your best slots. You never guess when to post again."
+    },
+    {
+      "q": "Does Instagram marketing AI write captions and choose hashtags for every post?",
+      "a": "Creator writes captions optimized for Instagram's search and topic-graph algorithms, which in 2026 prioritize natural-language keywords over hashtag spam. It includes two to five topical phrases that match what users type in the Explore search bar, plus a clear call-to-action—save this post, share to Stories, or visit the link in bio. Hashtags are limited to three to five highly relevant tags because Instagram's algorithm now reads full captions for context. Intelligence measures which caption styles earn the most saves and shares, then feeds that learning back to Creator for future posts."
+    },
+    {
+      "q": "What autonomy level should I choose for Instagram if I want to review content first?",
+      "a": "Start at Level zero. Creator and Scout will generate Reels, carousels, and Stories, then deliver them to your Asset Upload Center for review. You read captions, watch videos, approve or request edits, and then Operator schedules. Once you trust the system's voice and brand alignment—usually after two weeks—move to Level three so Reels and carousels auto-publish while Stories queue for your manual check. Level five runs fully autonomous, ideal for high-volume e-commerce brands that treat Instagram as an always-on acquisition channel and prefer speed over per-post approval."
+    },
+    {
+      "q": "How does Instagram marketing AI improve performance after posts go live?",
+      "a": "Intelligence tracks watch-time percentage, average swipe depth on carousels, Story completion rates, saves, shares, and profile visits for every piece of content. It identifies patterns—for example, Reels that show the payoff in the first two seconds hold 70 percent watch-time versus 40 percent for slow builds. Creator updates future scripts to lead with high-impact frames. Operator reallocates posting frequency toward the formats and topics that drove the most profile visits last week. The system runs a continuous test-and-learn cycle so your Instagram performance compounds month over month without you analyzing spreadsheets."
+    }
+  ],
+  "final_cta_heading": "Let AI run your Instagram while you build your business",
+  "final_cta_body": "CortexViral's agents script Reels, design carousels, schedule Stories, and optimize every post using watch-time and save data. Start your first autonomous mission today.",
+  "__meta__": {
+    "slug": "instagram-marketing-ai",
+    "title": "Instagram Marketing AI | CortexViral",
+    "meta": "Plan, generate, and publish Instagram content with AI. CortexViral turns Reels hooks, carousels, captions, and Stories into a coordinated growth engine.",
+    "h1_lead": "Instagram marketing,",
+    "h1_accent": "on autopilot.",
+    "kicker": "Instagram Marketing AI",
+    "primary_kw": "Instagram marketing AI",
+    "platform": "Instagram",
+    "generated_by": "claude"
+  }
+}

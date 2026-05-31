@@ -1,0 +1,146 @@
+{
+  "hero_subhead": "LinkedIn marketing AI that turns your expertise into high-velocity pipeline. CortexViral maps your offer to demand signals, drafts founder-voice posts, documents, and newsletters, then publishes on the windows that drive reply velocity and deal flow.",
+  "hero_bullets": [
+    "Personal profile reach at scale",
+    "First-hour engagement that feeds the algorithm",
+    "Carousels, polls, and text posts automated",
+    "Inbound pipeline without the posting treadmill"
+  ],
+  "sections": [
+    {
+      "kicker": "Why LinkedIn",
+      "heading": "The platform where buying committees actually live",
+      "body": "LinkedIn reaches decision-makers inside their work context. Ninety-four percent of B2B marketers distribute content here because the audience is contextually primed. Unlike attention-grab platforms, LinkedIn users scroll to solve problems, evaluate vendors, and discover solutions. Personal profiles earn three to five times the reach of company pages because the algorithm prioritizes human voices. Text posts dominate organic reach, followed by document carousels that package insights into swipeable PDFs. The algorithm rewards dwell time and reply velocity in the first sixty minutes after publish. Miss that window and your post stalls. CortexViral tracks these mechanics, routes your content to the formats that convert, and schedules every piece for maximum early engagement.",
+      "bullets": [
+        "Personal profiles deliver 3–5× the impressions of company pages",
+        "Text posts and document carousels drive the highest organic reach",
+        "First sixty minutes determine whether the algorithm amplifies your post",
+        "Dwell time and replies signal value to the feed",
+        "Ninety-four percent of B2B marketers publish here for a reason"
+      ]
+    },
+    {
+      "kicker": "The manual trap",
+      "heading": "Why founder-led LinkedIn becomes a second full-time job",
+      "body": "You know you should post daily. You know carousels and text posts work. But drafting a thoughtful piece takes ninety minutes you do not have. So you batch-write on Sunday, schedule through a tool, and watch mediocre engagement because the posts lack timeliness or reply hooks. Or you ghost the platform for two weeks and lose momentum entirely. LinkedIn rewards consistency and velocity. The algorithm decays your reach when you disappear. Agencies can post for you, but they cannot write in your voice or reference yesterday's customer call. You need output that sounds like you, reflects real market insight, and ships every weekday without burning your calendar. That is the job of LinkedIn marketing AI built for operators, not content teams.",
+      "bullets": []
+    },
+    {
+      "kicker": "How CortexViral works",
+      "heading": "Four agent teams that execute your LinkedIn strategy",
+      "body": "CortexViral is an AI Marketing Operating System that runs LinkedIn as a repeatable growth motion. Scout agents monitor your ICP's questions, competitor content, and trending topics inside your niche. Intelligence agents synthesize those signals into positioning angles and content hooks. Creator agents draft text posts, document carousels, polls, newsletters, and short video scripts in your voice using the Asset Upload Center's style guide and past posts. Operator agents schedule every piece during optimal publishing windows and track first-hour reply velocity. You set a Mission like \"Generate five qualified demo requests per week from DevOps directors\" and choose autonomy level L0 through L5. At L3 the system drafts and queues for your one-click approval. At L5 it publishes, engages replies, and optimizes cadence without you. Every action maps back to pipeline, not vanity metrics.",
+      "bullets": [
+        "Scout finds ICP pain points and competitor gaps in real time",
+        "Creator writes founder-voice posts, carousels, polls, and newsletters",
+        "Operator publishes during high-engagement windows and monitors replies",
+        "Intelligence refines messaging based on what actually drives inbound",
+        "Autonomy levels L0–L5 let you approve everything or let the system run"
+      ]
+    },
+    {
+      "kicker": "Platform mechanics",
+      "heading": "Formats and timing that the LinkedIn algorithm rewards",
+      "body": "Text posts still deliver the widest organic reach when they open with a hook and break into short paragraphs. Document carousels, uploaded as PDFs, turn frameworks or case studies into swipeable assets that hold attention and earn shares. Polls spark replies and signal the algorithm that your audience is engaged. LinkedIn newsletters build a subscriber base you own, sending your post to inboxes every time you publish. Short native video works when it delivers insight in under ninety seconds. The algorithm prioritizes content that keeps users on platform, so external links throttle reach unless the post has already gathered momentum. CortexViral formats your ideas into the structure LinkedIn favors, schedules posts Tuesday through Thursday between eight and ten AM in your audience's timezone, and front-loads reply hooks to trigger that critical first-hour velocity.",
+      "bullets": [
+        "Text posts with strong hooks and short paragraphs win reach",
+        "Document carousels (PDF uploads) package insights for high shares",
+        "Polls and questions drive reply velocity that feeds the algorithm",
+        "LinkedIn newsletters build owned subscriber lists",
+        "Posting Tuesday–Thursday, 8–10 AM maximizes early engagement"
+      ]
+    },
+    {
+      "kicker": "Founder-led scale",
+      "heading": "Your voice, your insights, zero posting treadmill",
+      "body": "CortexViral does not write generic thought leadership. It ingests your sales calls, recorded demos, Slack threads, and past high-performing posts through the Asset Upload Center. Creator agents learn your syntax, your frameworks, and the customer language you actually use. When Scout surfaces a trending discussion about API security, Creator drafts a text post that references your product's architecture and ends with a reply hook. You review in Slack or the web dashboard, approve or edit in seconds, and Operator queues it for the optimal window. The system tracks which hooks drive profile visits, which carousels earn shares, and which CTAs convert to demo requests. Over time Intelligence agents tune your content mix so every post ladder back to pipeline. You stay the face of the brand without spending ten hours a week on LinkedIn.",
+      "bullets": []
+    },
+    {
+      "kicker": "Pipeline, not applause",
+      "heading": "Measurement tied to revenue, not vanity metrics",
+      "body": "LinkedIn marketing AI inside CortexViral instruments every post for business impact. The platform tracks profile visits, connection requests from ICP roles, reply threads that reveal buying intent, and click-through to your booking link or lead magnet. Intelligence agents identify which content types and topics correlate with demo requests, then shift your publishing mix accordingly. If document carousels about compliance generate twice the pipeline of feature announcements, the system drafts more compliance content. If posts published at nine AM Thursday outperform Monday posts by forty percent, your queue shifts. You see a live dashboard that connects impressions to conversations to opportunities. No more guessing whether your LinkedIn effort matters. Every post either moves the pipeline or teaches the system what will.",
+      "bullets": [
+        "Track profile visits and connection requests from target roles",
+        "Identify reply threads that signal buying intent",
+        "Measure click-through to demo links and lead magnets",
+        "Shift content mix toward formats that generate pipeline",
+        "Live dashboard connects social activity to revenue opportunity"
+      ]
+    }
+  ],
+  "comparison": {
+    "title": "Manual LinkedIn vs. CortexViral on LinkedIn",
+    "left": {
+      "label": "Posting manually",
+      "items": [
+        "Ninety minutes to draft a single thoughtful post",
+        "Batch-write on weekends, lose timeliness and relevance during the week",
+        "Guess at optimal publish times and formats",
+        "Miss the first-hour reply window while you are in meetings",
+        "No systematic way to connect LinkedIn activity to pipeline"
+      ]
+    },
+    "right": {
+      "label": "CortexViral + LinkedIn",
+      "items": [
+        "Scout surfaces trending topics, Creator drafts in your voice daily",
+        "Posts reflect real-time market signals and customer language",
+        "Operator schedules every piece for maximum first-hour engagement",
+        "Intelligence tracks which formats and hooks generate demo requests",
+        "Live dashboard maps impressions to profile visits to opportunities"
+      ]
+    }
+  },
+  "internal_links": [
+    {
+      "slug": "marketing-os",
+      "title": "AI Marketing Operating System",
+      "blurb": "Learn how CortexViral orchestrates Scout, Creator, Operator, and Intelligence agents across every channel you run."
+    },
+    {
+      "slug": "reddit-marketing-ai",
+      "title": "Reddit Marketing AI",
+      "blurb": "Deploy the same agent architecture to find high-intent subreddit threads and contribute authentic, helpful answers."
+    },
+    {
+      "slug": "youtube-marketing-ai",
+      "title": "YouTube Marketing AI",
+      "blurb": "Turn your expertise into scripts, thumbnails, and optimized video publishing that drives subscriber growth and inbound."
+    }
+  ],
+  "faq": [
+    {
+      "q": "What makes LinkedIn marketing AI different from a generic scheduling tool?",
+      "a": "Generic schedulers move posts from a queue to the platform at a set time. LinkedIn marketing AI inside CortexViral combines four agent teams that monitor ICP discussions, draft founder-voice content, publish during high-engagement windows, and optimize your mix based on which posts drive demo requests. Scout agents surface trending topics in your niche. Creator agents write text posts, document carousels, polls, and newsletters in your syntax. Operator agents schedule for first-hour reply velocity. Intelligence agents track which formats and hooks convert to pipeline, then tune future content accordingly. You get a system that replaces the posting treadmill with a repeatable growth motion tied to revenue."
+    },
+    {
+      "q": "Can CortexViral actually write in my founder voice on LinkedIn?",
+      "a": "Yes. The Asset Upload Center ingests your recorded sales calls, past high-performing posts, Slack messages, and style guidelines. Creator agents learn your sentence structure, the frameworks you reference, and the customer language you use. When the system drafts a text post or document carousel, it mirrors your tone and references real product details or case studies you have shared. You review every draft in the dashboard or via Slack before publish at autonomy levels L0 through L3. At L4 and L5 the system can publish autonomously, but most founders start at L3 to approve content with one click. The result sounds like you because it was trained on you."
+    },
+    {
+      "q": "Which LinkedIn formats does CortexViral support and optimize?",
+      "a": "CortexViral handles text posts, document carousels uploaded as PDFs, polls, LinkedIn newsletters, short native video scripts, and articles. Text posts deliver the widest organic reach when formatted with hooks and short paragraphs. Document carousels package frameworks or case studies into swipeable visuals that earn shares and hold attention. Polls spark replies that signal engagement to the algorithm. Newsletters build a subscriber list you own. The platform tracks which formats drive profile visits and demo requests in your niche, then shifts your publishing mix toward what works. Operator agents schedule each format during the optimal window to maximize first-hour reply velocity and algorithmic amplification."
+    },
+    {
+      "q": "How does CortexViral handle LinkedIn's first-hour engagement window and algorithm?",
+      "a": "LinkedIn's algorithm prioritizes posts that generate dwell time and replies in the first sixty minutes after publish. CortexViral's Operator agents schedule every post during high-engagement windows, typically Tuesday through Thursday between eight and ten AM in your audience's timezone. Creator agents front-load reply hooks, questions, or provocative takes that encourage early comments. The system monitors reply velocity in real time and can prompt you to engage with early commenters to sustain momentum. Intelligence agents analyze which posting times, hooks, and formats consistently trigger strong first-hour performance, then apply those patterns to future content. You gain the algorithmic advantage of perfect timing without manual monitoring."
+    },
+    {
+      "q": "Does LinkedIn marketing AI work for personal profiles, company pages, or both?",
+      "a": "CortexViral prioritizes personal profiles because they earn three to five times the organic reach of company pages on LinkedIn. The platform is built for founder-led and executive-led strategies where a human voice drives trust and engagement. You connect your personal LinkedIn account, set a Mission like \"Generate qualified enterprise leads from IT directors,\" and the system publishes under your name. If you also manage a company page, you can configure separate content streams, but the highest ROI comes from personal profiles. The algorithm rewards individual contributors over corporate broadcast, so CortexViral leans into that mechanic to maximize your inbound pipeline."
+    }
+  ],
+  "final_cta_heading": "Turn your LinkedIn profile into a pipeline engine",
+  "final_cta_body": "CortexViral writes, schedules, and optimizes founder-voice content that converts. Set your Mission, choose your autonomy level, and let four agent teams run LinkedIn while you run your business.",
+  "__meta__": {
+    "slug": "linkedin-marketing-ai",
+    "title": "LinkedIn Marketing AI | CortexViral",
+    "meta": "Build LinkedIn presence with AI. CortexViral drafts founder posts, carousel PDFs, newsletter editions, and DM sequences that drive real B2B pipeline.",
+    "h1_lead": "LinkedIn marketing,",
+    "h1_accent": "founder-led at scale.",
+    "kicker": "LinkedIn Marketing AI",
+    "primary_kw": "LinkedIn marketing AI",
+    "platform": "LinkedIn",
+    "generated_by": "claude"
+  }
+}
