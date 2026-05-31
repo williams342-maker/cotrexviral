@@ -35,6 +35,14 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 122) **🔎 SEO Sprint v1 — Round 3: 6 Platform Pages**
+  - **6 new per-platform AI marketing pages**: `/instagram-marketing-ai`, `/facebook-marketing-ai`, `/linkedin-marketing-ai`, `/reddit-marketing-ai`, `/youtube-marketing-ai`, `/tiktok-marketing-ai`. All reuse the Round-2 `SeoLandingTemplate.jsx` — no JSX duplicated, just new content JSON.
+  - **Content generator** at `backend/scripts/generate_platform_pages.py` mirrors Round 2 architecture (Claude Sonnet 4.5 via `cortex_chat`, `json_repair` fallback). Each spec includes `platform_specifics` (formats, algo behavior, posting mechanics) which Claude weaves into 6 sections of 130-180 words. Body word count ~750-870/page; FAQ adds ~400 more. Re-run: `cd /app/backend && python -m scripts.generate_platform_pages`.
+  - **Internal-link rule** (Phase 6 strengthening): every platform page's first link is `/marketing-os` (the canonical hub), plus 2 sibling platforms — verified at iter32. Sibling pairs well-distributed (IG→TT+FB, FB→IG+TT, LI→RD+YT, RD→LI+YT, YT→TT+LI, TT→IG+YT). No self-references.
+  - **Footer "Channels" column** added to `CVFooter.jsx` with all 6 platform pages (data-testid='footer-channel-links'). Brand blurb compacted; footer now serves all 11 SEO landings + 5 product tools + 5 company links + 5 legal links in a single sweep.
+  - **iter32 tests**: 100% pass — 6/6 pages, 4/4 navigation flows (internal-link sibling, footer channel-link, marketing-os back-link, primary CTA→/dashboard) all work. All 4 JSON-LD blocks valid. Sitemap still complete.
+  - **One implementation gotcha fixed mid-flight**: an earlier `search_replace` lost the `channelLinks` constant declaration when overlapping with another edit — caused all 6 pages to render blank with a `ReferenceError`. Repaired and verified before testing agent run.
+
 - 2026-02-28 (part 121) **🔎 SEO Sprint v1 — Round 2: 5 Core Landing Pages**
   - **5 new SEO landing pages** live at `/marketing-os`, `/seller-acquisition`, `/ai-campaign-generator`, `/competitor-analysis`, `/asset-analysis`. Each uses a shared `SeoLandingTemplate.jsx` (data-driven from a `__meta__`-stamped JSON file under `pages/landing-os/content/`).
   - **Content generation**: `backend/scripts/generate_seo_landings.py` calls Claude Sonnet 4.5 via `cortex_chat` (Emergent LLM key) once per page with a structured prompt + JSON schema. Falls back to `json_repair` if the model adds prose. Re-runnable: `cd /app/backend && python -m scripts.generate_seo_landings`. `SEO_SKIP_EXISTING=1` env var to skip already-generated files.
