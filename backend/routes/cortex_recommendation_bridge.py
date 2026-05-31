@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import HTTPException, Request
@@ -37,6 +37,148 @@ from core import api, db
 from deps import get_current_user
 
 logger = logging.getLogger(__name__)
+
+
+# How long a bridge stays "fresh" for the Mission Dashboard hero. Older
+# bridges are still readable via /by-id/{bridge_id}; they just stop being
+# surfaced as the proactive recommendation.
+_BRIDGE_FRESHNESS_DAYS = 14
+# Minimum confidence for a bridge to be considered for the hero card —
+# below this we fall back to the briefing's deterministic top_recommendation.
+_BRIDGE_MIN_CONFIDENCE = 60
+
+
+async def _bridge_consumed(user_id: str, bridge_id: str) -> bool:
+    """A bridge is 'consumed' once it has been launched/dismissed via
+    the hero card. The hero card writes to `cortex_dismissed_plans` on
+    dismiss and to `missions` (with `auto_optimize_meta.bridge_id`) on
+    launch — either signal removes the bridge from the rotation."""
+    if await db.missions.count_documents(
+        {"user_id": user_id, "auto_optimize_meta.bridge_id": bridge_id}
+    ):
+        return True
+    if await db.cortex_dismissed_plans.count_documents(
+        {"user_id": user_id, "rec_id": bridge_id}
+    ):
+        return True
+    return False
+
+
+def _bridge_to_rec_card(bridge: dict, rec_payload: dict) -> dict:
+    """Wrap a bridge row + the deterministic plan card it maps to into
+    the unified shape the Mission Dashboard hero renders."""
+    return {
+        "source":          "bridge",
+        "bridge_id":       bridge.get("id"),
+        "title":           bridge.get("finding") or rec_payload.get("title"),
+        "summary":         (bridge.get("recommendation")
+                            or rec_payload.get("summary")
+                            or ""),
+        "reasoning":       bridge.get("reasoning") or "",
+        "confidence":      int(bridge.get("confidence") or 0),
+        "expected_outcome": (bridge.get("expected_impact")
+                             or rec_payload.get("expected_outcome") or ""),
+        "estimated_timeline_days": rec_payload.get("estimated_timeline_days") or 0,
+        "estimated_cost_usd":      rec_payload.get("estimated_cost_usd") or 0,
+        "mission_intent":  bridge.get("mission_intent"),
+        "recommendation":  rec_payload,   # full plan card for /console/execute
+    }
+
+
+def _briefing_to_rec_card(top_rec: dict) -> dict:
+    """Re-shape a briefing's top_recommendation into the unified hero
+    payload. `confidence` is stored as 0..1 in plan cards, so we scale
+    to 0..100 for display."""
+    conf_raw = top_rec.get("confidence") or 0
+    try:
+        conf_pct = int(round(float(conf_raw) * 100))
+    except Exception:
+        conf_pct = 0
+    return {
+        "source":          "briefing",
+        "bridge_id":       None,
+        "title":           top_rec.get("title") or "Recommended next action",
+        "summary":         top_rec.get("summary") or "",
+        "reasoning":       "",
+        "confidence":      conf_pct,
+        "expected_outcome": top_rec.get("expected_outcome") or "",
+        "estimated_timeline_days": top_rec.get("estimated_timeline_days") or 0,
+        "estimated_cost_usd":      top_rec.get("estimated_cost_usd") or 0,
+        "mission_intent":  top_rec.get("type"),
+        "recommendation":  top_rec,
+    }
+
+
+@api.get("/cortex/mission-dashboard/recommended-action")
+async def get_recommended_action(request: Request):
+    """The single 'what should I do next?' card surfaced at the top of
+    the Mission Dashboard. Picks (in order):
+
+      1. The newest un-consumed bridge with confidence ≥
+         `_BRIDGE_MIN_CONFIDENCE` within the freshness window. Bridges
+         carry deep provenance (a finished analysis job), so they're
+         strictly higher signal than briefing heuristics.
+      2. The deterministic briefing's `top_recommendation` if no bridge
+         qualifies. Always non-empty for users with any pipeline state.
+
+    Response shape (or `{has_recommendation: false}` when neither path
+    yields a card):
+        {
+          has_recommendation, source, bridge_id?, title, summary,
+          reasoning, confidence (0–100), expected_outcome,
+          estimated_timeline_days, estimated_cost_usd, mission_intent,
+          recommendation { ... plan card consumed by /cortex/console/execute }
+        }
+    """
+    user = await get_current_user(request)
+
+    # --- Path 1: bridge candidate -----------------------------------
+    cutoff = datetime.now(timezone.utc) - timedelta(days=_BRIDGE_FRESHNESS_DAYS)
+    cur = db.cortex_recommendation_bridges.find(
+        {
+            "user_id":     user.user_id,
+            "confidence":  {"$gte": _BRIDGE_MIN_CONFIDENCE},
+            "created_at":  {"$gte": cutoff},
+        },
+        {"_id": 0},
+    ).sort("created_at", -1).limit(10)
+
+    bridges = [b async for b in cur]
+    for bridge in bridges:
+        if await _bridge_consumed(user.user_id, bridge.get("id")):
+            continue
+        # Hydrate the deterministic plan card the bridge's intent maps
+        # to — that's what /cortex/console/execute consumes.
+        try:
+            from routes.cortex_recommendations import build_recommendation_from_intent
+            rec_payload = await build_recommendation_from_intent(
+                user_id=user.user_id,
+                intent=bridge.get("mission_intent") or "find_opportunities",
+                params=bridge.get("mission_params") or {},
+                user_message=bridge.get("recommendation") or "",
+            )
+        except Exception:
+            logger.exception("recommended-action: bridge → rec card failed")
+            continue
+        card = _bridge_to_rec_card(bridge, rec_payload)
+        card["has_recommendation"] = True
+        return card
+
+    # --- Path 2: deterministic briefing fallback --------------------
+    try:
+        from routes.cortex_recommendations import build_briefing
+        briefing = await build_briefing(user.user_id, max_opportunities=4)
+    except Exception:
+        logger.exception("recommended-action: briefing fallback failed")
+        return {"has_recommendation": False}
+
+    top_rec = briefing.get("top_recommendation")
+    if not top_rec:
+        return {"has_recommendation": False}
+
+    card = _briefing_to_rec_card(top_rec)
+    card["has_recommendation"] = True
+    return card
 
 
 @api.get("/cortex/recommendation-bridges/by-id/{bridge_id}")

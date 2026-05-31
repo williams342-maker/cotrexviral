@@ -138,6 +138,26 @@ const CommandCenter = () => {
     loadHistory(); loadStrategy(); loadOpps(); loadExec();
   }, [loadHistory, loadStrategy, loadOpps, loadExec]);
 
+  // ?prefill=<text> → seed the composer when a deep-link from elsewhere
+  // (e.g. the Mission Dashboard "Discuss with Cortex" CTA on the
+  // Recommended Action hero) arrives. We strip the query string after
+  // applying so a reload doesn't re-fire the seed.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const pre = params.get('prefill');
+    if (pre) {
+      setDraft(pre);
+      params.delete('prefill');
+      const qs = params.toString();
+      window.history.replaceState(
+        {},
+        '',
+        window.location.pathname + (qs ? `?${qs}` : ''),
+      );
+    }
+  }, []);
+
   // Conversation Mode bootstrap: when the user lands on the Command
   // Center, decide whether to start a brand-new session (default —
   // matches the "Cortex is an executive assistant for discrete

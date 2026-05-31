@@ -1,0 +1,22 @@
+{
+  "summary": "P2 Recommended Action Hero on Mission Dashboard fully verified end-to-end. Backend endpoint /api/cortex/mission-dashboard/recommended-action returns correct unified card (source='bridge', confidence=95, bridge_id, recommendation plan card), requires auth, skips bridges already in cortex_dismissed_plans, and falls back cleanly. Frontend hero renders with all required testids; Loading skeleton, Launch (override_autonomy=3 + recommendation payload), Discuss (prefill + URL cleared), and Dismiss (POST /cortex/plan/cancel + toast + hide) CTAs all working. has_recommendation=false correctly hides the hero entirely.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_recommended_action.py",
+    "/app/test_reports/pytest/recommended_action_iter30.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "test_recommended_action.py reads REACT_APP_BACKEND_URL but pytest runs in the backend process where only backend/.env is auto-loaded; added a fallback that parses /app/frontend/.env so tests work in both shells. Consider adding REACT_APP_BACKEND_URL to backend/.env or a tests/conftest.py for cleaner DI in future iterations.",
+    "/api/cortex/plan/cancel writes to cortex_dismissed_plans using the bridge id as rec_id — verified by intercepting the dismiss POST. Make sure get_recommended_action's _bridge_consumed check uses the same key shape (it does: rec_id == bridge.id)."
+  ],
+  "updated_files": ["/app/backend/tests/test_recommended_action.py"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% (all flows: hero render, launch, discuss prefill, dismiss, hidden-on-no-rec)"},
+  "test_credentials": "test@automatex.dev / session_token=test_session_1779636592168 (Bearer + cookie both work)",
+  "seed_data_creation": "None. Test inserts into cortex_dismissed_plans with reason='TEST_*' are removed by their own fixtures. The live Dismiss-flow E2E inserted a real dismissal for bridge c93cf0ed... which was manually cleaned up so the next agent still sees the high-confidence bridge.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest: cd /app/backend && pytest tests/test_recommended_action.py -v. The endpoint, all three CTAs, prefill query stripping, loading skeleton lifecycle, and has_recommendation=false hidden state were all verified. If you re-run dismiss flow against the live API, remember to clean up cortex_dismissed_plans for user_test1779636592168 / rec_id=<bridge_id> afterwards or the bridge will be skipped on subsequent calls.",
+  "rca of the issue": "N/A — no functional bugs found. Only minor test-infra adjustment needed (REACT_APP_BACKEND_URL not exported to backend pytest env; resolved in test file)."
+}

@@ -6,7 +6,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import {
   Loader2, Sparkles, Target, Rocket, Activity, Pause, Play, XCircle,
   TrendingUp, Send, Brain, ArrowRight, X, Trophy, Compass,
-  Zap, Calendar, Hash,
+  Zap, Calendar, Hash, MessageSquare, Clock, DollarSign,
 } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 
@@ -75,6 +75,9 @@ const Missions = () => {
       }
     >
       <div className="space-y-8" data-testid="missions-page">
+        {/* Cortex's Recommended Action — hero card */}
+        <RecommendedActionHero reload={load} />
+
         {/* Top summary strip */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <SummaryStat label="Running"        value={summary.running_missions ?? 0} icon={Rocket}     tone="emerald" />
@@ -291,6 +294,238 @@ const MissionAction = ({ mission, reload }) => {
   }
   return null;
 };
+
+/* ---------------------------------------------------------------
+   Recommended Action Hero — surfaces Cortex's top recommendation
+   at the top of the Mission Dashboard. Pulled from the same engine
+   that powers the Command Center briefing + recommendation bridges,
+   collapsed into ONE prominent card with three CTAs:
+     • Launch as Mission  — POST /cortex/console/execute (override L3)
+     • Discuss with Cortex — deep-link to Command Center with prefill
+     • Dismiss             — 7-day cooldown via /cortex/plan/cancel
+   ---------------------------------------------------------------- */
+const RecommendedActionHero = ({ reload }) => {
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const [rec, setRec] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(null); // 'launch' | 'dismiss' | null
+  const [hidden, setHidden] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const r = await axios.get(
+          `${API}/cortex/mission-dashboard/recommended-action`,
+          { withCredentials: true },
+        );
+        if (!active) return;
+        setRec(r.data?.has_recommendation ? r.data : null);
+      } catch {
+        if (active) setRec(null);
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+
+  if (hidden) return null;
+
+  if (loading) {
+    return (
+      <div
+        className="relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-br from-violet-500/[0.06] via-blue-500/[0.04] to-transparent p-6 animate-pulse"
+        data-testid="recommended-action-loading"
+      >
+        <div className="h-3 w-32 rounded bg-white/10 mb-3" />
+        <div className="h-5 w-2/3 rounded bg-white/10 mb-2" />
+        <div className="h-3 w-full rounded bg-white/5" />
+      </div>
+    );
+  }
+
+  if (!rec) return null;
+
+  const launch = async () => {
+    setBusy('launch');
+    try {
+      const { data } = await axios.post(
+        `${API}/cortex/console/execute`,
+        {
+          recommendation: rec.recommendation,
+          override_autonomy: 3, // force `launch` behavior from the hero
+        },
+        { withCredentials: true },
+      );
+      const verb = data.action_taken === 'launched'
+        ? 'Mission launched'
+        : data.action_taken === 'queued'
+          ? 'Plan queued for approval'
+          : 'Saved as draft';
+      toast({ title: verb, description: data.message || '' });
+      setHidden(true);
+      reload && reload();
+    } catch (e) {
+      toast({
+        title: 'Could not launch recommendation',
+        description: e?.response?.data?.detail || e.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const discuss = () => {
+    const prefill = encodeURIComponent(rec.title || 'Tell me more about your recommendation');
+    navigate(`/dashboard/command-center?prefill=${prefill}`);
+  };
+
+  const dismiss = async () => {
+    setBusy('dismiss');
+    try {
+      await axios.post(
+        `${API}/cortex/plan/cancel`,
+        {
+          recommendation: {
+            ...rec.recommendation,
+            // Tag with the bridge id so the bridge selector skips it
+            // on the next request (see _bridge_consumed in backend).
+            id: rec.bridge_id || rec.recommendation?.id,
+          },
+          reason: 'dismissed_from_mission_dashboard',
+        },
+        { withCredentials: true },
+      );
+      toast({ title: 'Recommendation dismissed', description: "Cortex won't re-surface this for 7 days." });
+      setHidden(true);
+    } catch (e) {
+      toast({
+        title: 'Could not dismiss',
+        description: e?.response?.data?.detail || e.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const conf = rec.confidence ?? 0;
+  const tl = rec.estimated_timeline_days;
+  const cost = rec.estimated_cost_usd;
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl border border-violet-500/25 bg-gradient-to-br from-violet-600/[0.12] via-blue-600/[0.06] to-zinc-950 p-5 md:p-6"
+      data-testid="recommended-action-hero"
+    >
+      {/* Decorative grid */}
+      <div className="absolute inset-0 cv-grid-bg opacity-30 pointer-events-none" />
+
+      <div className="relative flex flex-col lg:flex-row gap-5 lg:items-start">
+        {/* Left — content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-2">
+            <Brain size={13} className="text-violet-300" />
+            <span className="text-[10.5px] uppercase tracking-[0.14em] font-bold text-violet-300">
+              Cortex recommends
+            </span>
+            <span className="text-[10px] uppercase tracking-wider text-zinc-500 px-1.5 py-0.5 rounded-full bg-white/5 border border-white/5">
+              {rec.source === 'bridge' ? 'From analysis' : 'From briefing'}
+            </span>
+          </div>
+
+          <h2
+            className="text-[18px] md:text-[20px] font-semibold text-white leading-snug cv-display mb-2"
+            data-testid="recommended-action-title"
+          >
+            {rec.title}
+          </h2>
+          {rec.summary && (
+            <p className="text-[13px] text-zinc-400 leading-relaxed line-clamp-3 max-w-3xl">
+              {rec.summary}
+            </p>
+          )}
+
+          {/* Mini-stats row */}
+          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11.5px]">
+            <span className="flex items-center gap-1.5 text-zinc-300" data-testid="recommended-action-confidence">
+              <Zap size={11} className="text-amber-300" />
+              <span className="text-zinc-500">Confidence</span>
+              <span className="font-semibold text-white tabular-nums">{conf}%</span>
+            </span>
+            {rec.expected_outcome && (
+              <span className="flex items-center gap-1.5 text-zinc-300 max-w-[16rem] truncate">
+                <TrendingUp size={11} className="text-emerald-300" />
+                <span className="text-zinc-500">Outcome</span>
+                <span className="font-semibold text-white truncate">{rec.expected_outcome}</span>
+              </span>
+            )}
+            {tl ? (
+              <span className="flex items-center gap-1.5 text-zinc-300">
+                <Clock size={11} className="text-cyan-300" />
+                <span className="text-zinc-500">ETA</span>
+                <span className="font-semibold text-white tabular-nums">{tl}d</span>
+              </span>
+            ) : null}
+            {cost ? (
+              <span className="flex items-center gap-1.5 text-zinc-300">
+                <DollarSign size={11} className="text-violet-300" />
+                <span className="text-zinc-500">Est. cost</span>
+                <span className="font-semibold text-white tabular-nums">${Math.round(cost)}</span>
+              </span>
+            ) : null}
+          </div>
+
+          {/* Confidence bar */}
+          <div className="mt-3 h-1 rounded-full bg-white/5 overflow-hidden max-w-md">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-blue-500 transition-all"
+              style={{ width: `${Math.min(100, conf)}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Right — CTA stack */}
+        <div className="flex lg:flex-col gap-2 lg:min-w-[200px] lg:items-stretch flex-wrap">
+          <button
+            onClick={launch}
+            disabled={!!busy}
+            data-testid="recommended-action-launch"
+            className="text-[12.5px] font-semibold px-4 py-2.5 rounded-lg bg-gradient-to-r from-violet-600 to-blue-600 hover:opacity-90 text-white transition flex items-center justify-center gap-1.5 shadow-lg shadow-violet-900/30 disabled:opacity-50"
+          >
+            {busy === 'launch'
+              ? <Loader2 className="animate-spin" size={13} />
+              : <Rocket size={13} />}
+            {busy === 'launch' ? 'Launching…' : 'Launch as mission'}
+          </button>
+          <button
+            onClick={discuss}
+            disabled={!!busy}
+            data-testid="recommended-action-discuss"
+            className="text-[12.5px] font-semibold px-4 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-white border border-white/10 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+          >
+            <MessageSquare size={13} /> Discuss with Cortex
+          </button>
+          <button
+            onClick={dismiss}
+            disabled={!!busy}
+            data-testid="recommended-action-dismiss"
+            className="text-[11.5px] font-medium px-4 py-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-white/5 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+          >
+            {busy === 'dismiss'
+              ? <Loader2 className="animate-spin" size={11} />
+              : <X size={11} />}
+            Dismiss
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 const NewMissionModal = ({ onClose, onCreated }) => {
   const { toast } = useToast();
