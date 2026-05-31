@@ -35,6 +35,14 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 124) **🚨 P0 — Cortex production-timeout root-caused & fixed**
+  - **Symptom**: After deploy, Cortex AI timing out on `cortexviral.com`. User rolled back.
+  - **RCA**: Commit `f59b949` (~15h ago) had wrapped the already-async `chat._execute_completion(messages)` inside `await asyncio.to_thread(lambda: asyncio.run(_execute_completion(messages)))`. The comment justified it as preventing "event-loop blocking", but the call was already async (`litellm.acompletion` under the hood). The wrap created a fresh event loop per call inside Python's default thread-pool executor (~32 threads). Under concurrent production load, the pool exhausted, every new Cortex request stalled waiting for a thread, and K8s ingress killed them after the timeout window. Single-user preview tests never reproduced it because there was no concurrency pressure.
+  - **Fix** in `backend/cortex/llm_provider.py`: reverted to a direct `await chat._execute_completion(messages)`. Left a code comment documenting why the wrap is forbidden. The DELETE-during-build race the wrap claimed to address is already fixed at the route layer in `cortex_campaigns.py`, so removing the wrap is safe.
+  - **Verified locally**: 5 concurrent `cortex_tool_call` invocations now complete in **7.5s total** (true async parallelism) vs the serialized thread-pool behavior. Single tool call: 3.6s. Full Command Center `/api/cortex/console/chat` round-trip: 16s.
+  - **Regression test** `backend/tests/test_cortex_tool_call_concurrency.py` (2 tests, both pass): (1) AST-level static guard that scans `cortex_tool_call`'s **executable** source (docstrings/comments stripped) for `asyncio.to_thread` / `asyncio.run` patterns and fails the build if anyone re-introduces them; (2) live 5-concurrent-call test that asserts total wall-time < 18s.
+  - **Next step**: redeploy to push the fix to `cortexviral.com`.
+
 - 2026-02-28 (part 123) **🔎 SEO Sprint v1 — Round 4: /insights Blog (Index + 10 Articles)**
   - **/insights index** (`InsightsIndex.jsx`): operator-essay positioning ("Operator essays on the Marketing OS."), 6 category chips (All/Playbooks/Strategy/Operations/Automation/Intelligence), featured-card hero (page 1 only), 6-per-page grid, Newer/Older pagination. Filtering resets to page 1 cleanly.
   - **/insights/<slug> article template** (`InsightsArticle.jsx`): full-bleed hero with breadcrumbs, kicker badge, dek, author meta (gradient avatar + jobTitle + published date), boxed Key Takeaways callout, lede, 6-7 body sections with optional bullets, pull-quote with quote icon, related-landing CTA card, 3 related-article cards, FAQ, and final-takeaway closing block with "Start Your First Mission" + "Back to Insights" CTAs. Unknown slugs `<Navigate to="/insights" replace />`.

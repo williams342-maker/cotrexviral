@@ -236,14 +236,16 @@ async def cortex_tool_call(
             # raw response.
             messages = await chat.get_messages()
             await chat._add_user_message(messages, UserMessage(text=user_text))
-            # `_execute_completion` calls `litellm.completion()` (sync
-            # streaming) under the hood, which BLOCKS the main uvicorn
-            # event loop for the entire 2-3 min generation. Push it to
-            # a thread so other HTTP requests (e.g. DELETE while a
-            # campaign is building) stay responsive.
-            import asyncio as _asyncio
-            response = await _asyncio.to_thread(
-                lambda: _asyncio.run(chat._execute_completion(messages)))
+            # NOTE: `_execute_completion` IS async (litellm.acompletion under
+            # the hood). A previous version wrapped this in
+            # `asyncio.to_thread(lambda: asyncio.run(_execute_completion))`
+            # to "unblock the event loop" — that pattern silently exhausted
+            # Python's default thread-pool executor under concurrent
+            # production load and caused Cortex timeouts. Direct await is
+            # the correct path; the DELETE-during-build race condition that
+            # motivated the wrap is fixed at the route layer in
+            # cortex_campaigns.py (not here).
+            response = await chat._execute_completion(messages)
 
             # Attribute spend best-effort (mirrors send_with_usage tail).
             _attribute_spend(response, user_id=user_id, model=model)
