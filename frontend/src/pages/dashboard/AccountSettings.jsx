@@ -91,6 +91,9 @@ const AccountSettings = () => {
       {/* Password */}
       <PasswordSection />
 
+      {/* Cortex preferences */}
+      <CortexPreferencesSection />
+
       {/* Active sessions */}
       <SessionsSection />
 
@@ -678,3 +681,90 @@ const ConfirmPauseModal = ({ email, onClose, onConfirmed }) => {
 };
 
 export default AccountSettings;
+
+
+// ---------------------------------------------------------------------
+// Cortex preferences — keyed off the new /api/user/preferences pair.
+// Currently exposes one toggle (conversation_mode) but extensible.
+// ---------------------------------------------------------------------
+function CortexPreferencesSection() {
+  const { toast } = useToast();
+  const [mode, setMode] = useState(null);   // null = loading
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await axios.get(`${API}/user/preferences`, { withCredentials: true });
+        setMode(r.data?.preferences?.conversation_mode || 'fresh_every_visit');
+      } catch (_e) {
+        setMode('fresh_every_visit');
+      }
+    })();
+  }, []);
+
+  const save = async (next) => {
+    if (next === mode || saving) return;
+    setSaving(true);
+    const prev = mode;
+    setMode(next);
+    try {
+      await axios.put(`${API}/user/preferences`,
+                          { conversation_mode: next },
+                          { withCredentials: true });
+      toast({ title: 'Saved',
+              description: next === 'fresh_every_visit'
+                ? 'Cortex will start a new conversation each visit.'
+                : 'Cortex will resume your last conversation.' });
+    } catch (e) {
+      setMode(prev);
+      toast({ title: 'Could not save',
+              description: e?.response?.data?.detail || e.message,
+              variant: 'destructive' });
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <section className="mb-6" data-testid="account-cortex-prefs-section">
+      <SectionHeader icon={Sparkles} label="Cortex preferences" />
+      <div className="cv-glass rounded-2xl p-5">
+        <div className="text-[13px] font-semibold text-white mb-1">Conversation mode</div>
+        <div className="text-[11.5px] text-zinc-500 mb-3">
+          Cortex is designed for discrete missions, with History as the memory.
+          The default starts each visit fresh — turn this off to resume your last thread.
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {[
+            { id: 'fresh_every_visit',
+              title: 'Fresh session every visit',
+              hint:  'Recommended. Empty Command Center on entry. Past threads live in History.' },
+            { id: 'resume_last',
+              title: 'Resume last session',
+              hint:  'Restore the most recent conversation when you open Command Center.' },
+          ].map((opt) => {
+            const active = mode === opt.id;
+            return (
+              <button key={opt.id} onClick={() => save(opt.id)}
+                      data-testid={`conversation-mode-${opt.id}`}
+                      disabled={mode === null || saving}
+                      className={`text-left p-3 rounded-lg border transition ${
+                        active
+                          ? 'border-violet-500/50 bg-violet-500/10'
+                          : 'border-white/10 bg-white/[0.02] hover:border-white/20'
+                      }`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`w-3.5 h-3.5 rounded-full border flex-shrink-0 ${active ? 'border-violet-400 bg-violet-400' : 'border-white/30'}`} />
+                  <span className="text-[12.5px] font-semibold text-white">{opt.title}</span>
+                  {opt.id === 'fresh_every_visit' && (
+                    <span className="text-[9px] uppercase tracking-wider font-bold text-violet-300 bg-violet-500/20 border border-violet-500/30 px-1.5 py-0.5 rounded">Recommended</span>
+                  )}
+                </div>
+                <div className="text-[11px] text-zinc-500 leading-relaxed">{opt.hint}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}

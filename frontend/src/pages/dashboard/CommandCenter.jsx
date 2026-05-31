@@ -138,6 +138,38 @@ const CommandCenter = () => {
     loadHistory(); loadStrategy(); loadOpps(); loadExec();
   }, [loadHistory, loadStrategy, loadOpps, loadExec]);
 
+  // Conversation Mode bootstrap: when the user lands on the Command
+  // Center, decide whether to start a brand-new session (default —
+  // matches the "Cortex is an executive assistant for discrete
+  // missions, History is the memory" mental model) or resume the
+  // last one. Driven by GET /user/preferences.conversation_mode.
+  const bootstrappedRef = useRef(false);
+  useEffect(() => {
+    if (bootstrappedRef.current) return;
+    bootstrappedRef.current = true;
+    (async () => {
+      let mode = 'fresh_every_visit';
+      try {
+        const r = await axios.get(`${API}/user/preferences`, { withCredentials: true });
+        mode = r.data?.preferences?.conversation_mode || mode;
+      } catch (_e) { /* default to fresh */ }
+      if (mode === 'fresh_every_visit') {
+        try {
+          const r = await axios.post(`${API}/cortex/console/conversations/new`,
+                                          { title: null }, { withCredentials: true });
+          const newId = r.data?.conversation_id || r.data?.id;
+          if (newId) {
+            setActiveConvId(newId);
+            setThread([]);                  // empty — greeting bubble renders
+            setHistoryKey((k) => k + 1);    // refresh sidebar list
+          }
+        } catch (_e) { /* fall through — sticks with 'legacy' */ }
+      }
+      // resume_last → leave activeConvId='legacy' so loadHistory loads
+      // the most recent turns.
+    })();
+  }, []);
+
   // Refresh the chat thread when background work (analysis jobs,
   // recommendation bridges, discuss follow-ups) posts new Cortex turns
   // into the conversation. Triggered by ActiveWorkRail on status
@@ -494,10 +526,14 @@ const CommandCenter = () => {
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center mb-4 shadow-xl shadow-violet-500/30">
                   <Sparkles size={22} className="text-white" />
                 </div>
-                <div className="text-[18px] font-semibold text-white mb-1">
-                  I'm Cortex — your AI executive.
+                <div className="text-[10px] uppercase tracking-[0.3em] font-bold text-violet-300/80 mb-2">
+                  CORTEX
                 </div>
-                <div className="text-[12.5px] text-zinc-400 max-w-md leading-relaxed">
+                <div data-testid="cortex-greeting"
+                     className="text-[26px] sm:text-[32px] font-semibold bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent mb-3">
+                  How can I help you today?
+                </div>
+                <div className="text-[12.5px] text-zinc-500 max-w-md leading-relaxed">
                   Tell me what you want to grow. I'll analyze your business,
                   propose missions with reasoning, cost, timeline, and risk —
                   then execute through the autonomy you've granted me.

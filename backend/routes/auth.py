@@ -157,3 +157,54 @@ async def ws_ticket(request: Request):
         "created_at":    datetime.now(timezone.utc),
     })
     return {"ticket": ticket, "expires_at": expires_at.isoformat()}
+
+
+# ---------------------------------------------------------------------
+# Generic per-user preferences. The shape is intentionally open-ended
+# (a plain dict on `users.preferences`) so we can add new toggles
+# without schema migrations. Validate known keys at the route boundary.
+# ---------------------------------------------------------------------
+_CONVERSATION_MODES = {"fresh_every_visit", "resume_last"}
+
+_PREF_VALIDATORS: dict[str, callable] = {
+    "conversation_mode": lambda v: isinstance(v, str) and v in _CONVERSATION_MODES,
+}
+
+_PREF_DEFAULTS = {
+    "conversation_mode": "fresh_every_visit",
+}
+
+
+@api.get("/user/preferences")
+async def get_user_preferences(request: Request):
+    """Return the user's preference dict merged with defaults so the
+    frontend doesn't need to know which keys are unset."""
+    user = await get_current_user(request)
+    doc = await db.users.find_one(
+        {"user_id": user.user_id}, {"_id": 0, "preferences": 1}) or {}
+    prefs = {**_PREF_DEFAULTS, **(doc.get("preferences") or {})}
+    return {"preferences": prefs}
+
+
+@api.put("/user/preferences")
+async def update_user_preferences(request: Request):
+    """Patch one or more preference keys. Body shape: a flat dict of
+    `{key: value}`. Unknown keys → 422. Bad values → 422."""
+    user = await get_current_user(request)
+    payload = await request.json()
+    if not isinstance(payload, dict) or not payload:
+        raise HTTPException(400, "Body must be a non-empty {key: value} dict.")
+    update: dict = {}
+    for k, v in payload.items():
+        validator = _PREF_VALIDATORS.get(k)
+        if validator is None:
+            raise HTTPException(422, f"Unknown preference key: {k}")
+        if not validator(v):
+            raise HTTPException(422, f"Invalid value for {k}: {v!r}")
+        update[f"preferences.{k}"] = v
+    await db.users.update_one(
+        {"user_id": user.user_id}, {"$set": update}, upsert=True)
+    doc = await db.users.find_one(
+        {"user_id": user.user_id}, {"_id": 0, "preferences": 1}) or {}
+    prefs = {**_PREF_DEFAULTS, **(doc.get("preferences") or {})}
+    return {"preferences": prefs}

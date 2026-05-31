@@ -1,0 +1,33 @@
+{
+  "summary": "iter29: Verified Command Center session-management redesign (Conversation Mode toggle + auto Cortex greeting + Settings UI). Backend: 9/9 pytest tests pass for GET/PUT /api/user/preferences (defaults, persistence, validation, auth, defaults-merge). Frontend: Fresh-mode greeting renders perfectly with CORTEX kicker + subtitle, disappears after first user message; resume_last mode skips the auto POST /cortex/console/conversations/new and loads legacy history instead; Settings page's CortexPreferencesSection persists via PUT and surfaces a 'Saved' toast.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_user_preferences.py",
+    "/app/test_reports/pytest/user_prefs_iter29.xml"
+  ],
+  "action_items": [
+    "Minor docs nit: review_request.other_misc_info claims AccountSettings lives at /dashboard/profile, but per /app/frontend/src/App.js line 158 the actual route is /dashboard/settings/account. /dashboard/profile is unrouted (React Router logs 'No routes matched location'). Either add a redirect route /dashboard/profile -> /dashboard/settings/account or update the docstring / context note in review_request to avoid future confusion for testers."
+  ],
+  "critical_code_review_comments": [
+    "auth.py PUT /user/preferences uses raw request.json() + manual validation rather than a Pydantic model. Works fine and the per-key validator pattern is extensible, but a Pydantic BaseModel with extra='forbid' + Literal['fresh_every_visit','resume_last'] would give a more uniform 422 detail shape (currently 'detail' is a plain string instead of FastAPI's list-of-errors envelope). Not blocking.",
+    "Empty-body validation returns 400 ('Body must be a non-empty {key:value} dict') while bad-value/unknown-key return 422. Mixed status codes for input-validation are intentional per spec but slightly inconsistent with FastAPI norms — consider unifying to 422.",
+    "CommandCenter.jsx bootstrappedRef guard correctly prevents double-fires under React StrictMode (verified — only 1 POST in fresh mode, 0 in resume_last). Good.",
+    "Greeting empty-state condition is `!hasHistory && !sending` — solid because sending=true while the first turn is in flight, so the greeting doesn't briefly re-render before the user's bubble appears. Confirmed visually.",
+    "AccountSettings.jsx optimistic save (setMode(next) before await) with rollback on error is good UX — toast verified on click."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_user_preferences.py (new — 9 pytest cases)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (4/4 flows: fresh greeting visible, greeting disappears on send, settings UI persists via PUT + toast, resume_last skips POST /conversations/new)"},
+  "test_credentials": "test@automatex.dev / session_token=test_session_1779636592168 (user_test1779636592168, is_admin=true). Used as both Bearer header (pytest) and session_token cookie (Playwright). Source: /app/memory/test_credentials.md.",
+  "seed_data_creation": "None. Test fixture $unsets users.preferences before each backend test and restores conversation_mode='fresh_every_visit' after the UI run via PUT /api/user/preferences. The user's existing conversation history was left untouched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression file: /app/backend/tests/test_user_preferences.py — 9 pytest cases, ~1.8s runtime, uses pymongo (sync) to $unset users.preferences between tests for the canonical test user_test1779636592168. Auth via Bearer test_session_1779636592168. Frontend: settings UI route is /dashboard/settings/account (NOT /dashboard/profile — that path is unrouted). data-testids: 'cortex-greeting', 'cortex-empty-state', 'cortex-chat-thread', 'account-cortex-prefs-section', 'conversation-mode-fresh_every_visit', 'conversation-mode-resume_last'. POST /api/cortex/console/conversations/new returns {conversation_id, created_for, created_at} — frontend correctly reads r.data.conversation_id (the bug E1 mentioned was already patched).",
+  "rca of the issue": "N/A — no functional bugs found. Single doc-level inconsistency: review_request says AccountSettings is at /dashboard/profile but App.js routes it at /dashboard/settings/account; Playwright initial run logged 'No routes matched location /dashboard/profile' until I used the correct path."
+}
