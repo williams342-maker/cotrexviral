@@ -1,0 +1,127 @@
+{
+  "lede": "Social media automation is not “post more.” It is building a repeatable system that ships drafts, schedules intelligently, and keeps humans on the decisions that move revenue. This guide shows what to automate, what to review, and how to run one queue across every major platform.",
+  "key_takeaways": [
+    "Automate drafting, repurposing, and scheduling, keep positioning and replies human-led.",
+    "Use bulk drafts and a review queue to prevent tone drift and policy mistakes.",
+    "Under 10k followers, follow the 3-channel rule to win distribution consistently.",
+    "Heuristic scheduling beats “best time” myths when your content mix is changing weekly."
+  ],
+  "sections": [
+    {
+      "heading": "What automation should actually do",
+      "body": "Most teams automate the wrong thing. They chase volume and forget that distribution is conditional. Each platform rewards content that matches its native format, early engagement, and session time. Social media automation should create a pipeline that produces platform-native variants, routes them for approval, then publishes on a schedule you can defend.\n\nStart by separating four layers: strategy, production, publishing, and feedback. Strategy stays human. It includes audience promises, offer framing, and what you will not post. Production can be 60 to 80 percent automated, as long as you control inputs and enforce style. Publishing can be 90 percent automated if you respect platform quirks. Feedback should be automated for collection and summarization, not for emotional customer replies.\n\nA practical benchmark for a small team is 25 to 40 posts per week across channels, produced from 5 to 8 core ideas. Automation should turn those ideas into 3 to 6 variants per idea, then ship them as drafts. Your human job becomes choosing angles, rejecting weak hooks, and approving anything that could spark backlash.\n\nIf you are evaluating tools, judge them on three questions. Can you generate drafts in bulk without losing voice. Can you schedule across channels with per-platform formatting. Can you close the loop with performance insights that change next week’s plan. CortexViral is built around that end-to-end loop, not a posting calendar that stops at publish.",
+      "bullets": [
+        "Automate the assembly line, not the brand decisions",
+        "Draft first, publish second, analyze third",
+        "Treat every platform as its own product surface",
+        "Measure speed to “approved draft,” not just posts shipped"
+      ]
+    },
+    {
+      "heading": "Platform quirks you must respect",
+      "body": "Cross-posting is fine, identical posting is lazy. Each platform has rules that are not written down, but they are observable. If your automation ignores them, your account becomes a low-signal content repeater.\n\nInstagram and TikTok are watch-time engines. They punish weak first seconds and reward replays. Your automation should generate multiple hooks per video, and prioritize shorter cuts when retention drops. Captions matter less than the opening frame, but pinned comments can change the conversation, so keep that human.\n\nLinkedIn is a distribution plus trust platform. It likes clarity, strong first lines, and conversation velocity in the first hour. External links can throttle reach, so schedule link posts differently and put links in comments when appropriate. Also, LinkedIn punishes “AI-sounding” writing, so require a human pass on tone.\n\nYouTube is two platforms: Shorts and long-form. Shorts behave like TikTok, but subscription conversion matters more. For long-form, title and thumbnail are the product, then the first 30 seconds must match the promise. Automation helps you test 5 titles and 3 thumbnail concepts per video, but a human should pick the final pair.\n\nReddit is rules-first. Each subreddit has culture, posting cadence expectations, and ban triggers. Automate research and drafting, but publish through a review queue. Facebook is still powerful for groups, events, and retargeting audiences. It rewards comments and shares, so ask questions that invite real stories.\n\nYour system should store these constraints as templates, not tribal knowledge.",
+      "bullets": [
+        "Instagram, TikTok: hook variants and retention-first edits",
+        "LinkedIn: avoid link throttling, prioritize first-hour comments",
+        "YouTube: Shorts for reach, long-form for conversion and intent",
+        "Reddit: draft with context, publish with rules and restraint",
+        "Facebook: group-native prompts and shareable narratives"
+      ]
+    },
+    {
+      "heading": "Bulk drafts, then human review",
+      "body": "The safest way to scale is bulk publishing as drafts. You do one thinking session, then your system manufactures options. Instead of “write one post,” you produce 20 to 40 drafts in one batch, all tagged by channel, campaign, audience, and claim type.\n\nHere is the workflow that works in real teams. Start with 5 core ideas for the week. For each idea, draft: one short video script, one LinkedIn post, one Reddit post outline, one YouTube Short caption set, and one Facebook group prompt. That is 25 drafts before repurposing. Then repurpose winners into two additional variations each, usually a different hook and a different CTA. You now have 35 to 45 drafts.\n\nThe human-in-the-loop points are predictable. Approve any post that includes numbers, comparisons, promises, or competitor references. Approve anything that could be interpreted as medical, financial, or legal guidance. Approve anything that mentions pricing, guarantees, or outcomes. Everything else can flow through a lighter check, focused on voice and formatting.\n\nA review queue should be organized by risk, not by date. High-risk posts get checked first. Medium-risk posts get a quick skim. Low-risk posts can be approved in bulk. Your goal is to keep approval under 30 minutes per day while increasing throughput.\n\nCortexViral uses mission-driven execution and agent teams, like Scout for research and Creator for drafts, so you can generate batches without losing structure. The win is consistency, not magic.",
+      "bullets": [
+        "Batch 5 ideas into 35 to 45 platform-specific drafts",
+        "Route review by risk level, not calendar order",
+        "Approve claims, comparisons, and promises with human eyes",
+        "Keep daily approvals under 30 minutes"
+      ]
+    },
+    {
+      "heading": "Auto-scheduling with heuristics, not myths",
+      "body": "“Best time to post” charts are a trap. They assume your audience is static, your content mix is stable, and your account has predictable distribution. Most teams have none of those. The better approach is heuristic scheduling that adapts to what you are testing.\n\nUse three scheduling rules. First, post when your audience is likely to respond, not just scroll. For B2B, that is often 8:00 to 10:00 local time and 12:00 to 2:00, Tuesday through Thursday. For consumer, evenings and weekends can work, but only if your content matches the vibe. Second, separate formats. Do not stack three videos in a row on the same platform. Mix video, text, and carousel-style content when the platform supports it. Third, schedule for learning. If you are testing hooks, keep posting times consistent for a week so you can attribute results.\n\nA simple heuristic schedule for a sub-10k account is 5 posts per week on the primary channel, 3 on the secondary, and 2 on the tertiary. That is enough frequency to learn without flooding your audience. Your automation should fill the queue based on content type, campaign priority, and freshness. It should also auto-adjust when a post overperforms, for example by pulling a related variant forward within 24 hours.\n\nDirect publishing matters because it reduces human friction. One queue should handle platform formatting, character limits, hashtags, and UTM rules. Your job is choosing what gets amplified, and what gets retired.",
+      "bullets": [
+        "Schedule for response probability, not generic peak hours",
+        "Keep posting times stable during tests to isolate variables",
+        "Mix formats, avoid stacking identical content back-to-back",
+        "Pull forward related variants within 24 hours of a breakout post"
+      ]
+    },
+    {
+      "heading": "The 3-channel rule under 10k followers",
+      "body": "If your account is under 10k followers, you do not need six platforms. You need three channels with different distribution mechanics. This is how you get consistent reach while you build a library of proof.\n\nPick one “discovery” channel, one “trust” channel, and one “community” channel. Discovery is usually TikTok, Instagram Reels, or YouTube Shorts. Trust is usually LinkedIn or YouTube long-form. Community is often Reddit or Facebook groups. The rule is simple: one channel feeds awareness, one converts skeptics, one generates feedback and language you can reuse.\n\nRun a weekly operating cadence. Monday, publish one flagship discovery asset and two supporting posts. Tuesday and Wednesday, post trust content that explains your point of view with examples. Thursday, ship a community post that asks for stories, objections, or benchmarks. Friday, recap what you learned and tease next week’s angle.\n\nConcrete numbers: aim for 10 to 12 total posts per week across the three channels. Track three metrics only. Discovery: 3-second hold rate or average view duration. Trust: saves, profile clicks, or long-form watch time. Community: comment depth, not comment count.\n\nThis rule prevents the common failure mode where you scatter effort and learn nothing. Once one channel is reliably producing leads or demos, add a fourth channel with a clear purpose, not because you feel behind.\n\nThis is the point where a Marketing OS approach becomes valuable. If you want the full operating model, the overview at /marketing-os connects the pieces end to end.",
+      "bullets": [
+        "Discovery, trust, community, three different algorithms",
+        "10 to 12 posts per week is enough to learn fast",
+        "Measure hold rate, saves, and comment depth",
+        "Add channels only after one is producing qualified demand"
+      ]
+    },
+    {
+      "heading": "Governance, safety, and brand control",
+      "body": "Automation without governance becomes a liability. The fix is simple: treat publishing like a production system with permissions, audits, and escalation paths.\n\nStart with a brand rulebook that is actually enforceable. Define banned claims, required disclaimers, and your stance on sensitive topics. Then define your “red flag” triggers, like competitor callouts, pricing, outcomes, and regulated categories. Any draft that trips a trigger must go into a review queue.\n\nNext, add asset control. Your best hooks, proof points, customer quotes, and product screenshots should live in a single library. When teams upload random files in Slack, you get version drift and compliance risk. A central Asset Upload Center prevents that and makes repurposing faster.\n\nFinally, create an escalation loop for replies. Automate the capture and summarization of comments and DMs. Do not automate the actual response unless it is a known FAQ with a vetted answer. Your brand voice is most visible in conflict, not in scheduled posts.\n\nIf you do any outbound social selling, governance matters even more. You need prospect context, confidence scoring, and a review step before outreach. Systems like CortexViral’s Seller Acquisition Engine exist for this reason, they reduce spam behavior and force your team to qualify before messaging.\n\nThe goal is not to slow down. The goal is to scale without stepping on the landmines that kill trust.",
+      "bullets": [
+        "Use red-flag triggers to route posts into human review",
+        "Centralize assets to prevent version drift and compliance errors",
+        "Automate comment collection, keep nuanced replies human",
+        "Add confidence scoring and review before any outbound outreach"
+      ]
+    }
+  ],
+  "pull_quote": "Automate the pipeline, not the judgment, drafts and scheduling scale, but trust is still a human decision.",
+  "related_articles": [
+    {
+      "slug": "ai-marketing-operating-systems-explained",
+      "title": "AI Marketing Operating Systems, Explained",
+      "blurb": "Learn the OS model that connects strategy, agents, assets, campaigns, and performance into one loop."
+    },
+    {
+      "slug": "reddit-marketing-automation",
+      "title": "Reddit Marketing Automation That Doesn't Get You Banned",
+      "blurb": "A practical playbook for subreddits, approval workflows, and automation that respects rules and culture."
+    },
+    {
+      "slug": "multi-channel-campaign-management",
+      "title": "Multi-Channel Campaign Management Without the Spreadsheets",
+      "blurb": "How to run one campaign plan across channels with clear owners, reusable assets, and real reporting."
+    }
+  ],
+  "related_landing_blurb": "If you want the full system behind this guide, the Marketing OS overview shows how orchestration, assets, agents, and publishing fit together.",
+  "faq": [
+    {
+      "q": "What is social media automation in 2026?",
+      "a": "Social media automation is a workflow that turns ideas into platform-specific drafts, routes them through approvals, publishes on a schedule, and captures performance feedback. In 2026, the best systems include bulk drafting, per-platform formatting, heuristic scheduling, and automated insight summaries. The goal is higher consistency with fewer manual steps, while keeping humans responsible for strategy, claims, and sensitive replies."
+    },
+    {
+      "q": "What should you not automate on social media?",
+      "a": "Do not automate brand positioning, risky claims, competitor comparisons, or nuanced customer support. Also avoid fully automated Reddit posting without subreddit context and moderation rules. Automation should assist with research, drafting, repurposing, scheduling, and analytics collection. Keep humans in the loop for approvals, community judgment calls, and any interaction that could escalate reputational risk."
+    },
+    {
+      "q": "How do you automate publishing across multiple channels?",
+      "a": "Start by generating drafts in batches, then assign each draft a channel, format, and campaign tag. Use a single publishing queue that applies platform rules, like caption length, hashtags, link handling, and video aspect ratios. Add a review queue based on risk triggers, then auto-schedule approved posts using heuristics that separate formats and stabilize test windows. Finally, collect performance metrics weekly to update next week’s content mix."
+    },
+    {
+      "q": "Does social media automation hurt reach or engagement?",
+      "a": "Automation hurts performance when it produces generic posts, identical cross-posts, or spammy cadence. It helps when it increases consistency, improves platform-native formatting, and enables faster iteration on hooks and angles. Reach is driven by retention and early engagement, not by whether a human clicked “publish.” Keep quality controls, human approval for high-risk content, and a feedback loop that changes the next batch of drafts."
+    }
+  ],
+  "final_takeaway": "Social media automation works when it behaves like an operating system, not a scheduling hack. Build a pipeline that produces platform-native drafts in bulk, routes risk through human review, and schedules with heuristics that support learning. Keep the human work where it matters, positioning, proof, and replies. Run three channels well before you expand, then scale what already converts.",
+  "__meta__": {
+    "slug": "social-media-automation-guide",
+    "title": "The Social Media Automation Guide (2026 Edition)",
+    "dek": "What to automate, what to keep human-in-the-loop, and how to schedule across Instagram, TikTok, LinkedIn, YouTube, Reddit, and Facebook from one queue.",
+    "category": "automation",
+    "category_label": "Automation",
+    "author": {
+      "name": "Operator Agent",
+      "jobTitle": "Execution Lead",
+      "url": "https://cortexviral.com/agents"
+    },
+    "primary_kw": "Social media automation",
+    "related_landing": "marketing-os",
+    "published_at": "2026-05-31T03:27:08.329583+00:00",
+    "read_minutes": 6,
+    "generated_by": "gpt"
+  }
+}

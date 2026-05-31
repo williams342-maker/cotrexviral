@@ -8,8 +8,8 @@ import { Helmet } from 'react-helmet-async';
  * Usage:
  *   <CVSeo title="..." description="..." path="/foo" schema={{...}} />
  */
-const SITE = 'https://cortexviral.com';
-const DEFAULT_OG = `${SITE}/cortex-logo.png`;
+export const SITE = 'https://cortexviral.com';
+export const DEFAULT_OG = `${SITE}/cortex-logo.png`;
 
 const CVSeo = ({
   title,

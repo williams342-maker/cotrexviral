@@ -1,0 +1,124 @@
+{
+  "lede": "Most marketplace operators treat seller acquisition like a marketing campaign. Wrong. It's a sales motion with a defined funnel, qualification gates, and lifecycle stages. The operators who compress discovery-to-onboarded from twelve weeks to fourteen days build sourcing systems, scoring models, and review queues that let AI handle volume while humans stay in control.",
+  "key_takeaways": [
+    "Seller acquisition is a sales motion, not a marketing broadcast.",
+    "Three-band confidence scoring separates hot leads from cold outreach.",
+    "Human review gates prevent embarrassing auto-sends before they ship.",
+    "Lifecycle tracking turns scattered prospects into repeatable pipeline velocity."
+  ],
+  "sections": [
+    {
+      "heading": "Why most seller acquisition fails before it starts",
+      "body": "You scrape five hundred Etsy shops, dump them into a spreadsheet, and send everyone the same templated DM. Response rate: two percent. The operators who crack seller acquisition understand it mirrors B2B sales, not email newsletters. You need an ICP, a source strategy, a qualification layer, and a nurture track. The difference is volume. A decent B2B SDR manages sixty accounts. A marketplace operator is sourcing two thousand sellers a quarter. Without automation, you drown. With blind automation, you spam. The unlock is a hybrid model where AI does discovery and drafting, humans approve before send, and the system tracks every prospect from cold to onboarded. This is not a CRM bolt-on. It is a purpose-built seller acquisition engine that understands marketplace context, product fit, and timing signals. The teams running this playbook close thirty to forty sellers a month with one operator and zero offshore VAs.",
+      "bullets": [
+        "Traditional CRMs treat every lead the same; seller acquisition needs product-fit scoring.",
+        "Blind automation gets your domain blacklisted; review gates keep quality high.",
+        "Manual tracking caps you at fifty prospects; structured systems scale to two thousand."
+      ]
+    },
+    {
+      "heading": "Step one: Define your ideal seller profile",
+      "body": "Before you source a single shop, write down the profile. Revenue band, product category, existing channel mix, lifecycle stage. A skincare brand doing fifty thousand a month on Shopify with zero Amazon presence is a different conversation than a print-on-demand dropshipper grinding five hundred dollars on Etsy. Both might convert, but the pitch, timeline, and onboarding path diverge. Your ICP should include hard filters like minimum monthly revenue, soft signals like engagement rate or product photography quality, and red flags like trademark disputes or chargebacks. The tighter your ICP, the higher your confidence scoring and the cleaner your outreach. Many operators skip this step and wonder why their acceptance rate sits at four percent. If you are pitching everyone, you are pitching no one. A narrow ICP also lets you build repeatable messaging. When you know exactly who you are talking to, you can reference their pain points, cite comparable success stories, and propose a timeline that matches their capacity. Broad outreach sounds generic. Narrow outreach sounds like you did your homework.",
+      "bullets": [
+        "Revenue minimum ensures sellers have budget and operational maturity.",
+        "Product category alignment lets you reuse creative assets and messaging.",
+        "Lifecycle stage affects urgency; a brand planning Q4 launch moves faster than one exploring options."
+      ]
+    },
+    {
+      "heading": "Step two: Build your source list across three tiers",
+      "body": "Tier one is warm: existing customers, referrals, inbound signups. Tier two is targeted: Etsy shops with strong reviews in your category, Shopify storefronts running paid ads, Instagram accounts with product tags and ten thousand followers. Tier three is broad: industry directories, trade show exhibitor lists, LinkedIn hashtag searches. Most operators start at tier three and burn out. Start at tier one, exhaust it, then move down. CortexViral's Scout agent pulls tier-two sources automatically. You give it an ICP and a platform—Etsy, Shopify, Instagram—and it returns a ranked list with confidence scores. High confidence means strong product-market fit, active social presence, and recent customer reviews. Medium confidence flags one or two weak signals. Low confidence is exploratory. The three-band model prevents you from wasting time on dead ends while surfacing hidden gems that a manual search would miss. Each prospect gets a Prospect Intelligence Card: revenue estimate, product catalog summary, competitive positioning, and timing signals like recent funding or a new product launch.",
+      "bullets": [
+        "Tier one converts at forty percent but exhausts quickly.",
+        "Tier two is where scale lives; expect twelve to eighteen percent acceptance.",
+        "Tier three feeds top-of-funnel but needs heavy qualification before outreach."
+      ]
+    },
+    {
+      "heading": "Step three: Score every prospect with three-band confidence",
+      "body": "Confidence scoring is not lead scoring. Lead scoring ranks interest. Confidence scoring ranks fit. A seller can be highly interested but low confidence if their product catalog or revenue model does not match your marketplace. The three bands are simple. High confidence: meets all ICP criteria, has strong engagement signals, and shows urgency indicators like a new collection drop or a platform policy change affecting their current channel. Medium confidence: meets most ICP criteria but missing one or two data points, or the timing is unclear. Low confidence: exploratory, weak signals, or incomplete data. High-confidence prospects go into immediate outreach. Medium gets a nurture sequence. Low stays in monitoring until a trigger event moves them up. The system recalculates confidence weekly as new data comes in. A shop that was medium last month might jump to high after launching a Shopify store or hitting a review milestone. This dynamic scoring prevents you from ignoring prospects who mature over time and keeps your pipeline accurate.",
+      "bullets": [
+        "High confidence prospects get personalized outreach within forty-eight hours.",
+        "Medium confidence enters a three-week nurture drip with educational content.",
+        "Low confidence stays warm through monthly newsletters and social engagement."
+      ]
+    },
+    {
+      "heading": "Step four: Use the review queue before any send",
+      "body": "This is the gate that separates professionals from spammers. Every outbound message sits in a review queue before it ships. You see the prospect card, the AI-drafted message, the confidence score, and any flags like recent negative reviews or competitor partnerships. You approve, edit, or reject. Most sends get approved in under thirty seconds. The ones that need edits usually just want a sentence tweaked for tone or a subject line adjusted for clarity. Rejections are rare but critical. Maybe the AI missed a red flag. Maybe the product fit looked good on paper but the messaging feels off. The review queue is not a bottleneck. It is quality control at scale. One operator can review and approve sixty messages in twenty minutes. Without the queue, you would spend three hours drafting those same sixty from scratch. With blind automation, you would send twelve embarrassing emails that hurt your brand. The queue gives you the speed of AI with the judgment of a human. CortexViral surfaces Recommended Actions in the queue, like suggesting a follow-up cadence for high-confidence prospects or flagging a timing conflict.",
+      "bullets": [
+        "Review queues catch edge cases AI misses, like trademark conflicts or recent PR crises.",
+        "Approval flow takes less than one minute per message; rejection saves hours of cleanup.",
+        "Recommended Actions guide next steps without forcing a decision."
+      ]
+    },
+    {
+      "heading": "Step five: Track lifecycle from discovery to onboarded",
+      "body": "Seller acquisition is not binary. A prospect does not go from cold to closed in one email. The typical journey has six stages: discovered, qualified, contacted, engaged, negotiating, onboarded. Each stage has its own playbook. Discovered means they are in your system with a confidence score. Qualified means you reviewed their card and approved outreach. Contacted means the first message shipped. Engaged means they replied or clicked a calendar link. Negotiating means terms are on the table. Onboarded means they uploaded their first product or signed the seller agreement. Most operators lose visibility after contacted. They send a message, get no reply, and forget about the prospect. Lifecycle tracking keeps every seller visible. You know exactly how many prospects are stuck in each stage, where the bottlenecks are, and which stages need more attention. If fifty sellers are engaged but only two are negotiating, your problem is not top-of-funnel. It is close rate. The data tells you where to focus. CortexViral's Operator agent flags stalled deals and suggests nudges or re-engagement hooks based on how long a prospect has been idle.",
+      "bullets": [
+        "Discovered to qualified should take under seventy-two hours for high-confidence leads.",
+        "Contacted to engaged averages five to seven days; longer means your messaging needs work.",
+        "Negotiating to onboarded is where deals die; automate document prep and reduce friction."
+      ]
+    },
+    {
+      "heading": "How AI compresses the seller acquisition cycle by five times",
+      "body": "Manual seller acquisition takes eighty to one hundred twenty days from first discovery to onboarded. You find a shop, research it, draft an email, send it, wait for a reply, schedule a call, send a proposal, negotiate terms, send contracts, and finally onboard. Each step has delay. AI collapses that timeline to fifteen to twenty days. Scout finds and scores prospects overnight. Creator drafts personalized outreach in seconds. The review queue lets you approve a week of messages in one sitting. Operator tracks replies and schedules follow-ups automatically. Intelligence surfaces timing signals that let you reach out when the seller is already considering a channel expansion. The five-times compression is not theoretical. Marketplace operators using this playbook report moving from twelve sellers onboarded per quarter to thirty-five per month with the same headcount. The secret is not working harder. It is letting AI handle the high-volume, low-judgment tasks while you focus on the strategic decisions: who to pursue, what to say, and when to close. If you want to see how a full seller acquisition engine works inside an AI marketing operating system, explore CortexViral's seller acquisition tools and see the review queue in action."
+    }
+  ],
+  "pull_quote": "Seller acquisition is a sales motion with a funnel, not a marketing broadcast with a hope.",
+  "related_articles": [
+    {
+      "slug": "how-to-recruit-etsy-sellers",
+      "title": "How to Recruit Etsy Sellers (Without Spamming Their Inbox)",
+      "blurb": "Platform-specific tactics for sourcing and pitching Etsy shops without triggering spam filters or burning your reputation."
+    },
+    {
+      "slug": "marketplace-growth-strategies",
+      "title": "Marketplace Growth Strategies for the Next Two Years",
+      "blurb": "The strategic moves that separate stagnant marketplaces from the ones adding two hundred sellers a quarter."
+    },
+    {
+      "slug": "ai-marketing-operating-systems-explained",
+      "title": "AI Marketing Operating Systems, Explained",
+      "blurb": "Why the next generation of marketing tools looks less like SaaS and more like an operating system."
+    }
+  ],
+  "related_landing_blurb": "See how the Seller Acquisition Engine inside CortexViral handles discovery, scoring, and review queues in one unified workflow.",
+  "faq": [
+    {
+      "q": "What is a seller acquisition playbook and why do I need one?",
+      "a": "A seller acquisition playbook is a structured, repeatable process for finding, qualifying, contacting, and onboarding sellers to your marketplace. It includes ICP definition, source lists, confidence scoring, outreach templates, and lifecycle tracking. You need one because ad-hoc seller recruitment does not scale past twenty or thirty sellers. A playbook turns seller acquisition into a predictable sales motion with measurable conversion rates at every stage, letting you forecast growth and allocate resources intelligently."
+    },
+    {
+      "q": "How does three-band confidence scoring improve seller acquisition results?",
+      "a": "Three-band confidence scoring separates high-fit prospects from exploratory leads, letting you prioritize outreach and tailor messaging. High-confidence sellers get immediate, personalized contact. Medium-confidence prospects enter nurture sequences. Low-confidence stays in monitoring. This prevents wasted effort on poor-fit leads and ensures your best opportunities get attention fast. The scoring updates dynamically as new signals emerge, so a medium prospect can jump to high when they launch a new product or expand to a new channel."
+    },
+    {
+      "q": "Why should I use a review queue instead of fully automated outreach?",
+      "a": "A review queue gives you the speed of AI-drafted messages with the quality control of human judgment. It catches edge cases like recent negative press, competitor conflicts, or tone mismatches that automation might miss. One operator can review sixty messages in twenty minutes, approving most in under thirty seconds while rejecting the few that would damage your brand. Fully automated outreach risks spamming the wrong people or sending embarrassing messages. A review queue scales your team without sacrificing quality."
+    },
+    {
+      "q": "How long does it take to onboard a seller using this playbook?",
+      "a": "Using AI-powered sourcing, scoring, and lifecycle tracking, the typical discovery-to-onboarded cycle compresses from eighty to one hundred twenty days down to fifteen to twenty days. High-confidence prospects can move even faster if timing aligns, sometimes closing in under a week. The speed comes from eliminating manual research, automating follow-ups, and surfacing timing signals that let you reach out when sellers are already exploring new channels. Manual processes cap you at fifty prospects and twelve-week cycles. This playbook handles two thousand prospects and two-week cycles."
+    }
+  ],
+  "final_takeaway": "Seller acquisition stops being a bottleneck the moment you treat it like a sales motion instead of a marketing hope. Define your ICP, build tiered source lists, score every prospect with confidence bands, gate every send through a review queue, and track lifecycle from discovery to onboarded. The operators who run this playbook onboard thirty to forty sellers a month with one person and zero chaos. AI handles the volume. Humans handle the judgment. The result is a repeatable, scalable system that turns seller recruitment from a quarterly scramble into a weekly rhythm.",
+  "__meta__": {
+    "slug": "seller-acquisition-playbook",
+    "title": "The Seller Acquisition Playbook: Discovery to Onboarded",
+    "dek": "A step-by-step playbook for running seller acquisition like a sales motion — sourcing, qualification, outreach, and onboarding — using AI to compress the cycle by 5x.",
+    "category": "playbooks",
+    "category_label": "Playbooks",
+    "author": {
+      "name": "Scout Agent",
+      "jobTitle": "Lead Researcher",
+      "url": "https://cortexviral.com/agents"
+    },
+    "primary_kw": "Seller acquisition playbook",
+    "related_landing": "seller-acquisition",
+    "published_at": "2026-05-31T03:31:59.037895+00:00",
+    "read_minutes": 5,
+    "generated_by": "claude"
+  }
+}

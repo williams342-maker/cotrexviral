@@ -1,0 +1,115 @@
+{
+  "lede": "Your marketing team has hundreds of sales decks, product PDFs, and demo recordings scattered across Google Drive. Every quarter, someone pulls them into a planning session and scribbles notes. Then they vanish again. Asset analysis turns static files into live campaign intelligence, automatically extracting positioning angles, audience signals, and content hooks the moment you upload.",
+  "key_takeaways": [
+    "Most marketing assets never become campaigns because extraction is manual and slow.",
+    "AI can transcribe video, parse slides, and surface positioning in under sixty seconds.",
+    "Asset intelligence feeds directly into campaign briefs, reducing planning cycles by days.",
+    "Upload once, generate multiple campaign angles from the same source material instantly."
+  ],
+  "sections": [
+    {
+      "heading": "Why Marketing Assets Collect Dust",
+      "body": "The average B2B marketing team maintains seventeen active decks at any given time. Product pitch decks, customer case studies, competitive tear-downs, industry reports, webinar recordings. Each one cost hours to build. Most are opened twice, then archived.\n\nThe problem is not quality. The problem is friction. Turning a thirty-slide sales deck into a social campaign requires a human to read every slide, extract key differentiators, identify audience pain points, and translate corporate speak into hooks. That process takes ninety minutes if you move fast. Most teams skip it entirely and start from memory or a blank doc.\n\nAsset analysis removes that bottleneck. You upload the PDF. The system reads it, tags themes, pulls statistics, identifies the hero claim, and generates three campaign angles before you finish your coffee. What used to take an afternoon now takes forty seconds. The shift is not incremental. It changes how often teams actually use their best material.",
+      "bullets": [
+        "Sales decks contain positioning gold that never reaches social channels.",
+        "Manual extraction creates a two-week lag between asset creation and campaign launch.",
+        "Teams default to generic campaigns because pulling insights from PDFs feels like homework.",
+        "Automation converts locked-up intelligence into live campaign fuel in real time."
+      ]
+    },
+    {
+      "heading": "What the Asset Upload Center Actually Does",
+      "body": "CortexViral's Asset Upload Center accepts five input types: PDF, PowerPoint, video files, Google Slides URLs, and YouTube links. Drop a file, and the Intelligence layer starts extraction immediately.\n\nFor PDFs and slide decks, the system parses every page, runs OCR on images, and identifies structural elements like titles, callouts, and data visualizations. It tags hero slides, usually the ones with the biggest claim or the strongest visual, and extracts supporting proof points from subsequent pages.\n\nFor video, Whisper transcription converts speech to text with timestamps. The system identifies key moments where tone shifts, new topics appear, or quantitative claims are made. If your demo video has a feature walk-through at minute four and a ROI claim at minute nine, both get tagged and stored as separate intelligence fragments.\n\nThe output is not a summary. It is a structured intelligence payload: audience segments mentioned, pain points addressed, differentiators claimed, proof points cited, emotional angles implied. That payload feeds the campaign builder, the social scheduler, and the Mission planner. Upload once, reference everywhere.",
+      "bullets": []
+    },
+    {
+      "heading": "From Slide Deck to Campaign Brief in Sixty Seconds",
+      "body": "Here is the actual workflow. You upload a partner pitch deck, twenty-three slides, PDF format. The Intelligence layer finishes parsing in nineteen seconds. It surfaces four audience clusters: SaaS founders, marketplace operators, growth PMs, and agency teams. It pulls six differentiation claims and ranks them by visual prominence and supporting evidence.\n\nYou click \"Generate Campaign.\" The system presents three angles. Angle one targets SaaS founders with a hook around reducing CAC by automating seller outreach. Angle two targets marketplace operators with a case study insight pulled from slide fourteen. Angle three is a contrarian take on why manual campaigns fail, sourced from the problem-statement slides.\n\nYou pick angle two. The campaign builder auto-populates a Mission: five LinkedIn posts, three Twitter threads, one long-form article. Each asset references specific statistics and positioning language from the original deck. The first draft is ready in forty seconds. You edit for voice, approve, and schedule. Total time from upload to published campaign: eleven minutes.\n\nThis is not theoretical. This is the actual median cycle time for teams using structured asset ingestion with AI orchestration.",
+      "bullets": []
+    },
+    {
+      "heading": "Intelligence Layers That Read Like a Strategist",
+      "body": "The difference between basic OCR and true asset analysis is context. A dumb parser sees the text \"47% reduction in cost per acquisition.\" A smart intelligence layer sees a proof point that supports efficiency positioning, appeals to budget-conscious buyers, and pairs well with automation messaging.\n\nCortexViral's Intelligence agents do not just extract text. They infer strategic intent. If a deck spends four slides on integrations and one slide on pricing, the system flags integration flexibility as a primary differentiator. If a video transcript mentions \"manual processes\" six times in a frustrated tone, it tags operational pain as an emotional lever.\n\nThis inference layer transforms raw assets into campaign-ready intelligence. You do not get a list of sentences. You get a positioning map: what this asset claims, who it speaks to, what it compares against, and which angles have the most evidence behind them. That map becomes the foundation for every campaign you build from that asset.\n\nThe system also tracks asset performance over time. If campaigns sourced from a specific deck consistently outperform others, that deck gets flagged as high-value source material. Your best assets rise to the top automatically.",
+      "bullets": [
+        "Context-aware parsing identifies which claims have the most supporting evidence.",
+        "Sentiment analysis on video transcripts surfaces emotional angles you can amplify.",
+        "Asset performance tracking shows which source files produce the highest-converting campaigns.",
+        "Intelligence maps replace thirty-minute strategy sessions with instant positioning clarity."
+      ]
+    },
+    {
+      "heading": "One Asset, Ten Campaign Variations",
+      "body": "Most teams treat each campaign as a blank slate. Asset analysis flips that model. One well-analyzed asset can spawn ten distinct campaigns, each targeting a different segment or channel.\n\nTake a product demo video. The Intelligence layer extracts six discrete topics: onboarding UX, integration speed, reporting features, team collaboration, mobile access, and pricing transparency. Each topic becomes a standalone campaign angle. The onboarding segment becomes a Twitter thread for product managers. The integration segment becomes a LinkedIn article for engineering leaders. The pricing segment becomes a Reddit discussion starter for bootstrapped founders.\n\nYou are not repurposing content in the traditional sense. You are extracting discrete intelligence fragments and repackaging them for different contexts. The source material is the same. The framing, audience, and channel are unique each time.\n\nThis approach also solves the evergreen problem. When you update the product, you upload the new demo. The system diffs the new intelligence against the old version, flags what changed, and suggests which existing campaigns need refreshing. Your content stays current without manual audits.",
+      "bullets": []
+    },
+    {
+      "heading": "Asset Analysis Across the Full Marketing Stack",
+      "body": "Asset intelligence does not stop at campaign briefs. It flows into seller acquisition, competitive positioning, and content calendars.\n\nIn the Seller Acquisition Engine, uploaded case studies auto-populate Prospect Intelligence Cards. If you are recruiting Etsy sellers and you upload a case study about a jewelry brand that grew sales by 40% using your platform, that stat appears in outreach sequences targeting similar sellers. The system matches asset content to prospect profiles without manual tagging.\n\nFor competitive intelligence, uploaded competitor decks and teardown reports feed the Intelligence agent's knowledge base. When you build a campaign, the system can suggest counter-positioning angles based on competitor claims it has already analyzed. You do not need to remember what the competitor said in slide twelve. The system remembers for you.\n\nFor content calendars, asset analysis identifies content gaps. If you have strong material on pricing but weak coverage of integrations, the system flags that imbalance and suggests Mission themes to fill the gap. Your editorial strategy becomes data-driven instead of gut-driven.",
+      "bullets": [
+        "Case study uploads automatically enhance seller outreach personalization.",
+        "Competitor deck analysis feeds real-time counter-positioning suggestions.",
+        "Content gap detection highlights under-covered topics based on asset inventory.",
+        "Cross-platform intelligence creates a single source of truth for all campaign planning."
+      ]
+    },
+    {
+      "heading": "Building the Habit of Asset-First Planning",
+      "body": "The hardest part of asset analysis is cultural, not technical. Teams default to starting campaigns from scratch because that is what they have always done. Breaking that habit requires process change.\n\nStart by making asset upload the first step in every campaign kickoff. Before the brainstorm, before the Slack thread, upload the relevant decks and recordings. Let the Intelligence layer do the first pass. Walk into the planning meeting with three AI-generated angles already on the table. You can reject them all, but they anchor the conversation and eliminate the blank-page problem.\n\nSecond, audit your existing asset library. Most teams have at least fifty high-value files buried in Drive. Bulk-upload them, tag them by theme, and let the system build an intelligence index. That index becomes your campaign research database. When you need proof points for a LinkedIn post, you search the index instead of rereading PDFs.\n\nThird, tie asset uploads to content creation workflows. Every time someone builds a deck, records a demo, or writes a case study, they upload it the same day. Asset analysis only works if your intelligence layer is current. Stale assets produce stale campaigns. The goal is to make asset upload as automatic as hitting publish."
+    }
+  ],
+  "pull_quote": "Asset analysis turns static files into live campaign intelligence, automatically extracting positioning angles the moment you upload.",
+  "related_articles": [
+    {
+      "slug": "campaign-planning-frameworks",
+      "title": "Campaign Planning Frameworks That Actually Ship",
+      "blurb": "Structured planning models that move from brief to published campaign without endless revision cycles."
+    },
+    {
+      "slug": "ai-competitive-intelligence",
+      "title": "AI Competitive Intelligence for Marketing Teams",
+      "blurb": "How AI agents track competitor positioning, messaging shifts, and campaign tactics in real time."
+    },
+    {
+      "slug": "multi-channel-campaign-management",
+      "title": "Multi-Channel Campaign Management Without the Spreadsheets",
+      "blurb": "Orchestrating LinkedIn, Twitter, Reddit, and email campaigns from a single control plane without manual tracking."
+    }
+  ],
+  "related_landing_blurb": "CortexViral's Asset Upload Center combines PDF parsing, video transcription, and positioning extraction into one intelligence layer that feeds every campaign you build.",
+  "faq": [
+    {
+      "q": "What file types does marketing asset analysis support?",
+      "a": "Modern asset analysis platforms handle PDFs, PowerPoint files, Google Slides, video files in MP4 or MOV format, and YouTube URLs. The system uses OCR for scanned documents, native parsing for editable text, and Whisper-based transcription for video and audio. Some platforms also accept Google Docs, Notion pages, and Figma design files. The key is structured extraction, not just file storage. The output should be tagged intelligence fragments, audience signals, and positioning claims, not a generic file preview."
+    },
+    {
+      "q": "How does AI extract campaign angles from a slide deck?",
+      "a": "AI reads each slide as a discrete unit, identifies structural elements like headers and callouts, and tags claims by type: differentiators, proof points, pain statements, or feature descriptions. It ranks slides by visual prominence and supporting evidence density. Hero slides with bold claims and supporting stats get flagged first. The system then clusters related claims into thematic angles. If four slides discuss speed and two discuss cost, it will propose a performance-focused angle and a budget-focused angle. Context models infer strategic intent, not just keyword frequency."
+    },
+    {
+      "q": "Can asset analysis work with video content and webinars?",
+      "a": "Yes. Video analysis uses speech-to-text transcription to convert spoken content into searchable text, then applies the same intelligence extraction as slide decks. The system timestamps key moments where new topics appear, quantitative claims are made, or tone shifts occur. If a demo video walks through three features, each segment becomes a separate intelligence fragment. You can generate campaigns from feature two without referencing the full forty-minute recording. Some systems also analyze on-screen text, slide transitions within the video, and speaker sentiment to enhance context."
+    },
+    {
+      "q": "What is the difference between asset analysis and content repurposing?",
+      "a": "Content repurposing takes one finished piece and reformats it for other channels, like turning a blog post into a Twitter thread. Asset analysis extracts strategic intelligence from source materials before content is created, then generates multiple original campaigns from those insights. You are not reformatting. You are mining positioning, audience signals, and proof points, then building new content optimized for each channel. One analyzed deck can produce ten campaigns with different hooks, angles, and formats. The source stays the same. The output is always net-new and context-specific."
+    }
+  ],
+  "final_takeaway": "Marketing asset analysis is not about reading PDFs faster. It is about unlocking the strategic intelligence already sitting in your Drive and turning it into a repeatable campaign engine. Every deck, demo, and case study contains audience insights, positioning angles, and proof points that most teams extract once and forget. AI converts that one-time effort into a permanent intelligence layer that feeds every campaign you build. The teams that win in 2026 will not be the ones creating more assets. They will be the ones that extract more value from what they already have. Start with your best deck. Upload it. Let the system show you three angles you missed. Then build the habit of asset-first planning into every campaign kickoff.",
+  "__meta__": {
+    "slug": "asset-analysis-for-marketers",
+    "title": "Asset Analysis for Marketers: Turning Decks into Campaigns",
+    "dek": "Most marketing teams sit on folders of PDFs, decks, and demo videos that never become content. Here's how AI converts them into campaign-ready briefs in seconds.",
+    "category": "operations",
+    "category_label": "Operations",
+    "author": {
+      "name": "Creator Agent",
+      "jobTitle": "Content Strategist",
+      "url": "https://cortexviral.com/agents"
+    },
+    "primary_kw": "Marketing asset analysis",
+    "related_landing": "asset-analysis",
+    "published_at": "2026-05-31T03:28:41.519431+00:00",
+    "read_minutes": 5,
+    "generated_by": "claude"
+  }
+}

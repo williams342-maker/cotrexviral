@@ -45,6 +45,17 @@ SEO_LANDING_PATHS = [
     ("/tiktok-marketing-ai", "0.85", "weekly"),
     # ----- Insights (SEO blog index) -----
     ("/insights", "0.85", "weekly"),
+    # ----- /insights articles (10 seed posts) -----
+    ("/insights/how-to-recruit-etsy-sellers",              "0.7", "monthly"),
+    ("/insights/ai-marketing-operating-systems-explained", "0.7", "monthly"),
+    ("/insights/reddit-marketing-automation",              "0.7", "monthly"),
+    ("/insights/marketplace-growth-strategies",            "0.7", "monthly"),
+    ("/insights/campaign-planning-frameworks",             "0.7", "monthly"),
+    ("/insights/ai-competitive-intelligence",              "0.7", "monthly"),
+    ("/insights/social-media-automation-guide",            "0.7", "monthly"),
+    ("/insights/asset-analysis-for-marketers",             "0.7", "monthly"),
+    ("/insights/multi-channel-campaign-management",        "0.7", "monthly"),
+    ("/insights/seller-acquisition-playbook",              "0.7", "monthly"),
     # ----- Existing programmatic tool pages -----
     ("/ai-tiktok-post-generator", "0.9", "weekly"),
     ("/viral-content-ideas-generator", "0.9", "weekly"),

@@ -1,0 +1,129 @@
+{
+  "lede": "Most marketing teams treat competitive intelligence like a quarterly fire drill. They scramble before a board meeting, dump twelve tabs into a slide, and then ignore the dashboard for the next eighty days. The teams winning their categories run it weekly. With AI, they run it Mondays at 6 a.m. before anyone is even at their desk.",
+  "key_takeaways": [
+    "Run a competitive sweep every week, not every quarter — pace beats depth.",
+    "Track three signals: assortment, pricing, and engagement velocity.",
+    "Most dashboards rot because they ask for analysis instead of action.",
+    "Every report should end in three concrete moves for next week."
+  ],
+  "sections": [
+    {
+      "heading": "What AI competitive intelligence actually means",
+      "body": "AI competitive intelligence is the practice of letting agents do the data plumbing so your team can focus on judgment. The agent crawls competitor storefronts, reads their pricing pages, watches their social cadence, and surfaces a ranked list of what changed week over week. You walk in on Monday with a one-page brief and three concrete decisions to make. That is the entire shift. The old workflow had an analyst spending two days a month dumping screenshots into a deck nobody read. The new workflow has Cortex running the sweep every Sunday night and delivering a sharpened brief by 6 a.m. The work itself is not new. The cadence is. When intelligence shows up weekly instead of quarterly, you start noticing trends three months before your competitors do.",
+      "bullets": [
+        "Agents crawl public storefronts, pricing pages, and social profiles",
+        "Sweeps run on a schedule, not when someone remembers to ask",
+        "Output is a 1-page brief, not a 60-tab spreadsheet"
+      ]
+    },
+    {
+      "heading": "The three signals that matter (and the ten that don't)",
+      "body": "Founders fall into a trap of tracking everything. They wire up dashboards for follower count, share of voice, ad-library counts, hiring posts, podcast appearances, and twelve other vanity metrics. None of those signals predict what your competitors will do next quarter. Three signals do. Assortment tells you what they are betting on this season. Pricing tells you where they think the market will tolerate movement. Engagement velocity, measured as comments per post divided by follower base, tells you whether their content is actually working. If a competitor adds twelve new SKUs in a category, drops prices by 8 percent, and posts about it three times with 4x their normal engagement, you can predict their next move. The rest is noise. CortexViral's Intelligence team tracks those three signals across your top five competitors automatically and ignores the rest by default.",
+      "bullets": [
+        "Assortment shifts → strategic bets",
+        "Pricing shifts → margin and positioning signals",
+        "Engagement velocity → does their content actually convert"
+      ]
+    },
+    {
+      "heading": "Why most competitor dashboards rot",
+      "body": "The first time you set up a competitor dashboard, you spend a week wiring it. The second week you check it twice. By month two you have not opened it in twenty days. The reason is simple. Dashboards ask you to do analysis. You arrive, look at five charts, try to remember what was different last week, and form an interpretation. That is cognitive work, and it competes with every other thing on your calendar. So the dashboard loses. The fix is to move the work upstream. Have the system produce a written brief instead of a chart wall. The brief should answer three questions every week. What changed. What it probably means. What you should consider doing about it. When the deliverable is a paragraph instead of a graph, your team actually reads it. CortexViral generates exactly that brief, every Monday at 6 a.m., delivered to whoever owns competitive strategy.",
+      "bullets": [
+        "Dashboards demand interpretation; briefs deliver it",
+        "Written analysis gets read; chart walls do not",
+        "Brief format forces a recommendation, not just an observation"
+      ]
+    },
+    {
+      "heading": "The 1-page brief format we use",
+      "body": "Every CortexViral competitor brief follows the same one-page structure, and that consistency is what makes it actionable. The top half is the changes. The bottom half is the recommendation. The top opens with three sentences summarizing the most significant move any competitor made this week. Then it lists every competitor with a two-line summary of their week. Assortment changes, pricing changes, engagement velocity changes, and a confidence score the Intelligence team assigns based on how strong the signal is. The bottom half is the part that makes the brief worth reading. Three concrete moves for next week. Not strategic platitudes. Actual decisions. 'Test a 15 percent price reduction on these four SKUs.' 'Launch a Reels series mirroring competitor X's hook angle.' 'Add three SKUs in the gap competitor Y is opening.' If your competitive intelligence report ends in three concrete actions, it has done its job. If it ends in 'continue monitoring,' it has not.",
+      "bullets": [
+        "Top half: what changed and how confident we are",
+        "Bottom half: three concrete moves for next week",
+        "No 'continue monitoring' — every brief ships a decision"
+      ]
+    },
+    {
+      "heading": "How to set up your weekly sweep in CortexViral",
+      "body": "Setting up competitive intelligence inside CortexViral takes about ten minutes. You add competitors to the watchlist by pasting their URLs. The Intelligence team identifies their storefront pages, pricing pages, and primary social profiles automatically. You pick the cadence (weekly is the default and what we recommend) and the brief is added to your Mission Dashboard. Every Sunday night, agents do the sweep. Every Monday morning, the Recommended Action surfacing on your Mission Dashboard shows you the highest-leverage move the Intelligence team identified. You can launch it as a mission with one click, route it to the Operator team for execution, or dismiss it if the signal does not match your strategy. The whole loop runs without you scheduling a meeting or opening a spreadsheet. That is the operating system difference. The work happens whether or not you remember to ask for it.",
+      "bullets": [
+        "Paste competitor URLs → watchlist populated in seconds",
+        "Weekly cadence is the default; daily and biweekly available",
+        "Top recommendation surfaces on the Mission Dashboard automatically"
+      ]
+    },
+    {
+      "heading": "Common mistakes that kill competitive intelligence programs",
+      "body": "The first mistake is tracking too many competitors. Five is the magic number. Beyond five, signal-to-noise collapses and your team starts ignoring the brief. Pick your three closest market competitors and two aspirational benchmarks. The second mistake is treating the brief as research instead of decisions. If your team reads the brief and goes back to their normal work, the brief failed. The brief should generate at least one experiment a month. The third mistake is hoarding the brief. Competitive intelligence is most valuable when product, marketing, and sales all see it. Share the Monday brief in the company-wide channel. The fourth mistake is reacting to every move. Just because a competitor lowered prices does not mean you should. The brief is a starting point for discussion, not a script. Pick your battles. Skip 60 percent of the moves the brief surfaces. Execute the other 40 percent fast.",
+      "bullets": [
+        "Five competitors max — three peers, two aspirations",
+        "Every brief should generate at least one experiment",
+        "Share the brief company-wide on Monday mornings"
+      ]
+    },
+    {
+      "heading": "What this unlocks at scale",
+      "body": "When competitive intelligence runs on a weekly drumbeat, three things shift. Your launch cycle compresses because you stop debating moves you have already analyzed. Your assortment decisions get sharper because you can see exactly which categories competitors are betting on. Your content team starts winning more weeks because they know which hook angles are working in your category right now. The teams running this loop for six months tell us the same thing. They stop being surprised. A competitor launches something on Tuesday, and they already saw the assortment signal three weeks prior. They have a response in market by Friday. Competitive advantage compounds when you run on a faster intelligence cycle than your rivals. AI just makes that cycle cheap enough to run weekly without burning out an analyst.",
+      "bullets": [
+        "Compressed launch cycles — decisions are pre-analyzed",
+        "Sharper assortment bets",
+        "Content team wins more weeks"
+      ]
+    }
+  ],
+  "pull_quote": "When intelligence shows up weekly instead of quarterly, you start noticing trends three months before your competitors do.",
+  "related_articles": [
+    {
+      "slug": "marketplace-growth-strategies",
+      "title": "Marketplace Growth Strategies for the Next Two Years",
+      "blurb": "The supply-side flywheels that defensible marketplaces run, and how AI is changing the seller-acquisition math."
+    },
+    {
+      "slug": "campaign-planning-frameworks",
+      "title": "Campaign Planning Frameworks That Actually Ship",
+      "blurb": "Why most campaign plans never launch and the lightweight frameworks we use to compress brief to live."
+    },
+    {
+      "slug": "multi-channel-campaign-management",
+      "title": "Multi-Channel Campaign Management Without the Spreadsheets",
+      "blurb": "Coordinating a launch across six channels used to mean a 200-row tracking sheet — one mission card replaces it."
+    }
+  ],
+  "related_landing_blurb": "See how the Intelligence team runs your weekly competitor sweep and surfaces three concrete moves on the Mission Dashboard.",
+  "faq": [
+    {
+      "q": "What is AI competitive intelligence?",
+      "a": "AI competitive intelligence uses agents to crawl public storefronts, pricing pages, and social profiles of your top competitors on a recurring schedule, then synthesizes the findings into a written brief with concrete recommendations. The shift from older approaches is automation of the data plumbing combined with structured outputs. Instead of an analyst manually compiling screenshots once a quarter, the loop runs weekly and delivers a one-page brief with three concrete moves for the team to execute. The work is the same; the cadence is what creates the advantage."
+    },
+    {
+      "q": "How often should you run competitor analysis?",
+      "a": "Weekly is the sweet spot for most marketing teams. Daily is too noisy and creates analysis fatigue. Quarterly is too slow because competitors can ship two or three product launches in a quarter and you would catch them after the fact. Weekly gives you enough lag time to spot patterns without overwhelming the team with raw data. CortexViral's Intelligence team runs the sweep every Sunday night and delivers the brief by Monday at 6 a.m., which is the cadence we recommend by default."
+    },
+    {
+      "q": "What signals matter most in competitor analysis?",
+      "a": "Three signals predict competitive moves: assortment shifts, pricing shifts, and engagement velocity. Assortment tells you what categories competitors are betting on. Pricing tells you where they think the market will tolerate movement. Engagement velocity, measured as comments per post divided by follower base, tells you whether their content is actually converting. Everything else (follower counts, ad-library entries, hiring posts) is noise unless you have a specific hypothesis. Start with the three and add more only if you can articulate why a fourth signal would change a decision."
+    },
+    {
+      "q": "How do you turn a competitor brief into action?",
+      "a": "Every brief should end in exactly three concrete moves for the next week. Not 'continue monitoring' and not 'investigate further.' Actual decisions. 'Test a 15 percent price reduction on these four SKUs.' 'Launch a Reels series mirroring competitor X's hook.' 'Add three SKUs in the gap competitor Y is opening.' Then route the top move to whoever owns execution. Inside CortexViral, the top recommendation surfaces on the Mission Dashboard and can be launched as a mission with one click. Briefs that stop at observation are wasted briefs."
+    }
+  ],
+  "final_takeaway": "Competitive intelligence is one of those operational practices that sounds expensive until you realize the expense is mostly attention, not money. The teams winning their categories are not smarter than yours. They just run the intelligence loop on a weekly drumbeat instead of letting it slip to quarterly. AI makes that cadence cheap enough to sustain. The question is not whether you should run competitive intelligence. The question is whether you want it surfacing decisions every Monday morning, or whether you want to keep finding out about competitor moves three weeks after they ship.",
+  "__meta__": {
+    "slug": "ai-competitive-intelligence",
+    "title": "AI Competitive Intelligence for Marketing Teams",
+    "dek": "How to run a weekly competitor sweep with AI — what to track, what to ignore, and how to convert findings into next-week actions.",
+    "category": "intelligence",
+    "category_label": "Intelligence",
+    "author": {
+      "name": "Intelligence Agent",
+      "jobTitle": "Competitive Strategist",
+      "url": "https://cortexviral.com/agents"
+    },
+    "primary_kw": "AI competitive intelligence",
+    "related_landing": "competitor-analysis",
+    "published_at": "2026-02-28T03:00:00+00:00",
+    "read_minutes": 8,
+    "generated_by": "hand-authored"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "summary": "SEO Sprint v1 Round 4 (Insights blog) verified end-to-end. /insights index, all 10 article pages, JSON-LD schemas (Organization + Article + BreadcrumbList + FAQPage), category filtering, pagination, related-landing CTA, related-article card navigation, nonexistent-slug redirect, Back-to-Insights link, Footer Insights link, and sitemap.xml inclusion all PASS. JSON content files validated for required fields (lede, 4 key_takeaways, 6-7 sections, pull_quote, 3 related_articles, related_landing_blurb, 4 FAQs, final_takeaway, full __meta__).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "InsightsArticle reddit-marketing-automation",
+        "issues": [
+          "related_landing slug 'reddit-marketing-ai' is NOT in LANDING_TITLES dict inside InsightsArticle.jsx, so the related-landing CTA panel shows the generic fallback 'Explore the platform' title instead of a friendly title like 'Reddit Marketing AI'. Navigation to /reddit-marketing-ai still works because the route exists. Suggest adding {'reddit-marketing-ai': 'AI Reddit Growth Engine'} (or similar) to LANDING_TITLES."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Add 'reddit-marketing-ai' key to LANDING_TITLES dict in /app/frontend/src/pages/insights/InsightsArticle.jsx so the related-landing CTA on reddit-marketing-automation article shows a proper title instead of 'Explore the platform' fallback. Minor — does not block any flow."
+  ],
+  "critical_code_review_comments": [
+    "InsightsArticle.jsx LANDING_TITLES is hard-coded to 5 landing slugs but content allows more; consider sourcing the title from a shared registry or making the fallback smarter (Title-Case the slug).",
+    "All testid hygiene is excellent (data-testid coverage on every interactive/key element, including per-slug card and related-article ids). No issues.",
+    "InsightsIndex pagination correctly resets page to 1 on category change. Edge case verified for 'intelligence' (1 article -> 1 featured, no grid) — renders cleanly with no empty-grid layout glitch."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only request)", "frontend": "100%"},
+  "test_credentials": "None — public pages, no auth required",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Round 4 fully validated. All 10 article slugs render with 4 parseable JSON-LD blocks (Organization, Article, BreadcrumbList, FAQPage). Article schema has author.@type=Person, publisher.@type=Organization, datePublished, and mainEntityOfPage shapes per Google Article requirements. Sitemap at /api/seo/sitemap.xml includes /insights and all 10 article URLs. The only nitpick is the missing 'reddit-marketing-ai' entry in LANDING_TITLES (cosmetic only).",
+  "rca of the issue": "N/A — no critical bugs."
+}

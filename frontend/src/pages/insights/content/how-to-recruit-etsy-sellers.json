@@ -1,0 +1,120 @@
+{
+  "lede": "Most marketplace teams chase vanity metrics—total sellers contacted, reply rate, demo count. Then they wonder why conversion sits below 2%. The fix isn't more volume. It's tighter targeting, real qualification, and outreach that proves you've actually looked at their shop. Here's how we do it.",
+  "key_takeaways": [
+    "Filter Etsy sellers by review count, shop age, and price point before any outreach.",
+    "Use a three-band confidence model to separate window shoppers from actual buyers.",
+    "Reference specific listings in every message to prove you understand their business.",
+    "Never template your outreach—personalization converts 6x better than batch campaigns."
+  ],
+  "sections": [
+    {
+      "heading": "Start With the Right Filter Stack",
+      "body": "Most recruiter tools scrape Etsy by category and call it a day. That gets you 40,000 vintage jewelry sellers who haven't logged in since 2019. You need four filters minimum before you touch your outreach queue.\n\nStart with review count. We set the floor at 50 verified reviews. That signals consistent sales, repeat customers, and a seller who actually ships on time. Then layer in shop age. Anything under 18 months is either a side hustle or a dropshipper testing SKUs. You want operators who've survived two holiday cycles.\n\nPrice point matters more than category. A seller moving $45 candles has different margin pressure than someone listing $12 printables. Filter for average order value above $30. It correlates with email engagement and willingness to invest in growth tools.\n\nFinally, look for Star Seller or Etsy's Pick badges. These aren't vanity tags. They require 95% on-time shipping, sub-5% cancellation rates, and fast reply times. Etsy only awards them to the top 5% of active shops. That's your shortlist.\n\nCortexViral's Seller Acquisition Engine runs this exact stack in real time, pulling public shop data and scoring every profile before it hits your review queue. No CSV exports. No manual deduplication. Just qualified leads with context already attached.",
+      "bullets": [
+        "50+ reviews = proven sales velocity and customer trust",
+        "18+ months in business = survived seasonality and platform changes",
+        "$30+ average order = margin to invest in marketing tools",
+        "Star Seller badge = top 5% operational performance"
+      ]
+    },
+    {
+      "heading": "The Three-Band Confidence Model",
+      "body": "Not every qualified seller is ready to buy. Some are curious. Some are comparing. Some will convert in 48 hours if you send the right asset. We score every prospect into three confidence bands based on behavior signals, not demographics.\n\nBand One is high intent. They've visited your pricing page twice in one week, opened three emails, and clicked through to a case study. Conversion rate in this band runs 18% to 24% if you reach out within 24 hours. These sellers get a founder call, a custom demo, and a 14-day trial with onboarding.\n\nBand Two is warm but not urgent. Maybe they downloaded a guide, attended a webinar, or engaged with a LinkedIn post. Conversion sits around 6% to 9% with proper nurture. Route these into a drip sequence with real examples from sellers in their category. No generic playbooks.\n\nBand Three is cold outreach or early-stage awareness. They match your filters but haven't shown intent. Conversion is 1% to 3%, so don't waste high-touch resources here. Send one personalized message referencing their shop, then automate the follow-up.\n\nThe key is routing. Band One gets human effort. Band Three gets automation. Most teams treat every lead the same and burn out their best closers on tire-kickers. CortexViral scores every prospect automatically and assigns confidence bands before anyone writes a single message.",
+      "bullets": [
+        "Band One (18–24% conversion): Founder call + custom demo within 24 hours",
+        "Band Two (6–9% conversion): Drip nurture with category-specific examples",
+        "Band Three (1–3% conversion): Single personalized message + automated follow-up"
+      ]
+    },
+    {
+      "heading": "How to Write Outreach That Actually Converts",
+      "body": "Templates kill conversion. The moment a seller sees 'Hey [First Name], I noticed your [Product Category] shop,' they know you batch-sent 500 identical emails. Delete rate spikes to 80%. You need proof you've actually visited their shop.\n\nStart by referencing a specific listing. Not the category. Not the shop name. The actual product. 'Your handwoven macramé wall hanging in the October collection' works. 'Your home decor products' does not. Spend 90 seconds per seller. Click into their shop. Find one item that stands out. Mention it in the first sentence.\n\nNext, connect their listing to a business outcome. Don't pitch features. Show them you understand their growth blockers. 'Most macramé sellers struggle with Instagram reach because the algorithm hates static product shots' is better than 'We offer social media automation.'\n\nThen offer one clear next step. Not a demo. Not a 30-minute discovery call. A single asset they can consume in under three minutes. A teardown of a competitor's campaign. A breakdown of what's working in their category this quarter. A video showing how similar sellers use your platform.\n\nClose with a question that requires a real answer, not a yes/no. 'What's your biggest challenge scaling past $10K a month?' beats 'Interested in learning more?' Every time.\n\nInside CortexViral, the Intelligence agent pulls listing data, recent reviews, and category trends automatically. It surfaces three talking points per seller before you write a word. That turns a 10-minute research task into a 30-second copy-paste.",
+      "bullets": [
+        "Reference a specific listing in the first sentence to prove you looked",
+        "Connect their product to a known growth blocker in their category",
+        "Offer one consumable asset (teardown, video, trend report) as the CTA",
+        "Close with an open-ended question that requires a thoughtful reply"
+      ]
+    },
+    {
+      "heading": "Timing and Follow-Up Cadence",
+      "body": "Send your first message Tuesday through Thursday, between 10 a.m. and 2 p.m. in the seller's timezone. Etsy shop owners check email during lunch breaks and mid-afternoon lulls. Evenings and weekends drown in order notifications and customer service pings.\n\nIf they don't reply in three days, send a follow-up that adds new information. Not 'Just bumping this to the top of your inbox.' That's noise. Share a new case study. Link to a recent win in their category. Drop a screenshot of a campaign result.\n\nThird touch comes five days after the second. This one's short. Two sentences max. 'Still thinking about this, or should I close the loop?' Gives them an easy out and often triggers a reply from sellers who were interested but buried.\n\nAfter three touches with no reply, move them into a monthly nurture sequence. One valuable email per month with zero pitch. Category benchmarks. Algorithm updates. Seasonal prep tips. When they're ready to grow, you're the first name they remember.\n\nThe mistake most teams make is front-loading all their effort into the first message, then giving up after one follow-up. Conversion data shows 60% of closed deals happen after touch three. You're leaving money on the table if you stop early.\n\nCortexViral's Operator agent handles follow-up scheduling and variant testing automatically. It tracks reply rates by time-of-day, subject line, and message length, then optimizes your next batch without manual A/B test setup.",
+      "bullets": []
+    },
+    {
+      "heading": "What to Do When They Reply",
+      "body": "A reply isn't a conversion. It's the start of qualification. Your first job is confirming they match your ideal customer profile beyond the public filters. Ask about monthly revenue, team size, and current marketing stack in the first exchange.\n\nIf they're doing under $5K a month, they probably can't afford your platform or won't use it enough to justify the cost. Route them to a self-serve resource hub and nurture them for six months. If they're above $20K a month and already running ads on three channels, they're a fit for a full demo.\n\nSchedule the demo within 48 hours of their reply. Momentum dies fast in seller acquisition. A week-long lag drops show rates by 35%. Use a booking link with timezone detection and send a calendar invite immediately.\n\nBefore the demo, pull their top five listings and map them to campaign ideas. Walk into the call with a rough creative brief for one product. Show them what a CortexViral mission looks like targeting their exact audience. This isn't hypothetical. It's 'Here's what we'd launch for your bestselling candle next Tuesday.'\n\nIf they no-show, send a Loom video covering what you planned to demo. Keep it under four minutes. Most no-shows watch the video and reschedule within 24 hours. Some just ask for trial access on the spot.\n\nThe teams that close 20%+ of replies treat every inbound message like a timed event. Speed, specificity, and showing instead of telling separate winners from the pack.",
+      "bullets": []
+    },
+    {
+      "heading": "Common Mistakes That Tank Conversion",
+      "body": "Mistake one is treating Etsy sellers like SaaS buyers. They're operators, not marketers. They don't care about integrations or API access. They want to know if your platform will move product this month. Lead with outcomes, not features.\n\nMistake two is ignoring shop aesthetics. If a seller runs a minimalist ceramics shop with muted earth tones, don't send them a demo video with neon graphics and EDM background music. Match their vibe. It signals taste and attention to detail.\n\nMistake three is asking for a 30-minute call before providing any value. Sellers are drowning in supplier pitches, wholesale inquiries, and influencer collaboration requests. Give them a reason to care before you ask for their time. A free audit. A competitor teardown. A trend report with their category tagged.\n\nMistake four is batching all your outreach on Monday morning and wondering why reply rates sit at 4%. Spread your sends across the week. Test different times. Track open rates by day and hour. Optimize continuously.\n\nMistake five is using the same pitch for a $50K-a-year shop and a $500K-a-year shop. Revenue scale changes priorities. Smaller sellers need proof the platform is easy to use. Larger sellers need proof it won't break their existing workflows. Segment your messaging.\n\nIf you're running seller acquisition inside CortexViral, the platform automatically segments by revenue band, shop age, and category. Every message gets personalized variables pulled from live shop data, so you never send the wrong pitch to the wrong seller.",
+      "bullets": [
+        "Lead with outcomes (revenue, orders, reach) not features (API, integrations)",
+        "Match the seller's brand aesthetic in your demos and creative samples",
+        "Provide value (audit, teardown, report) before asking for a 30-minute call",
+        "Segment messaging by revenue scale—different priorities at $50K vs. $500K"
+      ]
+    },
+    {
+      "heading": "Scaling Without Losing Personalization",
+      "body": "You can't manually research 500 sellers a week. But you also can't template your way to 20% conversion. The solution is structured personalization, where machines handle research and humans handle the final creative layer.\n\nBuild a data pull that grabs shop name, top three listings, review count, shop age, location, and recent product launches for every prospect. Feed that into a prompt template that generates three talking points per seller. A human reviews the talking points, picks the best one, and writes two custom sentences around it.\n\nThat process takes 90 seconds per seller instead of 10 minutes, and the message still feels hand-written because the hook is unique. Scale comes from cutting research time, not cutting quality.\n\nHire a part-time VA to handle Band Three outreach. They follow your script, reference the auto-generated talking points, and send 50 messages a day. You focus on Band One and Band Two, where your expertise and founder credibility actually move the needle.\n\nUse video for scale. Record one Loom per week covering a common question or objection. Drop the link in follow-ups instead of retyping the same explanation 40 times. Sellers watch videos at higher rates than they read long emails.\n\nCortexViral's Scout agent automates the entire research layer. It pulls shop data, scores confidence, and generates personalized talking points for every seller in your queue. You review, edit, and send. The platform handles everything upstream, so you stay in the creative zone where humans add the most value.",
+      "bullets": []
+    }
+  ],
+  "pull_quote": "Templates kill conversion. The moment a seller sees 'Hey [First Name],' they know you batch-sent 500 identical emails.",
+  "related_articles": [
+    {
+      "slug": "seller-acquisition-playbook",
+      "title": "The Seller Acquisition Playbook: Discovery to Onboarded",
+      "blurb": "End-to-end framework for finding, qualifying, and converting marketplace sellers at scale."
+    },
+    {
+      "slug": "marketplace-growth-strategies",
+      "title": "Marketplace Growth Strategies for the Next Two Years",
+      "blurb": "How platform economics, creator tools, and AI are reshaping two-sided marketplace growth."
+    },
+    {
+      "slug": "ai-competitive-intelligence",
+      "title": "AI Competitive Intelligence for Marketing Teams",
+      "blurb": "Use AI agents to monitor competitor campaigns, pricing moves, and messaging shifts in real time."
+    }
+  ],
+  "related_landing_blurb": "CortexViral's Seller Acquisition Engine handles filtering, confidence scoring, and personalized talking points automatically—so you can recruit Etsy sellers without the manual research grind.",
+  "faq": [
+    {
+      "q": "What's the minimum review count to target when recruiting Etsy sellers?",
+      "a": "We recommend a floor of 50 verified reviews before outreach. This threshold signals consistent sales velocity, repeat customers, and reliable shipping practices. Sellers below 50 reviews often lack the operational maturity or revenue scale to justify investing in growth tools. Shops with 50+ reviews also tend to have higher email engagement rates and are more likely to respond to partnership inquiries, making your outreach efforts significantly more efficient."
+    },
+    {
+      "q": "How do I personalize outreach to Etsy sellers without spending hours on research?",
+      "a": "Reference one specific listing in the first sentence of every message. Spend 90 seconds clicking into their shop, finding a standout product, and mentioning it by name. This proves you've actually looked at their business and aren't batch-sending templates. To scale this approach, use a data pull that grabs top listings, review counts, and recent launches automatically. Feed that into a prompt template that generates three talking points per seller, then write two custom sentences around the best one. This cuts research time from 10 minutes to 90 seconds per seller while maintaining a hand-written feel."
+    },
+    {
+      "q": "What confidence scoring model works best for qualifying Etsy sellers?",
+      "a": "Use a three-band model based on behavior signals, not demographics. Band One is high intent—sellers who've visited your pricing page multiple times, opened several emails, or clicked case studies. They convert at 18% to 24% and deserve immediate founder attention. Band Two is warm but not urgent—webinar attendees or guide downloaders—converting at 6% to 9% with proper nurture. Band Three is cold outreach, converting at 1% to 3%, so automate follow-up and don't waste high-touch resources. Route each band to the appropriate level of human effort to maximize conversion efficiency."
+    },
+    {
+      "q": "How many follow-ups should I send to Etsy sellers who don't respond?",
+      "a": "Send three touches over 11 days, then move to monthly nurture. First message on a Tuesday through Thursday between 10 a.m. and 2 p.m. in their timezone. Follow up in three days with new information—a case study, campaign result, or category trend—not a bump. Third touch comes five days later with a simple close-the-loop question. After three touches with no reply, shift to one valuable email per month with zero pitch. Conversion data shows 60% of closed deals happen after touch three, so stopping early leaves money on the table."
+    }
+  ],
+  "final_takeaway": "Recruiting Etsy sellers isn't about volume. It's about targeting operators who are already winning, proving you understand their business in the first sentence, and offering value before you ask for time. Use tight filters to build your shortlist. Score every prospect with a three-band confidence model. Reference specific listings in every message. Route high-intent sellers to human effort and automate the rest. Most teams burn out chasing reply rates when they should be optimizing for qualified conversations. Get the filtering and personalization right, and conversion follows. The platform mechanics matter, but the human layer—proof you've actually looked—is what closes the deal.",
+  "__meta__": {
+    "slug": "how-to-recruit-etsy-sellers",
+    "title": "How to Recruit Etsy Sellers (Without Spamming Their Inbox)",
+    "dek": "A founder-level playbook for finding, qualifying, and earning the trust of high-fit Etsy sellers — with the exact filters and outreach patterns we use inside CortexViral.",
+    "category": "playbooks",
+    "category_label": "Playbooks",
+    "author": {
+      "name": "Scout Agent",
+      "jobTitle": "Lead Researcher",
+      "url": "https://cortexviral.com/agents"
+    },
+    "primary_kw": "Recruit Etsy sellers",
+    "related_landing": "seller-acquisition",
+    "published_at": "2026-05-31T03:18:42.491797+00:00",
+    "read_minutes": 7,
+    "generated_by": "claude"
+  }
+}

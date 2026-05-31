@@ -20,6 +20,8 @@ import {
   InstagramMarketingAI, FacebookMarketingAI, LinkedInMarketingAI,
   RedditMarketingAI, YouTubeMarketingAI, TikTokMarketingAI,
 } from './pages/platform-ai';
+import InsightsIndex from './pages/insights/InsightsIndex';
+import InsightsArticle from './pages/insights/InsightsArticle';
 import { BlogIndex, BlogPost } from './pages/blog/Blog';
 import AuthCallback from './pages/AuthCallback';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -125,6 +127,10 @@ function AppRouter() {
       <Route path="/reddit-marketing-ai" element={<RedditMarketingAI />} />
       <Route path="/youtube-marketing-ai" element={<YouTubeMarketingAI />} />
       <Route path="/tiktok-marketing-ai" element={<TikTokMarketingAI />} />
+
+      {/* Phase 7 — Insights blog */}
+      <Route path="/insights" element={<InsightsIndex />} />
+      <Route path="/insights/:slug" element={<InsightsArticle />} />
 
       <Route path="/tools/:slug" element={<NicheToolPage />} />
       <Route path="/blog" element={<BlogIndex />} />

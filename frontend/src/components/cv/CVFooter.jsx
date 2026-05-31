@@ -32,8 +32,8 @@ const companyLinks = [
   { label: 'Agents', to: '/agents' },
   { label: 'Pricing', to: '/pricing' },
   { label: 'Roadmap', to: '/roadmap' },
+  { label: 'Insights', to: '/insights' },
   { label: 'Blog', to: '/blog' },
-  { label: 'Dashboard', to: '/dashboard' },
 ];
 
 const CVFooter = () => {
