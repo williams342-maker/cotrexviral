@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Loader2, Trash2, ShieldAlert, User as UserIcon, Mail, Crown, Sparkles, Gift, ExternalLink, KeyRound, Eye, EyeOff, AlertCircle, CheckCircle2, LogOut, PauseCircle, Monitor } from 'lucide-react';
+import { Loader2, Trash2, ShieldAlert, User as UserIcon, Mail, Crown, Sparkles, Gift, ExternalLink, KeyRound, Eye, EyeOff, AlertCircle, CheckCircle2, LogOut, PauseCircle, Monitor, Brain, Pin, PinOff, Search } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useAuth, API } from '../../context/AuthContext';
 import { useToast } from '../../hooks/use-toast';
@@ -765,6 +765,275 @@ function CortexPreferencesSection() {
           })}
         </div>
       </div>
+    </section>
+  );
+}
+
+
+// ---------------------------------------------------------------------
+// <CortexMemorySection /> — Account Settings → Cortex Memory.
+// Surfaces what Cortex has stored about this user (strategy summary +
+// the last N conversation turns from cortex_memory_v2), lets the user
+// pin important turns so they survive the per-user cap pruner, delete
+// individual turns, and nuke everything.
+// ---------------------------------------------------------------------
+function CortexMemorySection() {
+  const { toast } = useToast();
+  const [strategy, setStrategy] = useState(null);
+  const [items, setItems] = useState([]);
+  const [stats, setStats] = useState({ total_stored: 0, pinned_count: 0 });
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState('');
+  const [showWipe, setShowWipe] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const searchTimer = useRef(null);
+
+  const load = async (query = '') => {
+    setLoading(true);
+    try {
+      const [memR, stratR] = await Promise.all([
+        axios.get(`${API}/cortex/memory/me`,
+                   { params: { limit: 50, q: query }, withCredentials: true }),
+        axios.get(`${API}/cortex/memory/strategy`,
+                   { withCredentials: true }),
+      ]);
+      setItems(memR.data?.items || []);
+      setStats({
+        total_stored: memR.data?.total_stored || 0,
+        pinned_count: memR.data?.pinned_count || 0,
+      });
+      setStrategy(stratR.data || null);
+    } catch (e) {
+      toast({ title: "Couldn't load memory",
+              description: e?.response?.data?.detail || e.message,
+              variant: 'destructive' });
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(''); /* initial */ }, []);
+
+  // Debounced search — 350ms after last keystroke.
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => { load(q); }, 350);
+    return () => clearTimeout(searchTimer.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
+
+  const togglePin = async (turn, next) => {
+    setBusyId(turn.id);
+    try {
+      await axios.post(`${API}/cortex/memory/pin/${turn.id}`,
+                          { pinned: next }, { withCredentials: true });
+      setItems((prev) => prev.map((t) =>
+        t.id === turn.id ? { ...t, pinned: next } : t));
+      setStats((s) => ({
+        ...s, pinned_count: s.pinned_count + (next ? 1 : -1),
+      }));
+    } catch (e) {
+      toast({ title: "Couldn't update pin",
+              description: e?.response?.data?.detail || e.message,
+              variant: 'destructive' });
+    } finally { setBusyId(null); }
+  };
+
+  const removeOne = async (turn) => {
+    setBusyId(turn.id);
+    try {
+      await axios.delete(`${API}/cortex/memory/turn/${turn.id}`,
+                            { withCredentials: true });
+      setItems((prev) => prev.filter((t) => t.id !== turn.id));
+      setStats((s) => ({
+        total_stored: Math.max(0, s.total_stored - 1),
+        pinned_count: Math.max(0, s.pinned_count - (turn.pinned ? 1 : 0)),
+      }));
+    } catch (e) {
+      toast({ title: "Couldn't delete",
+              description: e?.response?.data?.detail || e.message,
+              variant: 'destructive' });
+    } finally { setBusyId(null); }
+  };
+
+  const wipeAll = async () => {
+    setShowWipe(false);
+    try {
+      const r = await axios.delete(`${API}/cortex/memory/all`,
+                                       { withCredentials: true });
+      toast({ title: 'Memory wiped',
+              description: `Cortex forgot ${r.data.deleted_vectors} turns and its strategy doc. It'll start fresh on your next message.` });
+      setItems([]);
+      setStats({ total_stored: 0, pinned_count: 0 });
+      setStrategy(null);
+    } catch (e) {
+      toast({ title: "Couldn't wipe memory",
+              description: e?.response?.data?.detail || e.message,
+              variant: 'destructive' });
+    }
+  };
+
+  const fmt = (iso) => {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso);
+      const now = new Date();
+      const diff = (now - d) / 1000;
+      if (diff < 60) return 'just now';
+      if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
+      if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } catch { return ''; }
+  };
+
+  return (
+    <section className="mb-6" data-testid="account-memory-section">
+      <SectionHeader icon={Brain} label="Cortex memory" />
+
+      {/* Strategy summary — Mongo-backed long-term memory */}
+      <div className="cv-glass rounded-2xl p-5 mb-3" data-testid="memory-strategy-card">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[13px] font-semibold text-white">What Cortex believes about you</div>
+          <span className="text-[10.5px] uppercase tracking-wider text-zinc-500">Auto-distilled</span>
+        </div>
+        {strategy?.summary ? (
+          <p className="text-[13px] text-zinc-300 leading-relaxed whitespace-pre-line" data-testid="memory-strategy-summary">
+            {strategy.summary}
+          </p>
+        ) : (
+          <p className="text-[12.5px] text-zinc-500 italic">
+            Cortex hasn&apos;t formed an opinion yet — keep chatting and a strategy summary will appear here.
+          </p>
+        )}
+        {Array.isArray(strategy?.goals) && strategy.goals.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {strategy.goals.slice(0, 6).map((g, i) => (
+              <span key={i} className="text-[10.5px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-200 border border-violet-500/20">
+                {g}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Stored turns — semantic memory inspection */}
+      <div className="cv-glass rounded-2xl p-5">
+        <div className="flex flex-wrap items-center gap-3 justify-between mb-3">
+          <div className="text-[13px] font-semibold text-white flex items-center gap-2">
+            Stored conversation turns
+            <span className="text-[10.5px] font-normal text-zinc-500" data-testid="memory-stats">
+              {stats.total_stored} total · {stats.pinned_count} pinned
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+              <input
+                type="text"
+                placeholder="Search memory…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                data-testid="memory-search-input"
+                className="h-8 w-44 sm:w-56 pl-7 pr-2 text-[12px] rounded-md bg-black/30 border border-white/10 text-white placeholder:text-zinc-600 focus:outline-none focus:border-violet-500/40"
+              />
+            </div>
+            {stats.total_stored > 0 && (
+              <button
+                onClick={() => setShowWipe(true)}
+                data-testid="memory-wipe-btn"
+                className="h-8 text-[11.5px] font-medium text-rose-300 hover:text-rose-200 hover:bg-rose-500/10 px-2.5 rounded-md border border-rose-500/20 inline-flex items-center gap-1.5"
+              >
+                <Trash2 size={11} /> Wipe all
+              </button>
+            )}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="py-10 text-center text-zinc-500">
+            <Loader2 className="animate-spin mx-auto" size={16} />
+          </div>
+        ) : items.length === 0 ? (
+          <div className="py-8 text-center text-[12.5px] text-zinc-500" data-testid="memory-empty">
+            {q.trim() ? 'No matches for that search.' : 'No conversation turns stored yet.'}
+          </div>
+        ) : (
+          <ul className="divide-y divide-white/5" data-testid="memory-list">
+            {items.map((t) => (
+              <li key={t.id}
+                   className="py-3 flex items-start gap-3"
+                   data-testid={`memory-turn-${t.id}`}>
+                <span className={`mt-0.5 text-[9.5px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                  t.role === 'cortex'
+                    ? 'bg-violet-500/15 text-violet-200 border border-violet-500/25'
+                    : 'bg-cyan-500/10 text-cyan-200 border border-cyan-500/20'
+                }`}>
+                  {t.role === 'cortex' ? 'Cortex' : 'You'}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] text-zinc-200 leading-relaxed">
+                    {t.preview}
+                  </div>
+                  <div className="text-[10.5px] text-zinc-500 mt-1 flex items-center gap-2">
+                    <span>{fmt(t.created_at)}</span>
+                    {t.pinned && (
+                      <span className="text-amber-300 font-semibold inline-flex items-center gap-0.5">
+                        <Pin size={9} /> pinned
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => togglePin(t, !t.pinned)}
+                    disabled={busyId === t.id}
+                    data-testid={`memory-pin-${t.id}`}
+                    title={t.pinned ? 'Unpin' : 'Pin so this never gets pruned'}
+                    className={`p-1.5 rounded-md transition ${
+                      t.pinned
+                        ? 'text-amber-300 hover:bg-amber-500/10'
+                        : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/5'
+                    }`}>
+                    {t.pinned ? <PinOff size={13} /> : <Pin size={13} />}
+                  </button>
+                  <button
+                    onClick={() => removeOne(t)}
+                    disabled={busyId === t.id}
+                    data-testid={`memory-delete-${t.id}`}
+                    title="Delete this turn"
+                    className="p-1.5 rounded-md text-zinc-500 hover:text-rose-300 hover:bg-rose-500/10 transition">
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Wipe confirmation */}
+      {showWipe && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" data-testid="memory-wipe-modal">
+          <div className="cv-glass-strong rounded-2xl max-w-md w-full p-6">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertCircle className="text-rose-300" size={18} />
+              <div className="text-[15px] font-semibold text-white">Wipe Cortex&apos;s memory?</div>
+            </div>
+            <p className="text-[13px] text-zinc-300 leading-relaxed mb-4">
+              This deletes all {stats.total_stored} stored conversation turns and your strategy summary. Cortex will start completely fresh on your next message. <strong className="text-white">This cannot be undone.</strong>
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowWipe(false)}
+                       className="px-3.5 h-9 text-[12.5px] font-medium rounded-md text-zinc-300 hover:bg-white/5">
+                Cancel
+              </button>
+              <button onClick={wipeAll}
+                       data-testid="memory-wipe-confirm"
+                       className="px-3.5 h-9 text-[12.5px] font-semibold rounded-md bg-rose-500/20 text-rose-200 border border-rose-500/30 hover:bg-rose-500/30">
+                Yes, wipe everything
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

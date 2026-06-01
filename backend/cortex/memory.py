@@ -223,12 +223,17 @@ async def record_turn(user_id: str, role: str, text: str,
         return None
 
     # Prune oldest beyond the per-user cap so cosine scans stay fast.
-    # Cheap: 1 count + 1 delete-many at most every few inserts.
+    # Pinned turns are excluded from prune candidates — they're the
+    # ones the user explicitly told us to keep around forever.
     try:
-        n = await db[COLLECTION_V2].count_documents({"user_id": user_id})
+        n = await db[COLLECTION_V2].count_documents({
+            "user_id": user_id,
+            "$or": [{"pinned": {"$exists": False}}, {"pinned": {"$ne": True}}],
+        })
         if n > _PER_USER_CAP:
             cutoff_cur = db[COLLECTION_V2].find(
-                {"user_id": user_id},
+                {"user_id": user_id,
+                 "$or": [{"pinned": {"$exists": False}}, {"pinned": {"$ne": True}}]},
                 {"_id": 0, "id": 1, "created_at": 1},
             ).sort("created_at", -1).skip(_PER_USER_CAP).limit(1)
             cutoff = await cutoff_cur.to_list(length=1)
@@ -237,6 +242,8 @@ async def record_turn(user_id: str, role: str, text: str,
                 await db[COLLECTION_V2].delete_many({
                     "user_id":    user_id,
                     "created_at": {"$lt": cutoff_ts},
+                    "$or": [{"pinned": {"$exists": False}},
+                             {"pinned": {"$ne": True}}],
                 })
     except Exception:
         logger.exception("cortex.memory: prune skipped (non-fatal)")

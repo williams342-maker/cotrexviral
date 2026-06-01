@@ -59,6 +59,99 @@ async def memory_recall(payload: RecallPayload, request: Request):
     return {"query": payload.query, "hits": hits, "count": len(hits)}
 
 
+# ---------------------------------------------------- user-facing memory
+#  Powers the "Cortex Memory" section in Account Settings. Lets a user
+#  see exactly what Cortex remembers about them, pin important turns so
+#  they survive the per-user cap pruner, delete individual turns, and
+#  wipe the whole thing. The strategic-memory doc is returned by the
+#  existing `/cortex/memory/strategy` endpoint above.
+
+class MemoryListResp(BaseModel):
+    items:        list[dict]
+    total_stored: int
+    pinned_count: int
+
+
+@api.get("/cortex/memory/me")
+async def my_memory(request: Request, limit: int = 50, q: str = ""):
+    """Return the current user's stored conversation turns, newest
+    first. Pinned turns always appear at the top regardless of recency.
+    Optional `q` filter does a case-insensitive substring search.
+    Excludes the `vector` field (large + meaningless to humans)."""
+    user = await get_current_user(request)
+    limit = max(1, min(int(limit), 200))
+
+    base_filter = {"user_id": user.user_id}
+    if q.strip():
+        # Plain regex; we don't need fuzzy search here since semantic
+        # recall already exists. This is for "did Cortex actually
+        # record that I said X?" inspection.
+        base_filter["text"] = {"$regex": q.strip()[:80], "$options": "i"}
+
+    cur = db[cmem.COLLECTION_V2].find(
+        base_filter,
+        {"_id": 0, "id": 1, "role": 1, "text": 1,
+         "created_at": 1, "meta": 1, "pinned": 1},
+    ).sort([("pinned", -1), ("created_at", -1)]).limit(limit)
+    rows = await cur.to_list(length=limit)
+    for r in rows:
+        ts = r.get("created_at")
+        if isinstance(ts, datetime):
+            r["created_at"] = ts.isoformat()
+        # Trim long bodies for the UI list — full text is shown on hover.
+        r["preview"] = (r.get("text") or "")[:240]
+    total = await db[cmem.COLLECTION_V2].count_documents({"user_id": user.user_id})
+    pinned = await db[cmem.COLLECTION_V2].count_documents(
+        {"user_id": user.user_id, "pinned": True}
+    )
+    return {"items": rows, "total_stored": total, "pinned_count": pinned}
+
+
+class PinPayload(BaseModel):
+    pinned: bool = True
+
+
+@api.post("/cortex/memory/pin/{turn_id}")
+async def pin_memory(turn_id: str, payload: PinPayload, request: Request):
+    """Pin (default) or unpin a stored conversation turn. Pinned turns
+    bypass the per-user-cap pruner inside `record_turn`."""
+    user = await get_current_user(request)
+    res = await db[cmem.COLLECTION_V2].update_one(
+        {"id": turn_id, "user_id": user.user_id},
+        {"$set": {"pinned": bool(payload.pinned)}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(404, "Memory turn not found")
+    return {"id": turn_id, "pinned": bool(payload.pinned)}
+
+
+@api.delete("/cortex/memory/turn/{turn_id}")
+async def delete_memory(turn_id: str, request: Request):
+    user = await get_current_user(request)
+    res = await db[cmem.COLLECTION_V2].delete_one(
+        {"id": turn_id, "user_id": user.user_id}
+    )
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Memory turn not found")
+    return {"deleted": True, "id": turn_id}
+
+
+@api.delete("/cortex/memory/all")
+async def wipe_memory(request: Request):
+    """Nuclear option — wipe ALL of this user's stored vectors AND
+    their strategy doc. Cortex starts fresh on the next message."""
+    user = await get_current_user(request)
+    n_vec = (await db[cmem.COLLECTION_V2].delete_many(
+        {"user_id": user.user_id}
+    )).deleted_count
+    n_strat = (await db.cortex_strategy.delete_many(
+        {"user_id": user.user_id}
+    )).deleted_count
+    logger.info("memory wipe by user=%s vectors=%d strategy=%d",
+                user.user_id, n_vec, n_strat)
+    return {"deleted_vectors": n_vec, "deleted_strategy": n_strat}
+
+
 @api.get("/cortex/memory/health")
 async def memory_health(request: Request):
     await get_current_user(request)

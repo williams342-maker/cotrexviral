@@ -13,6 +13,63 @@ import CVBreadcrumbs from '../../components/cv/CVBreadcrumbs';
 import { SelectAgentModal, AgentChatModal } from '../../components/Modals';
 
 /**
+ * Per-platform visual signature (Phase 6 polish). Each platform page
+ * carries a unique accent palette echoing its channel brand identity
+ * — Instagram coral→fuchsia, TikTok magenta→cyan, LinkedIn electric
+ * blue, etc. The base SaaS landing pages (marketing-os,
+ * seller-acquisition, ai-campaign-generator, competitor-analysis,
+ * asset-analysis) keep the default violet/cyan brand combo.
+ *
+ * `accent.primary` / `accent.secondary` are used as CSS variables on
+ * the page root so any nested element can opt-in via inline style.
+ */
+const PLATFORM_ACCENTS = {
+  'instagram-marketing-ai': {
+    primary:    '#FF3CAC',    // hot pink
+    secondary:  '#FFB347',    // amber-coral
+    pulse:      '#FF3CAC',
+    rgb:        '255, 60, 172',
+  },
+  'tiktok-marketing-ai': {
+    primary:    '#FE2C55',    // TikTok red
+    secondary:  '#25F4EE',    // TikTok cyan
+    pulse:      '#25F4EE',
+    rgb:        '254, 44, 85',
+  },
+  'linkedin-marketing-ai': {
+    primary:    '#0A66C2',    // LinkedIn blue
+    secondary:  '#38BDF8',    // sky
+    pulse:      '#38BDF8',
+    rgb:        '10, 102, 194',
+  },
+  'youtube-marketing-ai': {
+    primary:    '#FF0033',    // YouTube red
+    secondary:  '#FF6B6B',    // soft coral
+    pulse:      '#FF6B6B',
+    rgb:        '255, 0, 51',
+  },
+  'facebook-marketing-ai': {
+    primary:    '#1877F2',    // Facebook blue
+    secondary:  '#42A5F5',    // light blue
+    pulse:      '#42A5F5',
+    rgb:        '24, 119, 242',
+  },
+  'reddit-marketing-ai': {
+    primary:    '#FF4500',    // Reddit orange
+    secondary:  '#FFD635',    // award gold
+    pulse:      '#FF4500',
+    rgb:        '255, 69, 0',
+  },
+};
+
+const DEFAULT_ACCENT = {
+  primary:    '#A78BFA',      // violet-400
+  secondary:  '#67E8F9',      // cyan-300
+  pulse:      '#22D3EE',
+  rgb:        '167, 139, 250',
+};
+
+/**
  * Reusable visual shell for /marketing-os, /seller-acquisition,
  * /ai-campaign-generator, /competitor-analysis, /asset-analysis.
  *
@@ -27,13 +84,27 @@ const SeoLandingTemplate = ({ content }) => {
   const [chatOpen, setChatOpen] = useState(false);
   const [activeAgent, setActiveAgent] = useState(null);
 
+  const accent = PLATFORM_ACCENTS[meta.slug] || DEFAULT_ACCENT;
+  // CSS custom properties — nested elements opt-in via style attribute.
+  const accentStyle = {
+    '--accent-primary':   accent.primary,
+    '--accent-secondary': accent.secondary,
+    '--accent-pulse':     accent.pulse,
+    '--accent-rgb':       accent.rgb,
+  };
+
   const breadcrumbs = [
     { label: 'Home', path: '/' },
     { label: meta.kicker || 'Solution', path: `/${meta.slug}` },
   ];
 
   return (
-    <div className="min-h-screen cv-dark antialiased" data-testid={`seo-landing-${meta.slug}`}>
+    <div
+      className="min-h-screen cv-dark antialiased"
+      data-testid={`seo-landing-${meta.slug}`}
+      data-accent={meta.slug in PLATFORM_ACCENTS ? meta.slug : 'default'}
+      style={accentStyle}
+    >
       <CVSeo
         title={meta.title}
         description={meta.meta}
@@ -54,8 +125,14 @@ const SeoLandingTemplate = ({ content }) => {
         <CVBackdrop variant="hero" />
         <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <CVBreadcrumbs items={[{ label: meta.kicker || 'Solution' }]} className="mb-5" />
-          <div className="inline-flex items-center gap-2 px-3 h-7 rounded-full cv-glass text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-300 mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 cv-pulse" />
+          <div
+            className="inline-flex items-center gap-2 px-3 h-7 rounded-full cv-glass text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-300 mb-6"
+            style={{ borderColor: 'rgba(var(--accent-rgb), 0.25)' }}
+          >
+            <span
+              className="w-1.5 h-1.5 rounded-full cv-pulse"
+              style={{ backgroundColor: 'var(--accent-pulse)' }}
+            />
             {meta.kicker}
           </div>
           <motion.h1
@@ -66,7 +143,16 @@ const SeoLandingTemplate = ({ content }) => {
             data-testid="seo-landing-h1"
           >
             {meta.h1_lead}{' '}
-            <span className="cv-gradient-text">{meta.h1_accent}</span>
+            <span
+              className="cv-gradient-text"
+              style={{
+                backgroundImage:
+                  'linear-gradient(120deg, var(--accent-primary), var(--accent-secondary))',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}
+            >{meta.h1_accent}</span>
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 16 }}
@@ -82,7 +168,11 @@ const SeoLandingTemplate = ({ content }) => {
             <div className="mt-7 grid sm:grid-cols-2 gap-2.5 max-w-2xl">
               {content.hero_bullets.map((b) => (
                 <div key={b} className="flex items-start gap-2.5 text-[14px] text-zinc-300">
-                  <Check size={15} className="text-cyan-300 mt-0.5 shrink-0" />
+                  <Check
+                    size={15}
+                    className="mt-0.5 shrink-0"
+                    style={{ color: 'var(--accent-secondary)' }}
+                  />
                   <span>{b}</span>
                 </div>
               ))}
@@ -122,7 +212,10 @@ const SeoLandingTemplate = ({ content }) => {
               data-testid={`seo-landing-section-${idx}`}
             >
               {s.kicker && (
-                <span className="text-[11px] uppercase tracking-[0.22em] text-violet-400 font-semibold">
+                <span
+                  className="text-[11px] uppercase tracking-[0.22em] font-semibold"
+                  style={{ color: 'var(--accent-primary)' }}
+                >
                   {s.kicker}
                 </span>
               )}
@@ -168,14 +261,27 @@ const SeoLandingTemplate = ({ content }) => {
                   ))}
                 </ul>
               </div>
-              <div className="cv-glass-strong rounded-3xl p-7 border-violet-400/40 cv-glow-violet">
-                <div className="text-[11px] uppercase tracking-[0.22em] text-violet-300 font-semibold mb-3">
+              <div
+                className="cv-glass-strong rounded-3xl p-7 cv-glow-violet"
+                style={{
+                  borderColor: 'rgba(var(--accent-rgb), 0.4)',
+                  boxShadow: '0 0 60px -20px rgba(var(--accent-rgb), 0.45)',
+                }}
+              >
+                <div
+                  className="text-[11px] uppercase tracking-[0.22em] font-semibold mb-3"
+                  style={{ color: 'var(--accent-secondary)' }}
+                >
                   {content.comparison.right?.label || 'With CortexViral'}
                 </div>
                 <ul className="space-y-3">
                   {(content.comparison.right?.items || []).map((it, i) => (
                     <li key={i} className="flex items-start gap-2.5 text-[14px] text-zinc-100">
-                      <Check size={14} className="text-cyan-300 mt-1 shrink-0" />
+                      <Check
+                        size={14}
+                        className="mt-1 shrink-0"
+                        style={{ color: 'var(--accent-secondary)' }}
+                      />
                       <span>{it}</span>
                     </li>
                   ))}

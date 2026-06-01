@@ -425,41 +425,137 @@ OPTIMAL_BASE = {
 @api.post("/ai/optimal-times")
 async def ai_optimal_times(payload: OptimalTimesRequest, request: Request):
     """Returns the next best posting slots for each requested platform.
-    Combines a static heuristic baseline with optional AI refinement based on the user's niche/audience.
+
+    Tries in order:
+      1. **Learned times** — aggregate this user's own historical
+         publishing pattern (`db.posts` grouped by weekday+hour). Once a
+         user has ≥ `MIN_POSTS_FOR_LEARNED` posts on a platform, we use
+         the top engagement windows they've personally seen, not a
+         heuristic.
+      2. **Static heuristic** — falls back to `OPTIMAL_BASE` for users
+         without enough publishing history yet.
+
+    Returned slots are tagged with `source: 'learned' | 'heuristic'` so
+    the UI can render a small "personalized" badge when applicable.
     """
     user = await get_current_user(request)
     now = datetime.now(timezone.utc)
     day_index = {"Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3, "Fri": 4, "Sat": 5, "Sun": 6}
+    day_name = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
-    results = {}
+    # ------------------------------------------------------------------
+    # Step 1 — pull per-platform learned slots in ONE aggregation. We
+    # consider posts within the last 180 days so seasonal drift doesn't
+    # drown out recent behavior, and we score each (weekday, hour) by
+    # a blend of post count + engagement (likes + comments + shares).
+    # ------------------------------------------------------------------
+    MIN_POSTS_FOR_LEARNED = 6   # threshold per platform before we trust learned data
+    LEARNED_WINDOW_DAYS   = 180
+
+    since = now - timedelta(days=LEARNED_WINDOW_DAYS)
+    pipeline = [
+        {"$match": {
+            "user_id":      user.user_id,
+            "status":       "published",
+            "platform":     {"$in": payload.platforms},
+            "published_at": {"$gte": since},
+        }},
+        # Mongo's $isoDayOfWeek is 1-7 (Mon=1..Sun=7), aligns with day_name when we -1.
+        {"$project": {
+            "platform":   1,
+            "weekday":    {"$subtract": [{"$isoDayOfWeek": "$published_at"}, 1]},
+            "hour":       {"$hour": "$published_at"},
+            "engagement": {"$add": [
+                {"$ifNull": ["$metrics.likes", 0]},
+                {"$ifNull": ["$metrics.comments", 0]},
+                {"$ifNull": ["$metrics.shares", 0]},
+                {"$ifNull": ["$metrics.impressions", 0]},
+            ]},
+        }},
+        {"$group": {
+            "_id":         {"platform": "$platform", "weekday": "$weekday", "hour": "$hour"},
+            "post_count":  {"$sum": 1},
+            "engagement":  {"$sum": "$engagement"},
+        }},
+        {"$sort": {"engagement": -1, "post_count": -1}},
+    ]
+    try:
+        agg_rows = await db.posts.aggregate(pipeline).to_list(length=500)
+    except Exception:
+        logger.exception("ai_optimal_times: learned aggregation failed")
+        agg_rows = []
+
+    # Bucket the rows by platform + count totals to know who qualifies.
+    by_plat: dict[str, list[dict]] = {p: [] for p in payload.platforms}
+    plat_totals: dict[str, int] = {p: 0 for p in payload.platforms}
+    for row in agg_rows:
+        k = row["_id"]
+        by_plat[k["platform"]].append({
+            "weekday": k["weekday"], "hour": k["hour"],
+            "count":   row["post_count"], "engagement": row["engagement"],
+        })
+        plat_totals[k["platform"]] += row["post_count"]
+
+    # ------------------------------------------------------------------
+    # Step 2 — build the 6-slot upcoming schedule per platform, mixing
+    # learned + heuristic as available. Each slot carries its source.
+    # We require ≥ MIN_POSTS_FOR_LEARNED posts AND at least one
+    # learned bucket. If the user concentrates all their posts in one
+    # weekday+hour, we still trust that — better to surface their own
+    # proven slot than override it with a heuristic.
+    # ------------------------------------------------------------------
+    results: dict[str, list[dict]] = {}
     for p in payload.platforms:
-        slots = OPTIMAL_BASE.get(p, [{"day": "Tue", "hour": 10}, {"day": "Thu", "hour": 15}])
+        learned = by_plat.get(p) or []
+        use_learned = (plat_totals[p] >= MIN_POSTS_FOR_LEARNED
+                        and len(learned) >= 1)
+
+        if use_learned:
+            base_slots = [
+                {"day": day_name[r["weekday"]] if 0 <= r["weekday"] < 7 else "Tue",
+                 "hour": int(r["hour"]),
+                 "source": "learned",
+                 "support_posts":      r["count"],
+                 "support_engagement": r["engagement"]}
+                for r in learned[:6]
+            ]
+        else:
+            base_slots = [
+                {**s, "source": "heuristic"}
+                for s in OPTIMAL_BASE.get(
+                    p, [{"day": "Tue", "hour": 10}, {"day": "Thu", "hour": 15}])
+            ]
+
         upcoming = []
-        for slot in slots:
+        for idx, slot in enumerate(base_slots):
             target_dow = day_index[slot["day"]]
-            today_dow = now.weekday()
+            today_dow  = now.weekday()
             delta = (target_dow - today_dow) % 7
             if delta == 0 and now.hour >= slot["hour"]:
                 delta = 7
             d = now + timedelta(days=delta)
             d = d.replace(hour=slot["hour"], minute=0, second=0, microsecond=0)
-            upcoming.append({
+            entry = {
                 "platform": p,
                 "datetime": d.isoformat(),
-                "day": slot["day"],
-                "hour": slot["hour"],
-                "score": 100 - len(upcoming) * 7,
-            })
+                "day":      slot["day"],
+                "hour":     slot["hour"],
+                "score":    100 - idx * 7,
+                "source":   slot.get("source", "heuristic"),
+            }
+            if slot.get("source") == "learned":
+                entry["support_posts"]      = slot["support_posts"]
+                entry["support_engagement"] = slot["support_engagement"]
+            upcoming.append(entry)
         upcoming.sort(key=lambda s: s["datetime"])
         results[p] = upcoming[:6]
 
-    # Optional AI rationale (kept short to avoid heavy LLM cost on every call)
+    # ------------------------------------------------------------------
+    # Step 3 — optional AI rationale (unchanged from prior version).
+    # ------------------------------------------------------------------
     rationale = None
-    ori_insight = None  # Echo → Ori hand-off (Phase 6)
+    ori_insight = None
     if payload.niche or payload.audience:
-        # Echo → Ori: "given the user's niche + platforms, what winning
-        # patterns from your memory should I cite?" Best-effort, single
-        # call, logged to agent_messages so it shows up in /chatter.
         try:
             from routes.agent_messaging import query_agent
             r = await query_agent(
@@ -494,4 +590,18 @@ async def ai_optimal_times(payload: OptimalTimesRequest, request: Request):
         except Exception:
             rationale = None
 
-    return {"slots": results, "rationale": rationale, "ori_insight": ori_insight}
+    return {
+        "slots":         results,
+        "rationale":     rationale,
+        "ori_insight":   ori_insight,
+        # Per-platform diagnostics so the UI can show "Learned from your
+        # 23 LinkedIn posts" vs "Industry baseline (post more to unlock
+        # personalized timing)".
+        "learned_support": {
+            p: {"post_count": plat_totals[p],
+                "uses_learned": (plat_totals[p] >= MIN_POSTS_FOR_LEARNED
+                                  and len(by_plat.get(p) or []) >= 1),
+                "min_required": MIN_POSTS_FOR_LEARNED}
+            for p in payload.platforms
+        },
+    }
