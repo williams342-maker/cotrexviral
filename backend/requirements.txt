@@ -22,7 +22,6 @@ ecdsa==0.19.2
 email-validator==2.3.0
 emergentintegrations==0.1.0
 fastapi==0.110.1
-fastembed==0.8.0
 fastuuid==0.14.0
 filelock==3.29.0
 flake8==7.3.0
@@ -50,6 +49,7 @@ httpx==0.28.1
 huggingface_hub==1.16.1
 hyperframe==6.1.0
 idna==3.16
+imageio-ffmpeg==0.6.0
 importlib_metadata==9.0.0
 iniconfig==2.3.0
 isort==8.0.1
@@ -57,6 +57,7 @@ Jinja2==3.1.6
 jiter==0.15.0
 jmespath==1.1.0
 jq==1.11.0
+json_repair==0.59.10
 jsonpatch==1.33
 jsonpointer==3.1.1
 jsonschema==4.26.0
@@ -89,7 +90,6 @@ mypy==2.1.0
 mypy_extensions==1.1.0
 numpy==2.4.6
 oauthlib==3.3.1
-onnxruntime==1.26.0
 openai==1.99.9
 orjson==3.11.9
 ormsgpack==1.12.2
@@ -126,10 +126,10 @@ python-dotenv==1.2.2
 python-http-client==3.3.7
 python-jose==3.5.0
 python-multipart==0.0.29
+python-pptx==1.0.2
 pytokens==0.4.1
 pytrends==4.9.2
 PyYAML==6.0.3
-qdrant-client==1.18.0
 referencing==0.37.0
 regex==2026.5.9
 requests==2.34.2
@@ -163,10 +163,8 @@ uvicorn==0.25.0
 watchfiles==1.2.0
 websockets==16.0
 Werkzeug==3.1.8
+xlsxwriter==3.2.9
 xxhash==3.7.0
 yarl==1.24.2
 zipp==4.1.0
 zstandard==0.25.0
-json_repair==0.59.10
-imageio-ffmpeg==0.6.0
-python-pptx==1.0.2

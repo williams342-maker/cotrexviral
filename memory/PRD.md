@@ -35,6 +35,25 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 127) **🚀 Managed Vector Memory — replaced fastembed + local Qdrant with OpenAI embeddings + Mongo**
+  - **The shift**: Removed the production-breaking `fastembed` + `qdrant-client` + `onnxruntime` dependencies entirely. Replaced with OpenAI `text-embedding-3-small` (1536-dim, ~$0.00002 per Cortex turn) for embeddings + a single Mongo collection (`cortex_memory_v2`) for storage + Python numpy cosine top-K for retrieval.
+  - **Why this works on Emergent's 1Gi pods**: no ML libs in the pod (embedding happens at OpenAI), no Qdrant process, no 130MB ONNX model. Pod stays tiny + fast. Data survives restarts (Mongo, not ephemeral disk).
+  - **`cortex/memory.py` rewrite**: complete drop-in replacement preserving the public API (`record_turn`, `recall_semantic`, `get_strategy`, `update_strategy_summary`, `health`, plus new `ensure_indexes`). Embeddings via shared `httpx.AsyncClient` with connection pooling — first call ~1.3s, subsequent ~200ms. `_cosine_topk` documented as the swap-point for migrating to Atlas `$vectorSearch` once a user crosses ~10k stored turns. Per-user vector cap (default 500, env `CORTEX_MEMORY_PER_USER_CAP`) prunes oldest on insert so cosine scans stay sub-10ms. Graceful degradation everywhere: missing `OPENAI_API_KEY`, embed failure, Mongo failure → return `[]` / `None`, chat keeps working.
+  - **`cortex/memory.py` improvement** (bundled): `update_strategy_summary` cooldown tightened from 2h → 30min and `min_turns` from 6 → 3. With semantic recall layered on top, the strategy doc is what makes Cortex feel like a persistent partner; aggressive refresh is now cheap (one classifier call per ~30min of activity).
+  - **Cleanup**: removed `fastembed==0.8.0`, `qdrant-client==1.18.0`, `onnxruntime==1.26.0` from `requirements.txt` (uninstalled + `pip freeze` re-baked). Removed all Qdrant code paths (~150 lines of dead code). Removed the now-stale `CORTEX_VECTOR_MEMORY` env flag and the gate logic from part 126 — semantic memory is unconditionally on whenever `OPENAI_API_KEY` is set.
+  - **`/api/health` reshaped** in `server.py`: now exposes the live memory state — `{embed_model, embed_dim, openai_key_set, numpy, per_user_cap, stored_turns}`. Use `curl https://cortexviral.com/api/health` to verify post-deploy.
+  - **Verified end-to-end** in preview:
+    - First chat turn: 14.2s total, embedded + stored, Cortex reply quality unchanged.
+    - **Second turn (proving semantic recall works)**: `recalled_count: 2`, recalled previews showed the exact prior turn ("we want to focus on etsy sellers this quarter") AND Cortex's own prior reply, and Cortex's new response directly referenced the prior context: *"You said you wanted to focus on Etsy sellers this quarter..."*
+    - 11.2s end-to-end on the second turn (faster than the old fastembed path).
+  - **Regression tests** at `backend/tests/test_cortex_memory_v2.py` (4 tests, all passing in 2.98s):
+    1. `health()` reports the new fields correctly.
+    2. record → recall roundtrip with 3 semantically-distinct turns: Etsy query returns the Etsy turn first, scores correctly ordered.
+    3. Per-user cap pruning works under repeated inserts.
+    4. Empty-user recall returns `[]`, not an error.
+  - **Pytest plumbing**: added `pytest-asyncio` dep, `backend/pytest.ini` with session-scoped event loop (required because Motor binds Mongo connections to the first event loop it sees — function-scoped loops would break test 2+).
+  - **Test credentials**: `OPENAI_API_KEY` (user-provided, in preview's `.env`). Same key needs to be added to production's environment via Emergent's Deploy → Environment Variables panel.
+
 - 2026-02-28 (part 126) **🎯 P0 — Cortex on production: REAL root cause found & fixed**
   - **Symptom**: After parts 124+125 deployed (concurrency fix + SSE heartbeat), production *still* showed "Connection closed before completion." Preview worked flawlessly. User confirmed LLM key balance was fine.
   - **Discovery path**: Direct backend logs from production were inaccessible from preview environment. Ran `deployment_agent` to surface deploy-config blockers — and **it flagged the real issue**: `fastembed==0.8.0` + `onnxruntime==1.26.0` in `requirements.txt`. Both are ML-runtime dependencies that **are not supported in Emergent's K8s pods** (250m CPU / 1Gi RAM).

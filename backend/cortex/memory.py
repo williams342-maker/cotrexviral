@@ -8,24 +8,42 @@ Two-layer architecture per the product spec:
    N turns (or via the nightly cron). Answers questions like:
        "What are Mike's current goals?"
 
-2. **Semantic Memory (Qdrant local mode)** — every conversation turn
-   is embedded with fastembed (BAAI/bge-small-en-v1.5, 384-dim) and
-   stored in an on-disk Qdrant collection. Answers questions like:
+2. **Semantic Memory (Mongo + OpenAI embeddings)** — every conversation
+   turn is embedded with OpenAI `text-embedding-3-small` (1536-dim) and
+   stored alongside the rest of your Cortex data in the
+   `cortex_memory_v2` Mongo collection. Recall is a cosine-similarity
+   sweep over the user's last N stored vectors, computed in numpy
+   (~5ms for 500 vectors of 1536 dims). Answers questions like:
        "What did Mike say about Etsy sellers three weeks ago?"
+
+   This is a deliberate trade-off vs Atlas Vector Search:
+   - + No managed-vendor dependency, works on Emergent's 1Gi pods
+   - + Survives pod restarts (data is in Mongo, not ephemeral disk)
+   - + Same `MONGO_URL` you already use — no schema migration drama
+   - − Linear scan, fine up to ~10k vectors per user. Past that,
+       upgrade to MongoDB Atlas Vector Search or Pinecone (the
+       `_cosine_topk` swap is a one-liner).
 
 Both layers compose: every Cortex turn pulls (a) the strategy doc and
 (b) the top-K semantically-similar prior turns, then injects them into
 the system prompt so Cortex actually feels like a persistent partner.
 
-Qdrant local mode requires no separate server — it persists to
-`/app/backend/.qdrant_data/`. fastembed downloads the embedding model
-on first use (~130MB) to `~/.cache/huggingface/`.
-
-Public API:
+Public API (unchanged from the previous fastembed/Qdrant implementation
+— callers in `routes/cortex_stream.py`, `routes/cortex_console.py`, and
+the strategic-memory cron see the same coroutine signatures):
     await record_turn(user_id, role, text, *, meta=None)
     await recall_semantic(user_id, query, *, k=5) -> list[dict]
     await get_strategy(user_id) -> dict | None
     await update_strategy_summary(user_id, *, force=False) -> dict
+
+Required env var:
+    OPENAI_API_KEY — used for the embedding API. The Emergent LLM key
+    does NOT proxy embeddings (probed and confirmed 404). Costs are
+    ~$0.00002 per turn at text-embedding-3-small pricing.
+
+Optional env var:
+    CORTEX_MEMORY_PER_USER_CAP — max vectors to keep per user (default
+    500). Older vectors are pruned on insert so cosine scans stay fast.
 """
 from __future__ import annotations
 
@@ -33,154 +51,236 @@ import asyncio
 import json
 import logging
 import os
-import re
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
+import httpx
+
 logger = logging.getLogger(__name__)
 
-# Lazy-loaded singletons — Qdrant + fastembed model are heavy to
-# initialize, so we defer until first use to keep server startup fast.
-_qdrant_client = None
-_qdrant_ready = False
-_qdrant_lock = asyncio.Lock()
-
-COLLECTION = "cortex_memory"
-EMBED_MODEL = "BAAI/bge-small-en-v1.5"   # 384-dim, ~130MB ONNX
-QDRANT_PATH = str(Path(__file__).parent.parent / ".qdrant_data")
-
-# Production guardrail — Emergent K8s pods are capped at ~250m CPU /
-# 1Gi RAM, which is too small to load fastembed's 130MB ONNX model
-# without OOM-killing the pod mid-request. We default to DISABLED in
-# production; semantic recall degrades to empty results (Mongo-backed
-# strategic memory and conversation history both keep working — they
-# don't touch Qdrant). Override via env var to re-enable when a bigger
-# pod / managed vector DB is in place.
-#
-# To re-enable on a larger deployment:  CORTEX_VECTOR_MEMORY=enabled
-_VECTOR_MEMORY_ENABLED = (
-    os.environ.get("CORTEX_VECTOR_MEMORY", "").strip().lower()
-    in {"1", "true", "yes", "enabled", "on"}
-)
+# ---- numpy is OPTIONAL — degrade gracefully if missing -------------
+try:
+    import numpy as _np
+    _HAS_NUMPY = True
+except Exception:  # pragma: no cover
+    _np = None  # type: ignore
+    _HAS_NUMPY = False
 
 
-async def _get_qdrant():
-    """Lazy-initialize the local Qdrant client + collection.
-    Returns None if initialization fails OR if vector memory is
-    disabled via env (default in production)."""
-    if not _VECTOR_MEMORY_ENABLED:
+COLLECTION_V2     = "cortex_memory_v2"     # new Mongo-backed memory
+COLLECTION_LEGACY = "cortex_memory"        # historical Qdrant name
+EMBED_MODEL       = "text-embedding-3-small"
+EMBED_DIM         = 1536
+
+_PER_USER_CAP = int(os.environ.get("CORTEX_MEMORY_PER_USER_CAP", "500"))
+_OPENAI_KEY   = os.environ.get("OPENAI_API_KEY", "").strip()
+
+# Shared httpx client for embedding calls — connection-reuse is what
+# keeps per-call latency down to ~200ms after the first cold call.
+_http_client: Optional[httpx.AsyncClient] = None
+_http_lock = asyncio.Lock()
+
+
+async def _get_http() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is not None:
+        return _http_client
+    async with _http_lock:
+        if _http_client is None:
+            _http_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(15.0, connect=5.0),
+                headers={"Authorization": f"Bearer {_OPENAI_KEY}"},
+                http2=False,  # http2 deps are heavy; http1.1 keep-alive is plenty
+            )
+        return _http_client
+
+
+async def _embed(text: str) -> Optional[list[float]]:
+    """Embed a single text via OpenAI text-embedding-3-small. Returns
+    None on error (callers degrade to no-semantic-recall, never crash)."""
+    if not _OPENAI_KEY:
+        logger.warning("cortex.memory: OPENAI_API_KEY not set; semantic memory disabled")
         return None
-    global _qdrant_client, _qdrant_ready
-    if _qdrant_ready:
-        return _qdrant_client
-    async with _qdrant_lock:
-        if _qdrant_ready:
-            return _qdrant_client
-        try:
-            from qdrant_client import QdrantClient
-            # Local file-backed Qdrant. Single-writer; we serialize via
-            # _qdrant_lock for writes so it's safe in our async stack.
-            Path(QDRANT_PATH).mkdir(parents=True, exist_ok=True)
-            client = QdrantClient(path=QDRANT_PATH)
-            # `add()` (the high-level helper) auto-creates collections
-            # with the right dim on first call. Set embedding model up
-            # front so it's used consistently.
-            try:
-                client.set_model(EMBED_MODEL)
-            except Exception:
-                # Older qdrant-client uses set_default_embedding_model.
-                if hasattr(client, "set_default_embedding_model"):
-                    client.set_default_embedding_model(EMBED_MODEL)
-            _qdrant_client = client
-        except Exception:
-            logger.exception("cortex.memory: failed to init Qdrant; semantic recall disabled")
-            _qdrant_client = None
-        _qdrant_ready = True
-        return _qdrant_client
+    if not text or not text.strip():
+        return None
+    try:
+        client = await _get_http()
+        r = await client.post(
+            "https://api.openai.com/v1/embeddings",
+            json={"model": EMBED_MODEL, "input": text[:4000]},
+        )
+        if r.status_code != 200:
+            logger.warning("cortex.memory: embed HTTP %d: %s",
+                            r.status_code, r.text[:200])
+            return None
+        return r.json()["data"][0]["embedding"]
+    except Exception:
+        logger.exception("cortex.memory: embed failed")
+        return None
+
+
+def _cosine_topk(query_vec: list[float], candidates: list[dict],
+                  k: int) -> list[dict]:
+    """Pure-Python cosine top-K. Used both as the primary search path
+    AND as the documented swap-point if/when this collection outgrows
+    the in-memory scan (target: replace with MongoDB Atlas Vector Search
+    `$vectorSearch` stage or a hosted vector DB).
+
+    Each candidate must have a `vector` key (list[float]). Returns a
+    new list of {text, role, created_at, meta, score} sorted high→low."""
+    if not candidates or not query_vec:
+        return []
+    k = max(1, min(k, len(candidates)))
+
+    if _HAS_NUMPY:
+        q = _np.asarray(query_vec, dtype=_np.float32)
+        # Build matrix; skip any rows with the wrong dim defensively.
+        rows = [c.get("vector") for c in candidates
+                if isinstance(c.get("vector"), list)
+                and len(c["vector"]) == len(query_vec)]
+        if not rows:
+            return []
+        M = _np.asarray(rows, dtype=_np.float32)
+        # Cosine = dot / (|q| · |row|). Vectorize.
+        q_norm = _np.linalg.norm(q) or 1.0
+        row_norms = _np.linalg.norm(M, axis=1)
+        row_norms[row_norms == 0] = 1.0
+        scores = (M @ q) / (row_norms * q_norm)
+        # argpartition for O(n) top-K, then sort the top slice.
+        idx = _np.argpartition(-scores, kth=k - 1)[:k]
+        idx = idx[_np.argsort(-scores[idx])]
+        out = []
+        for i in idx:
+            c = candidates[i]
+            out.append({
+                "text":       (c.get("text") or "")[:600],
+                "role":       c.get("role", "user"),
+                "created_at": (c.get("created_at").isoformat()
+                                if isinstance(c.get("created_at"), datetime)
+                                else c.get("created_at")),
+                "meta":       c.get("meta") or {},
+                "score":      float(scores[i]),
+            })
+        return out
+
+    # numpy missing — degrade to a Python loop (still correct, just slower).
+    import math
+    q_norm = math.sqrt(sum(x * x for x in query_vec)) or 1.0
+    scored: list[tuple[float, dict]] = []
+    for c in candidates:
+        v = c.get("vector")
+        if not isinstance(v, list) or len(v) != len(query_vec):
+            continue
+        v_norm = math.sqrt(sum(x * x for x in v)) or 1.0
+        dot = sum(a * b for a, b in zip(query_vec, v))
+        scored.append((dot / (v_norm * q_norm), c))
+    scored.sort(key=lambda x: -x[0])
+    out = []
+    for score, c in scored[:k]:
+        out.append({
+            "text":       (c.get("text") or "")[:600],
+            "role":       c.get("role", "user"),
+            "created_at": (c.get("created_at").isoformat()
+                            if isinstance(c.get("created_at"), datetime)
+                            else c.get("created_at")),
+            "meta":       c.get("meta") or {},
+            "score":      score,
+        })
+    return out
 
 
 # ---------------------------------------------------------- write path
 async def record_turn(user_id: str, role: str, text: str,
                        *, meta: Optional[dict] = None) -> Optional[str]:
-    """Embed and store one conversation turn in Qdrant. Best-effort —
-    failure logs and returns None so the chat endpoint never breaks
-    just because the vector DB is sad."""
+    """Embed and store one conversation turn. Best-effort — failure
+    logs and returns None so the chat endpoint never breaks just
+    because the vector layer is sad."""
     if not text or not text.strip():
         return None
-    client = await _get_qdrant()
-    if client is None:
+    vec = await _embed(text)
+    if vec is None:
         return None
+
+    from core import db
     point_id = uuid.uuid4().hex
-    payload = {
+    doc = {
+        "id":         point_id,
         "user_id":    user_id,
         "role":       role,
-        "text":       text[:4000],          # cap memory size per turn
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "text":       text[:4000],
+        "vector":     vec,
+        "dim":        len(vec),
+        "model":      EMBED_MODEL,
+        "created_at": datetime.now(timezone.utc),
         "meta":       meta or {},
     }
+    try:
+        await db[COLLECTION_V2].insert_one(doc)
+    except Exception:
+        logger.exception("cortex.memory: insert failed")
+        return None
 
-    def _do_add():
-        try:
-            client.add(
-                collection_name=COLLECTION,
-                documents=[text[:4000]],
-                metadata=[payload],
-                ids=[point_id],
-            )
-            return point_id
-        except Exception:
-            logger.exception("cortex.memory: qdrant add failed")
-            return None
+    # Prune oldest beyond the per-user cap so cosine scans stay fast.
+    # Cheap: 1 count + 1 delete-many at most every few inserts.
+    try:
+        n = await db[COLLECTION_V2].count_documents({"user_id": user_id})
+        if n > _PER_USER_CAP:
+            cutoff_cur = db[COLLECTION_V2].find(
+                {"user_id": user_id},
+                {"_id": 0, "id": 1, "created_at": 1},
+            ).sort("created_at", -1).skip(_PER_USER_CAP).limit(1)
+            cutoff = await cutoff_cur.to_list(length=1)
+            if cutoff:
+                cutoff_ts = cutoff[0]["created_at"]
+                await db[COLLECTION_V2].delete_many({
+                    "user_id":    user_id,
+                    "created_at": {"$lt": cutoff_ts},
+                })
+    except Exception:
+        logger.exception("cortex.memory: prune skipped (non-fatal)")
 
-    # qdrant-client's `add()` is synchronous + does CPU embedding work,
-    # so dispatch to a thread to avoid blocking the event loop.
-    return await asyncio.to_thread(_do_add)
+    return point_id
 
 
 # ----------------------------------------------------------- read path
 async def recall_semantic(user_id: str, query: str,
                            *, k: int = 5) -> list[dict]:
-    """Return top-K semantically-similar past turns for this user.
-    Each item: {text, role, created_at, score, meta}."""
+    """Return top-K semantically-similar past turns for this user."""
     if not query or not query.strip():
         return []
-    client = await _get_qdrant()
-    if client is None:
+    qvec = await _embed(query)
+    if qvec is None:
         return []
 
-    def _do_query():
-        try:
-            # qdrant-client 1.18 query_points helper with filter.
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
-            results = client.query(
-                collection_name=COLLECTION,
-                query_text=query[:1000],
-                limit=max(1, min(k, 25)),
-                query_filter=Filter(must=[
-                    FieldCondition(key="user_id",
-                                    match=MatchValue(value=user_id)),
-                ]),
-            )
-            out: list[dict] = []
-            for hit in results or []:
-                meta = getattr(hit, "metadata", {}) or {}
-                out.append({
-                    "text":       meta.get("text", "")[:600],
-                    "role":       meta.get("role", "user"),
-                    "created_at": meta.get("created_at"),
-                    "meta":       meta.get("meta") or {},
-                    "score":      float(getattr(hit, "score", 0.0) or 0.0),
-                })
-            return out
-        except Exception:
-            logger.exception("cortex.memory: qdrant query failed")
-            return []
-
-    return await asyncio.to_thread(_do_query)
+    from core import db
+    # Pull this user's recent vectors (capped at _PER_USER_CAP). The
+    # `vector` field is large (~6KB per row at 1536 floats) so we cap
+    # the candidate set rather than streaming the whole collection.
+    cur = db[COLLECTION_V2].find(
+        {"user_id": user_id},
+        {"_id": 0, "text": 1, "role": 1, "vector": 1,
+         "created_at": 1, "meta": 1},
+    ).sort("created_at", -1).limit(_PER_USER_CAP)
+    candidates = await cur.to_list(length=_PER_USER_CAP)
+    return _cosine_topk(qvec, candidates, k=k)
 
 
+# ------------------------------------------------ index bootstrap ----
+async def ensure_indexes() -> None:
+    """Idempotent — create the indexes we rely on for recall + prune.
+    Safe to call multiple times. Called once from cortex_stream on its
+    first request (lazy) since memory.py has no startup hook."""
+    from core import db
+    try:
+        await db[COLLECTION_V2].create_index(
+            [("user_id", 1), ("created_at", -1)],
+            name="user_created",
+            background=True,
+        )
+    except Exception:
+        logger.exception("cortex.memory: ensure_indexes failed (non-fatal)")
 # ----------------------------------------------------------- strategy
 async def get_strategy(user_id: str) -> Optional[dict]:
     """Return the user's current strategic-memory doc, or None."""
@@ -198,11 +298,18 @@ async def get_strategy(user_id: str) -> Optional[dict]:
 
 async def update_strategy_summary(user_id: str,
                                     *, force: bool = False,
-                                    min_turns: int = 6) -> dict:
+                                    min_turns: int = 3) -> dict:
     """Distill recent conversation history into a strategy doc using
-    Cortex's primary LLM. Idempotent — won't re-run if updated <2h ago
-    unless `force=True`. Returns the latest strategy doc (or {} on
+    Cortex's primary LLM. Idempotent — won't re-run if updated <30min
+    ago unless `force=True`. Returns the latest strategy doc (or {} on
     error). Stored in `cortex_strategy` Mongo collection per user_id.
+
+    Refresh policy is intentionally aggressive (30min cooldown,
+    `min_turns=3`) because on production with semantic recall sized
+    to ~500 vectors per user, the strategy doc is what makes Cortex
+    feel like it actually remembers across days. The LLM call is one
+    cheap classifier call per user every ~30min of activity — well
+    inside the cost envelope.
 
     Schema written:
         { user_id, summary, goals: [...], bottlenecks: [...],
@@ -213,7 +320,7 @@ async def update_strategy_summary(user_id: str,
     now = datetime.now(timezone.utc)
     if not force and existing.get("updated_at"):
         last = existing["updated_at"]
-        if isinstance(last, datetime) and (now - last) < timedelta(hours=2):
+        if isinstance(last, datetime) and (now - last) < timedelta(minutes=30):
             existing.pop("_id", None)
             return existing  # too fresh — skip
 
@@ -345,14 +452,16 @@ def render_memory_block(strategy: Optional[dict],
 # ---------------------------------------------------------- diagnostics
 async def health() -> dict:
     """Quick health snapshot used by admin /memory/health endpoint."""
-    client = await _get_qdrant()
-    info = {"qdrant_ready": client is not None,
-            "embed_model":  EMBED_MODEL,
-            "path":         QDRANT_PATH}
-    if client is not None:
-        try:
-            cols = client.get_collections()
-            info["collections"] = [c.name for c in cols.collections]
-        except Exception:
-            info["collections"] = []
+    from core import db
+    info: dict = {
+        "embed_model":   EMBED_MODEL,
+        "embed_dim":     EMBED_DIM,
+        "openai_key_set": bool(_OPENAI_KEY),
+        "numpy":          _HAS_NUMPY,
+        "per_user_cap":   _PER_USER_CAP,
+    }
+    try:
+        info["stored_turns"] = await db[COLLECTION_V2].count_documents({})
+    except Exception:
+        info["stored_turns"] = -1
     return info

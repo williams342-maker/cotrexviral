@@ -141,9 +141,10 @@ app.add_middleware(
 @app.get("/api/health")
 async def root_health():
     from cortex import memory as _cmem
+    mem = await _cmem.health()
     return {
         "status": "ok",
-        "vector_memory_enabled": _cmem._VECTOR_MEMORY_ENABLED,
+        "memory": mem,
         "time": datetime.now(timezone.utc).isoformat(),
     }
 
