@@ -51,11 +51,27 @@ COLLECTION = "cortex_memory"
 EMBED_MODEL = "BAAI/bge-small-en-v1.5"   # 384-dim, ~130MB ONNX
 QDRANT_PATH = str(Path(__file__).parent.parent / ".qdrant_data")
 
+# Production guardrail — Emergent K8s pods are capped at ~250m CPU /
+# 1Gi RAM, which is too small to load fastembed's 130MB ONNX model
+# without OOM-killing the pod mid-request. We default to DISABLED in
+# production; semantic recall degrades to empty results (Mongo-backed
+# strategic memory and conversation history both keep working — they
+# don't touch Qdrant). Override via env var to re-enable when a bigger
+# pod / managed vector DB is in place.
+#
+# To re-enable on a larger deployment:  CORTEX_VECTOR_MEMORY=enabled
+_VECTOR_MEMORY_ENABLED = (
+    os.environ.get("CORTEX_VECTOR_MEMORY", "").strip().lower()
+    in {"1", "true", "yes", "enabled", "on"}
+)
+
 
 async def _get_qdrant():
     """Lazy-initialize the local Qdrant client + collection.
-    Returns None if initialization fails (so the rest of Cortex keeps
-    working — semantic recall just degrades to empty results)."""
+    Returns None if initialization fails OR if vector memory is
+    disabled via env (default in production)."""
+    if not _VECTOR_MEMORY_ENABLED:
+        return None
     global _qdrant_client, _qdrant_ready
     if _qdrant_ready:
         return _qdrant_client

@@ -8,6 +8,7 @@ If you need to add a new domain, create routes/<name>.py and add it to the
 import list below. No other change to server.py is required.
 """
 from starlette.middleware.cors import CORSMiddleware
+from datetime import datetime, timezone
 
 from core import app, api, client, logger  # noqa: F401  (logger imported for side-effect)
 
@@ -133,6 +134,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Lightweight liveness/diagnostics endpoint. Public on purpose — no
+# sensitive data, just env-flag visibility for debugging deploy issues.
+@app.get("/api/health")
+async def root_health():
+    from cortex import memory as _cmem
+    return {
+        "status": "ok",
+        "vector_memory_enabled": _cmem._VECTOR_MEMORY_ENABLED,
+        "time": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 # Close the Mongo connection on shutdown. (Scheduler shuts itself down via
