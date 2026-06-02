@@ -66,13 +66,13 @@ const CVHero = ({ onGetStarted }) => {
             >
               Start Free <ArrowRight size={15} />
             </button>
-            <button
-              onClick={() => document.querySelector('#faq')?.scrollIntoView({ behavior: 'smooth' })}
+            <a
+              href="/tools/viral-post-generator"
               className="cv-btn-secondary inline-flex items-center gap-2 text-[14px] font-semibold px-5 h-12 rounded-full"
               data-testid="cv-hero-cta-secondary"
             >
-              <Play size={13} /> See how it works
-            </button>
+              <Play size={13} /> Try the free tool
+            </a>
           </motion.div>
 
           {/* Concrete-workflow strip — replaces vague "viral growth" claim with the 4 steps users will actually do. */}

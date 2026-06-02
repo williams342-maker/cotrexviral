@@ -35,6 +35,19 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-06-02 **🚀 Landing-page Phase B: Pricing rebuild + Free Viral Post Generator + Comparison + Case Studies (4 items shipped)**
+  - **#4 Pricing restructure** — kept Stripe plan keys (`free/starter/growth/agency`) but rebuilt tiers around the 6 dimensions buyers actually compare: channels, AI generations/month, posts/month, optimal-time scheduling, analytics depth, support SLA. Tier labels now: **Free / Creator / Growth / Agency**. Each card lists the concrete numbers; the comparison matrix mirrors the same dimensions row-by-row so buyers can scan without re-reading.
+  - **#5 Free interactive tool: Viral Post Generator** — new public route `/tools/viral-post-generator`. Form: niche text + platform dropdown (8 platforms). Backend `POST /api/tools/viral-post` calls Claude Haiku 4.5 (~12s) and returns 3 hook-tested posts using *contrarian / curiosity-gap / data-shock* frameworks. Each card has copy-to-clipboard. After generation: a lead-magnet upsell card ("Want CortexViral to schedule these for you?" → Start Free). Public endpoint is IP-rate-limited (8/hr/IP, in-memory bucket — no auth needed, anti-scraper guard). New file `backend/routes/public_tools.py`.
+  - **#7 Case Studies page** — new public route `/case-studies` with 3 detailed case studies in the requested format (problem → baseline → workflow → timeline → measurable result + pullquote): Solo Creator (0→47k followers in 90d), D2C Brand (4 channels in week 1 / 1.2M impressions m1), Marketing Agency (−71% production hours across 8 clients). Each case has a stable slug for deep-linking. BreadcrumbList JSON-LD.
+  - **#8 Comparison section** — new `CVComparison.jsx` slotted between Results and FAQ on the homepage. 8-row × 6-column matrix (CortexViral vs ChatGPT/Buffer/Hootsuite/Jasper/Copy.ai) with honest *yes/no/partial* signals. Anchored at `#compare`; nav link "Compare" scrolls to it. Below the table: a "Try the free viral post generator" CTA that drives traffic to the new tool.
+  - **Navbar refresh** — links now: How it works · Compare · Case Studies · Free Tool · Agents · Pricing. Hero secondary CTA swapped from "See how it works" → "Try the free tool" (drives the lead-magnet flow).
+  - **React-snap include list** updated — `/case-studies` and `/tools/viral-post-generator` now prerender to fully crawlable HTML with H1, content, JSON-LD (HowTo + BreadcrumbList), canonical, OG meta. Build went from 88 → 90 static routes.
+
+  **Verified** (preview):
+  - Free tool generated real niche-specific posts ("woodworking shop owners selling on Etsy" → 3 distinct Instagram posts, contrarian hook *"Stop optimizing for Etsy's algorithm—your shop dies if you do."*)
+  - Production build (`yarn build`) prerenders all 90 routes; `grep` of `/build/case-studies/index.html` + `/build/tools/viral-post-generator/index.html` confirms H1, structured data, canonical, OG meta all baked in.
+
+
 - 2026-06-02 **🚀 Landing-page Phase A: SEO rendering + copy + CTA polish (10 items, 5 done)**
   - **#1 SEO rendering fix (CRITICAL)**: added `"postbuild": "react-snap"` to `frontend/package.json` so every `yarn build` automatically prerenders all 88 routes. Verified `/build/index.html` (80KB) now contains: new H1 copy, 4-step workflow narrative, all 7 FAQ questions, FAQPage + Organization + SoftwareApplication JSON-LD, canonical URL, OG meta, internal `/pricing` link. Previously `yarn build` ran only `craco build` — producing an empty SPA shell that crawlers/social-card scrapers couldn't read.
   - **#2 Removed "Made with Emergent" badge** from `public/index.html` (badge `<a>` element + `emergent-main.js` script tag). Confirmed safe via support_agent — no platform restriction on removing it.

@@ -10,6 +10,8 @@ import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import SitemapPage from './pages/Sitemap';
 import DataDeletion from './pages/DataDeletion';
+import CaseStudies from './pages/CaseStudies';
+import ViralPostGenerator from './pages/tools/ViralPostGenerator';
 import NicheToolPage from './pages/programmatic/NicheToolPage';
 import { TikTokGenerator, ViralIdeas, InstagramCaption, ShortFormVideo, ContentAutomation } from './pages/landing';
 import {
@@ -107,6 +109,8 @@ function AppRouter() {
       <Route path="/terms" element={<Terms />} />
       <Route path="/sitemap" element={<SitemapPage />} />
       <Route path="/data-deletion" element={<DataDeletion />} />
+      <Route path="/case-studies" element={<CaseStudies />} />
+      <Route path="/tools/viral-post-generator" element={<ViralPostGenerator />} />
       <Route path="/ai-tiktok-post-generator" element={<TikTokGenerator />} />
       <Route path="/viral-content-ideas-generator" element={<ViralIdeas />} />
       <Route path="/instagram-caption-ai-generator" element={<InstagramCaption />} />

@@ -7,12 +7,12 @@ import AuthModal from '../AuthModal';
 import { useAuth } from '../../context/AuthContext';
 
 const links = [
-  { label: 'System', href: '#system' },
-  { label: 'Pipeline', href: '#pipeline' },
-  { label: 'Results', href: '#results' },
+  { label: 'How it works', href: '#system' },
+  { label: 'Compare', href: '#compare' },
+  { label: 'Case Studies', href: '/case-studies', external: true },
+  { label: 'Free Tool', href: '/tools/viral-post-generator', external: true },
   { label: 'Agents', href: '/agents', external: true },
   { label: 'Pricing', href: '/pricing', external: true },
-  { label: 'Roadmap', href: '/roadmap', external: true },
 ];
 
 const CVNavbar = ({ onGetStarted }) => {

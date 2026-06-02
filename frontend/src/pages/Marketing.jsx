@@ -4,6 +4,7 @@ import CVHero from '../components/cv/CVHero';
 import CVNeuralEngine from '../components/cv/CVNeuralEngine';
 import CVPipeline from '../components/cv/CVPipeline';
 import CVResults from '../components/cv/CVResults';
+import CVComparison from '../components/cv/CVComparison';
 import CVFaq, { DEFAULT_FAQS } from '../components/cv/CVFaq';
 import CVCTAFooter from '../components/cv/CVCTAFooter';
 import CVBuiltByMakers from '../components/cv/CVBuiltByMakers';
@@ -44,6 +45,7 @@ const Marketing = () => {
         <CVNeuralEngine />
         <CVPipeline />
         <CVResults />
+        <CVComparison />
         <CVFaq />
         <CVCTAFooter onGetStarted={openSelect} />
       </main>

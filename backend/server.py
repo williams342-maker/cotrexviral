@@ -95,6 +95,7 @@ from routes import (  # noqa: F401
     seller_lifecycle,    # Seller Acquisition OS — Onboarding + Retention monitor
     seller_offers,       # Seller Acquisition OS · Phase 4 — AI offer artifact generator
     seller_retention_intel,  # Seller Acquisition OS · Phase 8 — Churn-risk + workflows
+    public_tools,    # Public marketing tools (free viral post generator etc.) — no auth
 )
 
 
