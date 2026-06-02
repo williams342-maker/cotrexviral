@@ -109,11 +109,16 @@ async def _run_pipeline(asset_id: str) -> None:
         extracted = await extract(kind=kind, data=data,
                                      url=asset.get("source_url"))
 
-        # Stash extraction metadata back onto the asset for diagnostics.
+        # Stash extraction metadata back onto the asset for diagnostics
+        # AND a short text excerpt so the chat composer can give Cortex
+        # useful context the moment extraction finishes — without
+        # waiting for the slower LLM analysis pass.
+        excerpt = (extracted.get("text") or "")[:1200].strip()
         await db.cortex_assets.update_one(
             {"id": asset_id},
             {"$set": {"status": "analyzing",
                        "extraction_meta": extracted.get("meta") or {},
+                       "text_excerpt":    excerpt,
                        "thumb_b64": extracted.get("thumb_b64")}},
         )
 

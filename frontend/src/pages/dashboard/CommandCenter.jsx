@@ -287,11 +287,18 @@ const CommandCenter = () => {
       const lines = attachments.map((a, i) => {
         const intel = a.intelligence || {};
         const summary = intel.summary || intel.executive_summary || intel.headline || '';
-        const ready = a.status === 'complete';
+        const excerpt = (a.text_excerpt || '').slice(0, 800).trim();
         const head  = `${i + 1}. ${a.name} [${a.kind}] (asset:${a.id})`;
-        const body  = ready
-          ? (summary ? ` — ${summary}` : ' — analyzed, no summary available')
-          : ' — still analyzing; reference the asset id above.';
+        let body;
+        if (summary) {
+          body = ` — ${summary}`;
+        } else if (excerpt) {
+          // Extraction finished but full LLM analysis is still running.
+          // Feed the raw text excerpt so Cortex can answer immediately.
+          body = ` — Extracted text excerpt:\n${excerpt}`;
+        } else {
+          body = ' — still analyzing; reference the asset id above.';
+        }
         return head + body;
       });
       preamble =

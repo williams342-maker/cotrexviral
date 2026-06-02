@@ -22,14 +22,17 @@ const iconForKind = (kind) => {
   return FileIcon;
 };
 
-const statusLabel = (status) => {
-  if (!status) return 'queued';
-  if (status === 'queued')     return 'queued';
-  if (status === 'extracting') return 'reading…';
-  if (status === 'analyzing')  return 'analyzing…';
-  if (status === 'complete')   return 'ready';
-  if (status === 'failed')     return 'failed';
-  return status;
+const statusLabel = (a) => {
+  const s = a.status;
+  if (!s)               return 'queued';
+  if (s === 'queued')   return 'queued';
+  if (s === 'failed')   return 'failed';
+  if (s === 'complete') return 'ready';
+  if (s === 'extracting') return 'reading…';
+  // analyzing — extraction done, LLM analysis in flight. Cortex can
+  // already chat about it using the extracted excerpt or filename, so
+  // we call this "ready to chat" rather than the slower "analyzing".
+  return 'ready to chat';
 };
 
 export const Composer = ({ value, onChange, onSubmit, sending }) => {
@@ -61,7 +64,12 @@ export const Composer = ({ value, onChange, onSubmit, sending }) => {
                                     { withCredentials: true });
         const a = r.data || {};
         setAttachments((prev) => prev.map((x) =>
-          x.id === assetId ? { ...x, status: a.status, intelligence: a.intelligence } : x));
+          x.id === assetId
+            ? { ...x,
+                status:        a.status,
+                intelligence:  a.intelligence,
+                text_excerpt:  a.text_excerpt || x.text_excerpt }
+            : x));
         if (a.status === 'complete' || a.status === 'failed') {
           clearInterval(pollsRef.current[assetId]);
           delete pollsRef.current[assetId];
@@ -134,24 +142,35 @@ export const Composer = ({ value, onChange, onSubmit, sending }) => {
              className="flex flex-wrap gap-1.5 px-2.5 pt-2.5">
           {attachments.map((a) => {
             const Icon = iconForKind(a.kind);
-            const isReady = a.status === 'complete';
+            const isComplete = a.status === 'complete';
             const isFailed = a.status === 'failed';
+            // After extraction finishes (status moves out of queued/extracting),
+            // the user can already send — Cortex has the filename + extracted
+            // text excerpt to reason over.
+            const isChatReady = isComplete
+              || (a.status && a.status !== 'queued' && a.status !== 'extracting');
+            const tone = isFailed
+              ? 'border-rose-500/30 bg-rose-500/10 text-rose-200'
+              : isComplete
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+                : isChatReady
+                  ? 'border-emerald-500/25 bg-emerald-500/[0.06] text-emerald-100/90'
+                  : 'border-violet-500/25 bg-violet-500/10 text-violet-100';
+            const labelTone = isFailed
+              ? 'text-rose-300'
+              : (isComplete || isChatReady)
+                ? 'text-emerald-300'
+                : 'text-violet-300';
             return (
               <div key={a.id}
                    data-testid={`composer-attachment-${a.id}`}
-                   className={`flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-md border text-[11.5px] max-w-[260px] ${
-                     isFailed
-                       ? 'border-rose-500/30 bg-rose-500/10 text-rose-200'
-                       : isReady
-                         ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
-                         : 'border-violet-500/25 bg-violet-500/10 text-violet-100'
-                   }`}>
+                   className={`flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-md border text-[11.5px] max-w-[260px] ${tone}`}>
                 <Icon size={12} className="shrink-0 opacity-80" />
                 <span className="truncate">{a.name}</span>
-                <span className={`shrink-0 text-[10px] ${isFailed ? 'text-rose-300' : isReady ? 'text-emerald-300' : 'text-violet-300'}`}>
-                  · {statusLabel(a.status)}
+                <span className={`shrink-0 text-[10px] ${labelTone}`}>
+                  · {statusLabel(a)}
                 </span>
-                {!isReady && !isFailed && (
+                {!isComplete && !isFailed && !isChatReady && (
                   <Loader2 size={10} className="animate-spin opacity-70 shrink-0" />
                 )}
                 <button onClick={() => removeAttachment(a.id)}
