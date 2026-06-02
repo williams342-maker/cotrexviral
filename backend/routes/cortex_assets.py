@@ -138,21 +138,13 @@ async def _run_pipeline(asset_id: str) -> None:
                 upsert=True,
             )
 
-        # 3b. Creative Brief — synthesize the executable campaign brief
-        # on top of the intelligence + review. Phase-A2 layer. Best-effort:
-        # if the LLM is down we skip rather than fail the whole pipeline.
-        try:
-            brief = await generate_brief(asset, intel, review)
-            if brief:
-                await db.cortex_creative_briefs.update_one(
-                    {"asset_id": asset_id},
-                    {"$set": {**brief, "asset_id": asset_id,
-                               "user_id": asset.get("user_id")}},
-                    upsert=True,
-                )
-        except Exception:
-            logger.exception("asset pipeline: creative brief failed for %s",
-                              asset_id)
+        # 3b. Creative Brief — DEFERRED. Brief generation adds another
+        # ~5-15s of LLM round-trips and is on-demand via the
+        # `/cortex/assets/{id}/brief` endpoint (regenerate_brief) and
+        # `/build-campaign` flow. Skipping it here lets `status=complete`
+        # flip faster so the chat composer can use the asset's intel
+        # immediately. If a brief is needed it's generated lazily on
+        # first read from the existing endpoints.
 
         # 4. Flip status → complete
         await db.cortex_assets.update_one(

@@ -22,6 +22,7 @@ gracefully if one tool-call fails.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -121,16 +122,26 @@ _REVIEW_TOOL = {
 # -------------------------------------------------------- orchestrator
 async def analyze_asset(asset: dict, extracted: dict) -> dict:
     """Run the full Phase-A1 pipeline for one asset:
-        1) extract_intelligence
-        2) generate_review
+        1) extract_intelligence  ┐  run in parallel — review only needs
+        2) generate_review       ┘  the extracted text, so passing
+                                    intel=None avoids the dependency
+                                    that previously forced a sequential
+                                    waterfall.
         3) write to Cortex Memory
        Returns the persisted records (intelligence, review) so the caller
        can return them in the upload response."""
     user_id = asset.get("user_id")
     asset_id = asset.get("id")
 
-    intel = await extract_intelligence(asset, extracted)
-    review = await generate_review(asset, extracted, intel)
+    # Run both LLM tool-calls concurrently. Review previously used
+    # intel as optional context for its prompt; dropping that here is
+    # the only quality trade-off, and it's small because review still
+    # reads the asset's full extracted text.
+    intel, review = await asyncio.gather(
+        extract_intelligence(asset, extracted),
+        generate_review(asset, extracted, None),
+        return_exceptions=False,
+    )
 
     # Persist into Cortex Memory so future chat conversations can recall
     # this asset's gist. Best-effort — never raises into the pipeline.
