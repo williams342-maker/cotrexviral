@@ -630,6 +630,10 @@ const CommandCenter = () => {
               activeMissions={activeMissions}
               missionsLoading={missionsLoading}
               onOpenMission={() => navigate(`/dashboard/missions`)}
+              onMissionCancelled={(mid) => {
+                setActiveMissions((prev) => prev.filter((x) => x.id !== mid));
+                loadActiveMissions();
+              }}
               onDiscussFinding={(f) => {
                 setDraft(`I see Cortex flagged: "${f.bottleneck}". What's your reasoning, and what would you recommend?`);
               }}

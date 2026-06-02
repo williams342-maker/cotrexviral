@@ -17,7 +17,7 @@ const URGENCY = {
 
 export const OpportunityRail = ({
   opportunities = [], loading, onPrompt, strategy,
-  activeMissions = [], missionsLoading = false, onOpenMission,
+  activeMissions = [], missionsLoading = false, onOpenMission, onMissionCancelled,
   onDiscussFinding, onLaunchScan,
 }) => {
   return (
@@ -28,7 +28,8 @@ export const OpportunityRail = ({
 
       {/* Active missions */}
       <ActiveMissionRail missions={activeMissions} loading={missionsLoading}
-                            onOpenDetails={onOpenMission} />
+                            onOpenDetails={onOpenMission}
+                            onCancelled={onMissionCancelled} />
 
       {/* Active Work — long-running analyses with real job IDs */}
       <ActiveWorkRail onLaunchScan={onLaunchScan} />
