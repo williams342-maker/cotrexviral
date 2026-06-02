@@ -142,14 +142,6 @@ app.add_middleware(
 async def root_health():
     from cortex import memory as _cmem
     mem = await _cmem.health()
-    # Tiny diagnostic so we can see whether the live server's view of
-    # OPENAI_API_KEY matches what the CLI/test view of .env shows.
-    # Returns just length + last 4 chars (safe to expose, can't
-    # reconstruct the key from this).
-    import os as _os
-    _k = _os.environ.get("OPENAI_API_KEY", "").strip()
-    mem["_diag_key_len"] = len(_k)
-    mem["_diag_key_tail"] = _k[-4:] if _k else ""
     return {
         "status": "ok",
         "memory": mem,

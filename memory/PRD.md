@@ -35,6 +35,28 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-02-28 (part 128) **🎨 P2 + P3 + P4 — Memory tab, platform visual signatures, learned posting times**
+  - **P2 — Cortex Memory tab in Account Settings**:
+    - New backend endpoints in `routes/cortex_memory.py`:
+      - `GET /api/cortex/memory/me?limit=50&q=…` — lists this user's stored turns (newest first, pinned first), excludes the large `vector` field, optional case-insensitive substring search.
+      - `POST /api/cortex/memory/pin/{turn_id}` body `{pinned: bool}` — pin/unpin a turn so the per-user-cap pruner skips it.
+      - `DELETE /api/cortex/memory/turn/{turn_id}` — delete a single turn.
+      - `DELETE /api/cortex/memory/all` — nuke all of this user's vectors AND strategy doc.
+    - Pruner in `cortex/memory.py` now skips pinned turns from prune candidates so they survive the per-user cap forever.
+    - New `<CortexMemorySection />` in `AccountSettings.jsx`: shows the auto-distilled strategy summary + goals chips, then a searchable list of stored turns with role pill (You / Cortex), preview body, relative time, pin/unpin + delete actions, and a "Wipe all" button gated by a confirmation modal. Empty/loading states handled. Data-testids: `account-memory-section`, `memory-strategy-card`, `memory-list`, `memory-turn-<id>`, `memory-pin-<id>`, `memory-delete-<id>`, `memory-wipe-btn`, `memory-wipe-confirm`.
+  - **P3 — Per-platform visual signature** (`SeoLandingTemplate.jsx`):
+    - New `PLATFORM_ACCENTS` map keyed by slug → `{primary, secondary, pulse, rgb}`. Brand-accurate palettes: Instagram coral→amber, TikTok red→cyan, LinkedIn blue→sky, YouTube red→coral, Facebook blue→light-blue, Reddit orange→gold.
+    - 5 base SaaS landings (`marketing-os`, `seller-acquisition`, `ai-campaign-generator`, `competitor-analysis`, `asset-analysis`) keep the default violet/cyan via `DEFAULT_ACCENT`.
+    - Accent applied via CSS custom properties (`--accent-primary`, `--accent-secondary`, `--accent-pulse`, `--accent-rgb`) on the page root → consumed inline by H1 gradient, kicker chip border + pulse dot, hero bullet Check icons, section kicker eyebrows, comparison "with CortexViral" border + glow + label + check icons. Zero Tailwind safelist changes needed.
+    - Verified live: TikTok page now renders H1 in TikTok-brand red→cyan gradient; preview screenshot confirmed.
+  - **P4 — Per-user learned posting times** (`routes/channels.py`):
+    - Replaced the static heuristic in `POST /api/ai/optimal-times` with a Mongo aggregation over `db.posts` grouped by `(platform, isoWeekday, hour)` scored by post count + engagement (likes+comments+shares+impressions), restricted to last 180 days.
+    - Trust threshold: ≥ 6 published posts on a platform AND ≥ 1 learned bucket → switch to learned slots. Below threshold → static heuristic.
+    - Each returned slot now carries `source: 'learned' | 'heuristic'` plus `support_posts` + `support_engagement` on learned slots. New `learned_support` block in the response: `{platform: {post_count, uses_learned, min_required}}` so the UI can show "Personalized from your 23 LinkedIn posts" vs "Industry baseline (post more to unlock personalized timing)".
+    - Regression test `backend/tests/test_optimal_times_learned.py` (2 tests passing): (1) heuristic fallback when no history, (2) learned path correctly identifies Tue 9am after seeding 8 LinkedIn posts on that exact slot.
+  - **Total tests after this round: 8/8 passing in 15.3s** (4 cortex-memory-v2 + 2 optimal-times-learned + 2 concurrency).
+  - **OpenAI key rotation incident**: original key from part 127 got auto-revoked by OpenAI (likely flagged as exposed since it was pasted in chat). User rotated, new key live in preview's `.env`. Removed the temporary `/api/health._diag_key_*` diagnostic field I'd added during RCA. **Production needs the same rotation**: update `OPENAI_API_KEY` in Emergent Deploy → Environment Variables with the new key, then redeploy. Going forward, keys should be pasted directly into the Emergent secrets panel, never through chat.
+
 - 2026-02-28 (part 127) **🚀 Managed Vector Memory — replaced fastembed + local Qdrant with OpenAI embeddings + Mongo**
   - **The shift**: Removed the production-breaking `fastembed` + `qdrant-client` + `onnxruntime` dependencies entirely. Replaced with OpenAI `text-embedding-3-small` (1536-dim, ~$0.00002 per Cortex turn) for embeddings + a single Mongo collection (`cortex_memory_v2`) for storage + Python numpy cosine top-K for retrieval.
   - **Why this works on Emergent's 1Gi pods**: no ML libs in the pod (embedding happens at OpenAI), no Qdrant process, no 130MB ONNX model. Pod stays tiny + fast. Data survives restarts (Mongo, not ephemeral disk).
