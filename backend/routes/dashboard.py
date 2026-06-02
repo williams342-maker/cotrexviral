@@ -1,6 +1,6 @@
 """Dashboard summary endpoint (stats + recent activity for /dashboard overview)."""
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from core import db, api, STRICT_NORMALIZED_READS
 from deps import get_current_user
@@ -40,3 +40,16 @@ async def list_reports(request: Request):
     user = await get_current_user(request)
     cursor = db.reports.find({"user_id": user.user_id}, {"_id": 0}).sort("created_at", -1)
     return await cursor.to_list(50)
+
+
+@api.delete("/reports/{report_id}")
+async def delete_report(report_id: str, request: Request):
+    """Hard-delete a report owned by the current user. Used by the
+    Reports page card close (X) button so users can dismiss noisy or
+    failed scans from their list."""
+    user = await get_current_user(request)
+    result = await db.reports.delete_one(
+        {"id": report_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(404, "Report not found.")
+    return {"ok": True, "id": report_id}

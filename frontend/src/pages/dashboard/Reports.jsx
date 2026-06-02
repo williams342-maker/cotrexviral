@@ -39,6 +39,19 @@ export default function Reports() {
     })();
   }, []);
 
+  const handleDelete = async (reportId) => {
+    if (!window.confirm('Delete this report? This cannot be undone.')) return;
+    try {
+      await axios.delete(`${API}/reports/${reportId}`, { withCredentials: true });
+      setReports((prev) => prev.filter((r) => r.id !== reportId));
+      // If the currently-open detail view was just deleted, fall back to list.
+      if (activeId === reportId) setSearchParams({});
+    } catch (err) {
+      const detail = err?.response?.data?.detail || err?.message || 'Failed to delete report';
+      window.alert(detail);
+    }
+  };
+
   const active = useMemo(() =>
     reports.find((r) => r.id === activeId), [reports, activeId]);
 
@@ -112,7 +125,8 @@ export default function Reports() {
               <FilteredEmpty onClear={() => { setQ(''); setTypeFilter('all'); setRange('all'); }} />
             ) : (
               <ReportList reports={filtered}
-                            onOpen={(id) => setSearchParams({ id })} />
+                            onOpen={(id) => setSearchParams({ id })}
+                            onDelete={handleDelete} />
             )}
           </>
         )}
@@ -236,38 +250,55 @@ function EmptyState() {
 }
 
 
-function ReportList({ reports, onOpen }) {
+function ReportList({ reports, onOpen, onDelete }) {
   return (
     <div data-testid="reports-list" className="grid grid-cols-1 md:grid-cols-2 gap-3">
       {reports.map((r) => {
         const meta = TYPE_META[r.type] || TYPE_META.site_scan;
         const Icon = meta.icon;
         return (
-          <button key={r.id}
-                  onClick={() => onOpen(r.id)}
-                  data-testid={`report-card-${r.id}`}
-                  className={`text-left rounded-xl border p-4 transition hover:bg-white/[0.04] ${meta.tone}`}>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-7 h-7 rounded-md bg-white/[0.05] border border-white/5 flex items-center justify-center">
-                <Icon size={12} />
-              </span>
-              <span className="text-[10px] uppercase tracking-widest font-bold">
-                {meta.label}
-              </span>
-              <span className="text-[10px] text-zinc-500 ml-auto">
-                {fmtDate(r.created_at)}
-              </span>
-            </div>
-            <div className="text-sm text-white font-semibold truncate mb-1">
-              {r.url || r.target || '—'}
-            </div>
-            <div className="text-[12px] text-zinc-400 line-clamp-2">
-              {(r.report?.summary) || 'Open to view findings.'}
-            </div>
-            <div className="flex items-center gap-1.5 mt-2 text-[11px] text-zinc-400">
-              View report <ChevronRight size={11} />
-            </div>
-          </button>
+          <div key={r.id}
+               data-testid={`report-card-${r.id}`}
+               className={`group relative rounded-xl border transition hover:bg-white/[0.04] ${meta.tone}`}>
+            <button onClick={() => onOpen(r.id)}
+                    data-testid={`report-card-open-${r.id}`}
+                    className="w-full text-left p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-7 h-7 rounded-md bg-white/[0.05] border border-white/5 flex items-center justify-center">
+                  <Icon size={12} />
+                </span>
+                <span className="text-[10px] uppercase tracking-widest font-bold">
+                  {meta.label}
+                </span>
+                <span className="text-[10px] text-zinc-500 ml-auto pr-7">
+                  {fmtDate(r.created_at)}
+                </span>
+              </div>
+              <div className="text-sm text-white font-semibold truncate mb-1">
+                {r.url || r.target || '—'}
+              </div>
+              <div className="text-[12px] text-zinc-400 line-clamp-2">
+                {(r.report?.summary) || 'Open to view findings.'}
+              </div>
+              <div className="flex items-center gap-1.5 mt-2 text-[11px] text-zinc-400">
+                View report <ChevronRight size={11} />
+              </div>
+            </button>
+
+            {/* Close / delete button — top-right, surfaces on hover */}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onDelete?.(r.id); }}
+              data-testid={`report-delete-${r.id}`}
+              title="Delete report"
+              aria-label="Delete report"
+              className="absolute top-2 right-2 w-6 h-6 rounded-md flex items-center justify-center
+                         text-zinc-500 hover:text-rose-300 hover:bg-rose-500/15 border border-transparent
+                         hover:border-rose-500/30 opacity-0 group-hover:opacity-100 focus:opacity-100
+                         transition">
+              <X size={12} />
+            </button>
+          </div>
         );
       })}
     </div>
