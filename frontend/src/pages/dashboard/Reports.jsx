@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
   FileText, Globe, Search, BarChart3, Users, Lightbulb,
-  ChevronRight, ExternalLink, ArrowLeft, X, CheckSquare, Square, Trash2, AlertTriangle,
+  ChevronRight, ExternalLink, ArrowLeft, X, CheckSquare, Square, Trash2, AlertTriangle, RotateCw,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { API } from '../../context/AuthContext';
@@ -51,6 +51,7 @@ export default function Reports() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [retryBusyIds, setRetryBusyIds] = useState(() => new Set());
 
   useEffect(() => {
     (async () => {
@@ -124,6 +125,57 @@ export default function Reports() {
       window.alert(detail);
     } finally {
       setBulkBusy(false);
+    }
+  };
+
+  const retryOne = async (reportId) => {
+    setRetryBusyIds((prev) => { const n = new Set(prev); n.add(reportId); return n; });
+    try {
+      const r = await axios.post(`${API}/reports/${reportId}/retry`, {},
+                                    { withCredentials: true });
+      const newReport = r.data?.report;
+      if (!newReport) throw new Error('Retry returned no new report.');
+      // Swap the failed row out, drop the new one in newest-first.
+      setReports((prev) => [newReport, ...prev.filter((x) => x.id !== reportId)]);
+      if (activeId === reportId) setSearchParams({ id: newReport.id });
+    } catch (err) {
+      const detail = err?.response?.data?.detail || err?.message || 'Retry failed';
+      window.alert(detail);
+    } finally {
+      setRetryBusyIds((prev) => { const n = new Set(prev); n.delete(reportId); return n; });
+    }
+  };
+
+  const bulkRetryFailed = async () => {
+    const failed = reports.filter(isFailedReport);
+    if (failed.length === 0) {
+      window.alert('No failed scans to retry.');
+      return;
+    }
+    if (!window.confirm(
+      `Retry ${failed.length} failed scan${failed.length > 1 ? 's' : ''}? ` +
+      `Cortex will fix the URL where possible (e.g. add the missing https://) and re-run each scan.`)) return;
+    setBulkBusy(true);
+    setRetryBusyIds(new Set(failed.map((r) => r.id)));
+    try {
+      const r = await axios.post(`${API}/reports/bulk-retry`,
+                                  { ids: failed.map((x) => x.id) },
+                                  { withCredentials: true });
+      // Refresh from server so we get fresh new rows + skip data in one shot.
+      try {
+        const r2 = await axios.get(`${API}/reports`, { withCredentials: true });
+        setReports(Array.isArray(r2.data) ? r2.data : []);
+      } catch (_e) { /* keep optimistic state */ }
+      const { retried, skipped } = r.data || {};
+      window.alert(
+        `Retried ${retried || 0} of ${failed.length}.` +
+        (skipped ? ` Skipped: ${skipped}.` : ''));
+    } catch (err) {
+      const detail = err?.response?.data?.detail || err?.message || 'Bulk retry failed';
+      window.alert(detail);
+    } finally {
+      setBulkBusy(false);
+      setRetryBusyIds(new Set());
     }
   };
 
@@ -204,6 +256,8 @@ export default function Reports() {
               }}
               failedCount={failedCount}
               onSelectFailed={selectAllFailed}
+              onRetryAllFailed={bulkRetryFailed}
+              bulkBusy={bulkBusy}
             />
 
             {selectedIds.size > 0 && (
@@ -224,6 +278,8 @@ export default function Reports() {
               <ReportList reports={filtered}
                             onOpen={(id) => setSearchParams({ id })}
                             onDelete={handleDelete}
+                            onRetry={retryOne}
+                            retryBusyIds={retryBusyIds}
                             selectMode={selectMode || selectedIds.size > 0}
                             selectedIds={selectedIds}
                             onToggleSelect={toggleSelect} />
@@ -238,7 +294,8 @@ export default function Reports() {
 
 function FilterBar({ q, onQ, typeFilter, onType, availableTypes,
                        range, onRange, sort, onSort, total, filtered,
-                       selectMode, onToggleSelectMode, failedCount, onSelectFailed }) {
+                       selectMode, onToggleSelectMode, failedCount, onSelectFailed,
+                       onRetryAllFailed, bulkBusy }) {
   const hasFilter = q || typeFilter !== 'all' || range !== 'all' || sort !== 'newest';
   return (
     <div data-testid="reports-filter-bar"
@@ -311,12 +368,21 @@ function FilterBar({ q, onQ, typeFilter, onType, availableTypes,
         )}
         <div className="w-px h-4 bg-white/10 mx-1" />
         {failedCount > 0 && (
-          <button onClick={onSelectFailed}
-                  data-testid="reports-select-failed"
-                  title={`Select all ${failedCount} failed scan${failedCount > 1 ? 's' : ''}`}
-                  className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-200 border border-rose-500/25 transition flex items-center gap-1">
-            <AlertTriangle size={10} /> Clear failed scans ({failedCount})
-          </button>
+          <>
+            <button onClick={onRetryAllFailed}
+                    data-testid="reports-retry-failed"
+                    disabled={bulkBusy}
+                    title={`Re-run all ${failedCount} failed scan${failedCount > 1 ? 's' : ''} with repaired URLs`}
+                    className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 border border-emerald-500/30 transition flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed">
+              <RotateCw size={10} className={bulkBusy ? 'animate-spin' : ''} /> Retry all failed ({failedCount})
+            </button>
+            <button onClick={onSelectFailed}
+                    data-testid="reports-select-failed"
+                    title={`Select all ${failedCount} failed scan${failedCount > 1 ? 's' : ''}`}
+                    className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-200 border border-rose-500/25 transition flex items-center gap-1">
+              <AlertTriangle size={10} /> Clear failed scans ({failedCount})
+            </button>
+          </>
         )}
         <button onClick={onToggleSelectMode}
                 data-testid="reports-toggle-select-mode"
@@ -406,7 +472,8 @@ function EmptyState() {
 }
 
 
-function ReportList({ reports, onOpen, onDelete, selectMode, selectedIds, onToggleSelect }) {
+function ReportList({ reports, onOpen, onDelete, onRetry, retryBusyIds,
+                       selectMode, selectedIds, onToggleSelect }) {
   return (
     <div data-testid="reports-list" className="grid grid-cols-1 md:grid-cols-2 gap-3">
       {reports.map((r) => {
@@ -473,18 +540,35 @@ function ReportList({ reports, onOpen, onDelete, selectMode, selectedIds, onTogg
             {/* Close / delete button — top-right, surfaces on hover.
                 Hidden in select mode to avoid two competing affordances. */}
             {!selectMode && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onDelete?.(r.id); }}
-                data-testid={`report-delete-${r.id}`}
-                title="Delete report"
-                aria-label="Delete report"
-                className="absolute top-2 right-2 w-6 h-6 rounded-md flex items-center justify-center
-                           text-zinc-500 hover:text-rose-300 hover:bg-rose-500/15 border border-transparent
-                           hover:border-rose-500/30 opacity-0 group-hover:opacity-100 focus:opacity-100
-                           transition">
-                <X size={12} />
-              </button>
+              <>
+                {failed && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onRetry?.(r.id); }}
+                    data-testid={`report-retry-${r.id}`}
+                    disabled={retryBusyIds?.has(r.id)}
+                    title="Retry this scan with a repaired URL"
+                    aria-label="Retry scan"
+                    className="absolute top-2 right-9 px-1.5 h-6 rounded-md flex items-center gap-1 text-[10.5px] font-semibold
+                               text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/15 border border-emerald-500/30
+                               opacity-0 group-hover:opacity-100 focus:opacity-100 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                    <RotateCw size={11} className={retryBusyIds?.has(r.id) ? 'animate-spin' : ''} />
+                    {retryBusyIds?.has(r.id) ? '…' : 'Retry'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onDelete?.(r.id); }}
+                  data-testid={`report-delete-${r.id}`}
+                  title="Delete report"
+                  aria-label="Delete report"
+                  className="absolute top-2 right-2 w-6 h-6 rounded-md flex items-center justify-center
+                             text-zinc-500 hover:text-rose-300 hover:bg-rose-500/15 border border-transparent
+                             hover:border-rose-500/30 opacity-0 group-hover:opacity-100 focus:opacity-100
+                             transition">
+                  <X size={12} />
+                </button>
+              </>
             )}
           </div>
         );
