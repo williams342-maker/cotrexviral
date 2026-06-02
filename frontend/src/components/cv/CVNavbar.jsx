@@ -115,7 +115,7 @@ const CVNavbar = ({ onGetStarted }) => {
               className="cv-btn-primary inline-flex items-center gap-1.5 text-[13px] font-semibold px-4 h-9 rounded-full"
               data-testid="cv-nav-cta"
             >
-              Start Growing <ArrowUpRight size={14} />
+              Start Free <ArrowUpRight size={14} />
             </button>
             <button
               onClick={() => setOpen((o) => !o)}

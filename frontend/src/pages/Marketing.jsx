@@ -33,8 +33,8 @@ const Marketing = () => {
   return (
     <div className="min-h-screen cv-dark antialiased">
       <CVSeo
-        title="AI Marketing Operating System for Growth Teams"
-        description="CortexViral is an AI Marketing Operating System that plans campaigns, generates content, recruits sellers, analyzes competitors, and executes growth workflows from one command center."
+        title="Create, Schedule & Optimize Social Posts Automatically | CortexViral"
+        description="CortexViral is the AI social marketing autopilot: pick your niche, AI writes hook-tested posts, you approve in one tap, it schedules at peak times and measures results. Replace a 5-person social team — start free."
         path="/"
         schema={[ORG_SCHEMA, SOFTWARE_SCHEMA, buildFaqSchema(DEFAULT_FAQS.map((f) => ({ question: f.q, answer: f.a })))]}
       />

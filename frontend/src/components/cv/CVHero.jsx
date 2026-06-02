@@ -27,7 +27,7 @@ const CVHero = ({ onGetStarted }) => {
             data-testid="cv-hero-badge"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 cv-pulse" />
-            The AI Marketing Operating System
+            AI social marketing autopilot
           </motion.div>
 
           <motion.h1
@@ -36,8 +36,9 @@ const CVHero = ({ onGetStarted }) => {
             transition={{ duration: 0.7, delay: 0.05 }}
             className="cv-display text-5xl sm:text-6xl lg:text-7xl font-semibold text-white leading-[0.95]"
           >
-            The AI Marketing{' '}
-            <span className="cv-gradient-text">Operating System.</span>
+            Create, schedule, and optimize{' '}
+            <span className="cv-gradient-text">short-form social posts</span>
+            <span className="text-zinc-400 text-[0.7em] font-normal"> — automatically.</span>
           </motion.h1>
 
           <motion.p
@@ -46,9 +47,10 @@ const CVHero = ({ onGetStarted }) => {
             transition={{ duration: 0.7, delay: 0.15 }}
             className="mt-6 max-w-2xl text-[17px] leading-relaxed text-zinc-400"
           >
-            <strong className="text-zinc-200">Plan campaigns. Generate assets. Recruit sellers. Analyze competitors. Execute growth.</strong>{' '}
-            CortexViral runs every layer of your marketing — strategy, content, distribution, intelligence — from one command center.
-            No more stitching ten tools together.
+            <strong className="text-zinc-200">
+              Pick your niche → AI writes hook-tested posts → you approve in one tap → CortexViral schedules at peak times → it measures results and learns.
+            </strong>{' '}
+            Replace the work of a 5-person social team — without the overhead, the agency retainer, or stitching together ten tools.
           </motion.p>
 
           <motion.div
@@ -62,34 +64,42 @@ const CVHero = ({ onGetStarted }) => {
               className="cv-btn-primary inline-flex items-center gap-2 text-[14px] font-semibold px-6 h-12 rounded-full"
               data-testid="cv-hero-cta-primary"
             >
-              Start Your First Mission <ArrowRight size={15} />
+              Start Free <ArrowRight size={15} />
             </button>
             <button
-              onClick={() => document.querySelector('#results')?.scrollIntoView({ behavior: 'smooth' })}
+              onClick={() => document.querySelector('#faq')?.scrollIntoView({ behavior: 'smooth' })}
               className="cv-btn-secondary inline-flex items-center gap-2 text-[14px] font-semibold px-5 h-12 rounded-full"
               data-testid="cv-hero-cta-secondary"
             >
-              <Play size={13} /> View Case Studies
+              <Play size={13} /> See how it works
             </button>
           </motion.div>
 
-          {/* Trust bar */}
+          {/* Concrete-workflow strip — replaces vague "viral growth" claim with the 4 steps users will actually do. */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.8, delay: 0.5 }}
             className="mt-14"
+            data-testid="cv-hero-workflow"
           >
             <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-600 font-medium mb-4">
-              Trusted by fast-growing brands
+              How CortexViral works
             </div>
-            <div className="flex flex-wrap items-center gap-x-8 gap-y-3 text-zinc-500">
-              {['LEVEL', 'OXFORD', 'VERTEX', 'LUMEN', 'SYNQ'].map((b) => (
-                <span key={b} className="cv-display font-semibold text-[15px] tracking-[0.24em] opacity-70 hover:opacity-100 transition-opacity">
-                  {b}
-                </span>
+            <ol className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[12.5px]">
+              {[
+                { n: '01', t: 'Pick a niche',         d: 'Enter your topic + audience.' },
+                { n: '02', t: 'AI generates hooks',   d: 'Hook-tested posts per platform.' },
+                { n: '03', t: 'Approve in one tap',   d: 'Edit or accept the AI draft.' },
+                { n: '04', t: 'It schedules + learns', d: 'Posts at peak times, tracks ROI.' },
+              ].map((step) => (
+                <li key={step.n} className="cv-glass rounded-xl p-3" data-testid={`cv-hero-step-${step.n}`}>
+                  <div className="cv-display text-[13px] font-semibold cv-gradient-text">{step.n}</div>
+                  <div className="text-white font-semibold mt-1">{step.t}</div>
+                  <div className="text-zinc-500 mt-0.5 text-[11.5px] leading-snug">{step.d}</div>
+                </li>
               ))}
-            </div>
+            </ol>
           </motion.div>
         </div>
 

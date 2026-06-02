@@ -35,6 +35,17 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-06-02 **🚀 Landing-page Phase A: SEO rendering + copy + CTA polish (10 items, 5 done)**
+  - **#1 SEO rendering fix (CRITICAL)**: added `"postbuild": "react-snap"` to `frontend/package.json` so every `yarn build` automatically prerenders all 88 routes. Verified `/build/index.html` (80KB) now contains: new H1 copy, 4-step workflow narrative, all 7 FAQ questions, FAQPage + Organization + SoftwareApplication JSON-LD, canonical URL, OG meta, internal `/pricing` link. Previously `yarn build` ran only `craco build` — producing an empty SPA shell that crawlers/social-card scrapers couldn't read.
+  - **#2 Removed "Made with Emergent" badge** from `public/index.html` (badge `<a>` element + `emergent-main.js` script tag). Confirmed safe via support_agent — no platform restriction on removing it.
+  - **#3 + #6 Tightened positioning** — Hero H1 now: *"Create, schedule, and optimize short-form social posts — automatically."* Sub-copy is the concrete 4-step workflow: niche → hooks → approve → schedule → measure. Replaced abstract "Operating System" language with a "5-person social team replacement" frame.
+  - **#9 CTA consistency** — single primary CTA "Start Free" across navbar, hero primary, CTA footer; secondary CTAs are "See how it works" (hero, scrolls to FAQ) and "See pricing" (footer).
+  - **#10 FAQ rewrite + internal-link push**: 7 new FAQ entries directly answering buyer questions (workflow, comparisons, free plan, speed, case studies), each linking out to `/pricing`, `/agents`, and `/insights/*` blog posts. `buildFaqSchema` continues to emit valid Schema.org FAQPage markup.
+  - **Hero workflow strip** (new): 4 numbered glass cards under the CTAs surface the concrete workflow above the fold — replaces the old "Trusted by LEVEL · OXFORD · VERTEX..." fake-logo trust bar.
+
+  **Phase B backlog** (next batch when user is ready): #4 Pricing page rebuild · #5 Free interactive "Viral Post Generator" tool · #7 Real case studies with measurable results · #8 Comparison sections (vs ChatGPT/Buffer/Hootsuite/Jasper/Copy.ai).
+
+
 - 2026-06-02 **🧹 Bulk-select + bulk-delete across noisy lists (Reports, Assets, Cortex Memory)**
   - Shared interaction pattern: "Select" toggle → checkboxes appear on every row/card → sticky violet selection bar with `N selected · Select all visible · Cancel · Delete N`.
   - **Reports** (`/dashboard/reports`) — `POST /api/reports/bulk-delete` + heuristic "Clear failed scans" shortcut (detects scans whose summary starts with "Could not"/"Failed"/"Scan could not"/"lacked … protocol" or empty body). Hard delete, user-scoped.

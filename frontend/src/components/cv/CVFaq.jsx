@@ -5,28 +5,32 @@ import CVBackdrop from './CVBackdrop';
 
 const DEFAULT_FAQS = [
   {
-    q: 'What is an AI viral content generator?',
-    a: 'An AI viral content generator like CortexViral uses large language models to draft hook-tested, platform-tailored social media posts in seconds — including hooks, captions, hashtags, and CTAs. It analyses what is currently trending in your niche, then writes content matched to each channel\'s peak posting window.',
+    q: 'How does CortexViral generate viral social posts?',
+    a: 'Tell CortexViral your niche and target audience, and our AI studies what is currently going viral in that vertical (hooks, formats, posting times). It then writes platform-tailored drafts — TikTok scripts, Instagram captions, LinkedIn long-form, Twitter threads — each variant tested against proven hook patterns. You approve in one tap and it ships.',
   },
   {
-    q: 'Can CortexViral really help me grow on TikTok and Instagram?',
-    a: 'Yes. Our AI generates short-form video scripts with timed scenes, voiceover, on-screen text, and Instagram-ready captions. Combined with optimal-time scheduling and multi-variant testing, brands typically see 3–5× more reach within the first 60 days.',
+    q: 'Which social platforms can CortexViral post to?',
+    a: 'CortexViral publishes directly to TikTok, Instagram, X (Twitter), LinkedIn, Facebook, YouTube, Pinterest, Reddit and Threads. You connect each channel once with OAuth — no copy-pasting between tabs.',
   },
   {
-    q: 'Which social platforms does CortexViral support?',
-    a: 'CortexViral supports TikTok, Instagram, X (Twitter), LinkedIn, YouTube, Facebook, Pinterest, Threads, Reddit, and 30+ more channels. You publish once and CortexViral tailors the post for every connected channel.',
+    q: 'How is this different from ChatGPT, Buffer, Jasper or Hootsuite?',
+    a: 'ChatGPT writes general text — it doesn\'t schedule, doesn\'t learn what works for your audience, and can\'t publish anywhere. Buffer and Hootsuite schedule but make you write everything yourself. Jasper and Copy.ai generate copy but have no analytics or publishing. CortexViral closes the entire loop: trend research → draft → approve → schedule at peak time → measure → learn — in one product. See the full breakdown on our /agents page.',
   },
   {
-    q: 'How is this different from ChatGPT or other AI writers?',
-    a: 'ChatGPT writes general text. CortexViral is a viral marketing automation tool: it studies real-time trends, generates platform-specific variants, schedules them at peak windows, tracks performance, and learns what works for your niche. It is a closed-loop growth system, not just a writer.',
+    q: 'Can it really replace a social media manager?',
+    a: 'For most solo founders, creators and small marketing teams — yes. CortexViral handles the four jobs an SMM does daily: ideation (Nova), content writing (Sam), distribution timing (Kai), and reply / community work (Angela). You keep human oversight: every post lands in your approval queue before it goes live.',
   },
   {
-    q: 'Do I need to hire a social media manager if I use CortexViral?',
-    a: 'No. CortexViral replaces or augments your social-media manager. Four specialist AI agents (Nova, Sam, Kai, Angela) handle content, SEO, social listening, and email — all reporting into your inbox 24/7.',
+    q: 'Is there a free plan? How does pricing work?',
+    a: 'Yes — start free with limited AI generations and one connected channel, no credit card. Paid tiers (Creator and Agency) unlock unlimited posts, more channels, scheduling, analytics, team seats and direct publishing. Full breakdown on the /pricing page.',
   },
   {
-    q: 'Is there a free plan?',
-    a: 'Yes. Start free with limited AI generations, then upgrade to Pro for unlimited posts, real-time scheduling, premium analytics, and live publishing to connected channels.',
+    q: 'How fast can I get my first post out?',
+    a: 'About three minutes. Connect one channel, type your niche, hit generate. CortexViral returns five hook-tested drafts in ~20 seconds; pick one, approve, and it schedules to your next peak window automatically.',
+  },
+  {
+    q: 'Do you have case studies and real results?',
+    a: 'Yes — our insights blog covers marketplace growth playbooks, seller acquisition wins, and the campaign frameworks our customers use to grow 3-5x in 60 days. Start with /insights/marketplace-growth-strategies or /insights/seller-acquisition-playbook.',
   },
 ];
 

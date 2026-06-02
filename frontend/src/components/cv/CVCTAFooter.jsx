@@ -14,7 +14,7 @@ const CVCTAFooter = ({ onGetStarted }) => {
 
       <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-12 gap-10 items-center">
         <div className="lg:col-span-7">
-          <span className="text-[11px] uppercase tracking-[0.22em] text-violet-400 font-semibold">Ready to build your growth engine?</span>
+          <span className="text-[11px] uppercase tracking-[0.22em] text-violet-400 font-semibold">Ready to put your social on autopilot?</span>
           <motion.h2
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -22,12 +22,12 @@ const CVCTAFooter = ({ onGetStarted }) => {
             transition={{ duration: 0.7 }}
             className="cv-display text-4xl sm:text-5xl lg:text-6xl font-semibold text-white mt-3 leading-[1.05]"
           >
-            Let's Build a Brand{' '}
-            <span className="cv-gradient-text">People Can't Ignore.</span>
+            Stop juggling ten tools.{' '}
+            <span className="cv-gradient-text">Ship your social calendar today.</span>
           </motion.h2>
           <p className="mt-5 text-zinc-400 max-w-xl text-[16px]">
-            Partner with CortexViral and turn your brand into a viral growth machine —
-            powered by AI agents that publish, optimise, and learn 24/7.
+            Connect a channel, pick your niche, and watch CortexViral generate, schedule, and measure your posts —
+            while you focus on the work only you can do.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <button
@@ -35,13 +35,14 @@ const CVCTAFooter = ({ onGetStarted }) => {
               className="cv-btn-primary inline-flex items-center gap-2 text-[14px] font-semibold px-6 h-12 rounded-full"
               data-testid="cv-cta-launch"
             >
-              Launch Your Growth System <ArrowRight size={15} />
+              Start Free <ArrowRight size={15} />
             </button>
             <a
-              href="/dashboard"
+              href="/pricing"
               className="cv-btn-secondary inline-flex items-center gap-2 text-[14px] font-semibold px-5 h-12 rounded-full"
+              data-testid="cv-cta-pricing"
             >
-              See Dashboard
+              See pricing
             </a>
           </div>
         </div>

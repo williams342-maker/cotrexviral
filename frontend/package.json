@@ -60,6 +60,7 @@
   "scripts": {
     "start": "craco start",
     "build": "craco build",
+    "postbuild": "react-snap",
     "test": "craco test",
     "prebuild": "node scripts/refresh-sitemap.js",
     "build:seo": "craco build && react-snap"
