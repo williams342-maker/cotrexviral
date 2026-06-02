@@ -185,7 +185,7 @@ async def extract_intelligence(asset: dict, extracted: dict) -> Optional[dict]:
             tool=_INTEL_TOOL,
             session_id=f"asset-intel-{asset.get('id')}",
             user_id=asset.get("user_id") or "anonymous",
-            prefer="claude",
+            prefer="haiku",
             required=["summary", "products", "audience"],
         )
         if args:
@@ -221,7 +221,7 @@ async def generate_review(asset: dict, extracted: dict,
             tool=_REVIEW_TOOL,
             session_id=f"asset-review-{asset.get('id')}",
             user_id=asset.get("user_id") or "anonymous",
-            prefer="claude",
+            prefer="haiku",
             required=["scores", "strengths", "weaknesses", "recommended_changes"],
         )
         if args:

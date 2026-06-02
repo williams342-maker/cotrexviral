@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 # request; `gpt-5.2` is the second-stage fallback they specified.
 _PROVIDERS: dict[str, Tuple[str, str]] = {
     "claude":   ("anthropic", "claude-sonnet-4-5-20250929"),
+    "haiku":    ("anthropic", "claude-haiku-4-5-20251001"),
     "gpt":      ("openai",    "gpt-5.2"),
     "fast":     ("openai",    "gpt-5.4-mini"),    # cheap classification
 }
