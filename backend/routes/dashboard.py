@@ -1,6 +1,9 @@
 """Dashboard summary endpoint (stats + recent activity for /dashboard overview)."""
 
+from typing import List
+
 from fastapi import HTTPException, Request
+from pydantic import BaseModel, Field
 
 from core import db, api, STRICT_NORMALIZED_READS
 from deps import get_current_user
@@ -53,3 +56,23 @@ async def delete_report(report_id: str, request: Request):
     if result.deleted_count == 0:
         raise HTTPException(404, "Report not found.")
     return {"ok": True, "id": report_id}
+
+
+class BulkDeleteReportsPayload(BaseModel):
+    ids: List[str] = Field(default_factory=list)
+
+
+@api.post("/reports/bulk-delete")
+async def bulk_delete_reports(payload: BulkDeleteReportsPayload, request: Request):
+    """Bulk-delete reports owned by the current user. Always scoped to
+    the caller's user_id so a malicious client can't wipe other users'
+    rows even with a spoofed id list."""
+    user = await get_current_user(request)
+    ids = [i for i in (payload.ids or []) if isinstance(i, str) and i.strip()]
+    if not ids:
+        return {"ok": True, "deleted": 0}
+    # Cap the batch so a runaway client can't issue a huge delete in one shot.
+    ids = ids[:500]
+    result = await db.reports.delete_many(
+        {"id": {"$in": ids}, "user_id": user.user_id})
+    return {"ok": True, "deleted": int(result.deleted_count), "requested": len(ids)}

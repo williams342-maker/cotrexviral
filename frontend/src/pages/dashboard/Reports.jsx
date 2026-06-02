@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
   FileText, Globe, Search, BarChart3, Users, Lightbulb,
-  ChevronRight, ExternalLink, ArrowLeft, X,
+  ChevronRight, ExternalLink, ArrowLeft, X, CheckSquare, Square, Trash2, AlertTriangle,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { API } from '../../context/AuthContext';
@@ -22,12 +22,35 @@ const TYPE_META = {
   seller_discovery: { icon: Users,     label: 'Seller Discovery', tone: 'text-violet-300 border-violet-500/25 bg-violet-500/[0.04]' },
 };
 
+// Heuristic: detect reports that failed to scan / produced no useful
+// content. The data model has no explicit `status` field — failures are
+// recognizable only via the LLM-written summary text or by an empty
+// findings body.
+function isFailedReport(r) {
+  const body = r?.report || {};
+  const summary = String(body.summary || '').trim().toLowerCase();
+  if (!summary) {
+    const empty = !(body.improvements?.length || body.issues?.length
+                     || body.recommendations?.length || body.post_ideas?.length
+                     || body.notable_items?.length);
+    if (empty) return true;
+  }
+  if (/^(could not|scan could not|failed to|unable to|scan failed)/.test(summary)) return true;
+  if (/lacked (an? )?(http|valid) protocol/.test(summary)) return true;
+  return false;
+}
+
 
 export default function Reports() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchParams, setSearchParams] = useSearchParams();
   const activeId = searchParams.get('id');
+
+  // ---- bulk selection state ----
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -44,11 +67,63 @@ export default function Reports() {
     try {
       await axios.delete(`${API}/reports/${reportId}`, { withCredentials: true });
       setReports((prev) => prev.filter((r) => r.id !== reportId));
+      setSelectedIds((prev) => {
+        if (!prev.has(reportId)) return prev;
+        const next = new Set(prev); next.delete(reportId); return next;
+      });
       // If the currently-open detail view was just deleted, fall back to list.
       if (activeId === reportId) setSearchParams({});
     } catch (err) {
       const detail = err?.response?.data?.detail || err?.message || 'Failed to delete report';
       window.alert(detail);
+    }
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setSelectMode(false);
+  };
+
+  const selectAllFailed = () => {
+    const failedIds = reports.filter(isFailedReport).map((r) => r.id);
+    if (failedIds.length === 0) {
+      window.alert('No failed scans detected.');
+      return;
+    }
+    setSelectMode(true);
+    setSelectedIds(new Set(failedIds));
+  };
+
+  const bulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Delete ${ids.length} report${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    setBulkBusy(true);
+    try {
+      const r = await axios.post(`${API}/reports/bulk-delete`,
+                                  { ids }, { withCredentials: true });
+      const deleted = r.data?.deleted ?? ids.length;
+      setReports((prev) => prev.filter((x) => !selectedIds.has(x.id)));
+      if (activeId && selectedIds.has(activeId)) setSearchParams({});
+      clearSelection();
+      // Lightweight toast via alert — keeps the page free of toast deps churn.
+      if (deleted !== ids.length) {
+        window.alert(`Deleted ${deleted} of ${ids.length} reports.`);
+      }
+    } catch (err) {
+      const detail = err?.response?.data?.detail || err?.message || 'Bulk delete failed';
+      window.alert(detail);
+    } finally {
+      setBulkBusy(false);
     }
   };
 
@@ -93,6 +168,8 @@ export default function Reports() {
     return ['all', ...['seo_scan', 'site_scan', 'competitor_audit', 'content_audit', 'seller_discovery'].filter((t) => set.has(t))];
   }, [reports]);
 
+  const failedCount = useMemo(() => reports.filter(isFailedReport).length, [reports]);
+
   return (
     <DashboardLayout>
       <div data-testid="reports-page" className="space-y-6">
@@ -120,13 +197,36 @@ export default function Reports() {
               range={range} onRange={setRange}
               sort={sort} onSort={setSort}
               total={reports.length} filtered={filtered.length}
+              selectMode={selectMode}
+              onToggleSelectMode={() => {
+                setSelectMode((v) => !v);
+                if (selectMode) setSelectedIds(new Set());
+              }}
+              failedCount={failedCount}
+              onSelectFailed={selectAllFailed}
             />
+
+            {selectedIds.size > 0 && (
+              <SelectionBar
+                count={selectedIds.size}
+                total={filtered.length}
+                busy={bulkBusy}
+                onSelectAllVisible={() =>
+                  setSelectedIds(new Set(filtered.map((r) => r.id)))}
+                onClear={clearSelection}
+                onDelete={bulkDelete}
+              />
+            )}
+
             {filtered.length === 0 ? (
               <FilteredEmpty onClear={() => { setQ(''); setTypeFilter('all'); setRange('all'); }} />
             ) : (
               <ReportList reports={filtered}
                             onOpen={(id) => setSearchParams({ id })}
-                            onDelete={handleDelete} />
+                            onDelete={handleDelete}
+                            selectMode={selectMode || selectedIds.size > 0}
+                            selectedIds={selectedIds}
+                            onToggleSelect={toggleSelect} />
             )}
           </>
         )}
@@ -137,7 +237,8 @@ export default function Reports() {
 
 
 function FilterBar({ q, onQ, typeFilter, onType, availableTypes,
-                       range, onRange, sort, onSort, total, filtered }) {
+                       range, onRange, sort, onSort, total, filtered,
+                       selectMode, onToggleSelectMode, failedCount, onSelectFailed }) {
   const hasFilter = q || typeFilter !== 'all' || range !== 'all' || sort !== 'newest';
   return (
     <div data-testid="reports-filter-bar"
@@ -208,6 +309,25 @@ function FilterBar({ q, onQ, typeFilter, onType, availableTypes,
             <X size={10} /> Clear
           </button>
         )}
+        <div className="w-px h-4 bg-white/10 mx-1" />
+        {failedCount > 0 && (
+          <button onClick={onSelectFailed}
+                  data-testid="reports-select-failed"
+                  title={`Select all ${failedCount} failed scan${failedCount > 1 ? 's' : ''}`}
+                  className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-200 border border-rose-500/25 transition flex items-center gap-1">
+            <AlertTriangle size={10} /> Clear failed scans ({failedCount})
+          </button>
+        )}
+        <button onClick={onToggleSelectMode}
+                data-testid="reports-toggle-select-mode"
+                title={selectMode ? 'Exit selection mode' : 'Select multiple reports'}
+                className={`text-[10.5px] font-semibold px-2 py-1 rounded-md border transition flex items-center gap-1 ${
+                  selectMode
+                    ? 'bg-violet-500/20 text-violet-100 border-violet-500/40'
+                    : 'bg-white/[0.02] text-zinc-300 border-white/10 hover:bg-white/[0.05]'}`}>
+          {selectMode ? <CheckSquare size={10} /> : <Square size={10} />}
+          {selectMode ? 'Selecting' : 'Select'}
+        </button>
       </div>
     </div>
   );
@@ -224,6 +344,42 @@ function FilteredEmpty({ onClear }) {
               data-testid="reports-filtered-empty-clear"
               className="text-[12px] font-semibold px-3 py-1.5 rounded-md bg-violet-500/15 hover:bg-violet-500/25 text-violet-200 border border-violet-500/30 transition">
         Clear filters
+      </button>
+    </div>
+  );
+}
+
+
+function SelectionBar({ count, total, busy, onSelectAllVisible, onClear, onDelete }) {
+  return (
+    <div data-testid="reports-selection-bar"
+         className="sticky top-2 z-20 rounded-xl border border-violet-500/30 bg-violet-500/[0.08] backdrop-blur-md px-3 py-2 flex items-center gap-3">
+      <div className="flex items-center gap-1.5 text-[12px] text-violet-100 font-semibold">
+        <CheckSquare size={13} />
+        <span data-testid="reports-selection-count">
+          {count} selected
+        </span>
+        <span className="text-violet-300/70 font-normal">· of {total} visible</span>
+      </div>
+      <button onClick={onSelectAllVisible}
+              data-testid="reports-selection-select-all"
+              disabled={busy || count >= total}
+              className="text-[11px] font-semibold px-2 py-1 rounded-md bg-white/[0.04] hover:bg-white/[0.08] text-zinc-200 border border-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed">
+        Select all visible
+      </button>
+      <div className="flex-1" />
+      <button onClick={onClear}
+              data-testid="reports-selection-cancel"
+              disabled={busy}
+              className="text-[11px] font-semibold px-2 py-1 rounded-md text-zinc-300 hover:text-white hover:bg-white/[0.06] transition flex items-center gap-1">
+        <X size={11} /> Cancel
+      </button>
+      <button onClick={onDelete}
+              data-testid="reports-selection-delete"
+              disabled={busy}
+              className="text-[11.5px] font-semibold px-3 py-1.5 rounded-md bg-rose-500 hover:bg-rose-400 text-white transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-rose-500/20">
+        <Trash2 size={12} />
+        {busy ? 'Deleting…' : `Delete ${count}`}
       </button>
     </div>
   );
@@ -250,26 +406,55 @@ function EmptyState() {
 }
 
 
-function ReportList({ reports, onOpen, onDelete }) {
+function ReportList({ reports, onOpen, onDelete, selectMode, selectedIds, onToggleSelect }) {
   return (
     <div data-testid="reports-list" className="grid grid-cols-1 md:grid-cols-2 gap-3">
       {reports.map((r) => {
         const meta = TYPE_META[r.type] || TYPE_META.site_scan;
         const Icon = meta.icon;
+        const isSelected = selectedIds?.has(r.id);
+        const failed = isFailedReport(r);
+        // When selectMode is on, the whole card becomes a toggle target
+        // instead of an "open" link — that matches the gmail-style multi-
+        // select flow users expect.
+        const handleCardClick = () => {
+          if (selectMode) onToggleSelect?.(r.id);
+          else            onOpen(r.id);
+        };
         return (
           <div key={r.id}
                data-testid={`report-card-${r.id}`}
-               className={`group relative rounded-xl border transition hover:bg-white/[0.04] ${meta.tone}`}>
-            <button onClick={() => onOpen(r.id)}
+               data-failed={failed ? 'true' : 'false'}
+               data-selected={isSelected ? 'true' : 'false'}
+               className={`group relative rounded-xl border transition ${meta.tone} ${
+                  isSelected
+                    ? 'ring-2 ring-violet-400/60 ring-offset-2 ring-offset-zinc-950'
+                    : 'hover:bg-white/[0.04]'}`}>
+            <button onClick={handleCardClick}
                     data-testid={`report-card-open-${r.id}`}
                     className="w-full text-left p-4">
               <div className="flex items-center gap-2 mb-2">
+                {selectMode && (
+                  <span data-testid={`report-checkbox-${r.id}`}
+                        className={`w-4 h-4 rounded shrink-0 flex items-center justify-center border transition ${
+                          isSelected
+                            ? 'bg-violet-500 border-violet-400 text-white'
+                            : 'bg-white/[0.04] border-white/20 text-transparent'}`}>
+                    {isSelected ? <CheckSquare size={10} /> : null}
+                  </span>
+                )}
                 <span className="w-7 h-7 rounded-md bg-white/[0.05] border border-white/5 flex items-center justify-center">
                   <Icon size={12} />
                 </span>
                 <span className="text-[10px] uppercase tracking-widest font-bold">
                   {meta.label}
                 </span>
+                {failed && (
+                  <span data-testid={`report-failed-badge-${r.id}`}
+                        className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 tracking-wider">
+                    Failed
+                  </span>
+                )}
                 <span className="text-[10px] text-zinc-500 ml-auto pr-7">
                   {fmtDate(r.created_at)}
                 </span>
@@ -281,23 +466,26 @@ function ReportList({ reports, onOpen, onDelete }) {
                 {(r.report?.summary) || 'Open to view findings.'}
               </div>
               <div className="flex items-center gap-1.5 mt-2 text-[11px] text-zinc-400">
-                View report <ChevronRight size={11} />
+                {selectMode ? (isSelected ? 'Selected · click to deselect' : 'Click to select') : <>View report <ChevronRight size={11} /></>}
               </div>
             </button>
 
-            {/* Close / delete button — top-right, surfaces on hover */}
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onDelete?.(r.id); }}
-              data-testid={`report-delete-${r.id}`}
-              title="Delete report"
-              aria-label="Delete report"
-              className="absolute top-2 right-2 w-6 h-6 rounded-md flex items-center justify-center
-                         text-zinc-500 hover:text-rose-300 hover:bg-rose-500/15 border border-transparent
-                         hover:border-rose-500/30 opacity-0 group-hover:opacity-100 focus:opacity-100
-                         transition">
-              <X size={12} />
-            </button>
+            {/* Close / delete button — top-right, surfaces on hover.
+                Hidden in select mode to avoid two competing affordances. */}
+            {!selectMode && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDelete?.(r.id); }}
+                data-testid={`report-delete-${r.id}`}
+                title="Delete report"
+                aria-label="Delete report"
+                className="absolute top-2 right-2 w-6 h-6 rounded-md flex items-center justify-center
+                           text-zinc-500 hover:text-rose-300 hover:bg-rose-500/15 border border-transparent
+                           hover:border-rose-500/30 opacity-0 group-hover:opacity-100 focus:opacity-100
+                           transition">
+                <X size={12} />
+              </button>
+            )}
           </div>
         );
       })}
