@@ -10,16 +10,31 @@ import CVCTAFooter from '../components/cv/CVCTAFooter';
 import CVBuiltByMakers from '../components/cv/CVBuiltByMakers';
 import CVFooter from '../components/cv/CVFooter';
 import CVSeo, { ORG_SCHEMA, SOFTWARE_SCHEMA, buildFaqSchema } from '../components/cv/CVSeo';
+import { useAuth } from '../context/AuthContext';
+import AuthModal from '../components/AuthModal';
 import { SelectAgentModal, AgentChatModal } from '../components/Modals';
 
 const Marketing = () => {
+  // "Start Free" CTAs across the marketing page must trigger the real
+  // login flow — not the old "Choose Your Specialist" picker which is
+  // only useful AFTER signup. The agent picker stays available via the
+  // existing chat-with-agent UI for already-authenticated users.
+  const { user, login } = useAuth();
+  const [authOpen, setAuthOpen] = useState(false);
   const [selectOpen, setSelectOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [activeAgent, setActiveAgent] = useState(null);
 
-  const openSelect = () => {
-    setChatOpen(false);
-    setSelectOpen(true);
+  const openStartFree = () => {
+    // If already authed, jump straight into the agent picker (legacy flow
+    // for warm users). Otherwise open the Auth modal which redirects to
+    // auth.emergentagent.com — the real signup path.
+    if (user) {
+      setChatOpen(false);
+      setSelectOpen(true);
+    } else {
+      setAuthOpen(true);
+    }
   };
   const handleSelectAgent = (a) => {
     setActiveAgent(a);
@@ -39,18 +54,20 @@ const Marketing = () => {
         path="/"
         schema={[ORG_SCHEMA, SOFTWARE_SCHEMA, buildFaqSchema(DEFAULT_FAQS.map((f) => ({ question: f.q, answer: f.a })))]}
       />
-      <CVNavbar onGetStarted={openSelect} />
+      <CVNavbar onGetStarted={openStartFree} />
       <main>
-        <CVHero onGetStarted={openSelect} />
+        <CVHero onGetStarted={openStartFree} />
         <CVNeuralEngine />
         <CVPipeline />
         <CVResults />
         <CVComparison />
         <CVFaq />
-        <CVCTAFooter onGetStarted={openSelect} />
+        <CVCTAFooter onGetStarted={openStartFree} />
       </main>
       <CVBuiltByMakers />
       <CVFooter />
+
+      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
 
       <SelectAgentModal
         open={selectOpen}
