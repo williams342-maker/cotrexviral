@@ -26,11 +26,11 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core import api, db
 from deps import get_current_user
@@ -299,6 +299,51 @@ async def delete_asset(asset_id: str, request: Request):
                    "status":     "deleted"}},
     )
     return {"ok": True, "id": asset_id}
+
+
+class BulkDeleteAssetsPayload(BaseModel):
+    ids: List[str] = Field(default_factory=list)
+
+
+@api.post("/cortex/assets/bulk-delete")
+async def bulk_delete_assets(payload: BulkDeleteAssetsPayload, request: Request):
+    """Bulk soft-delete user-owned assets. Purges stored bytes for each
+    row (best-effort per-asset; one storage error doesn't abort the
+    batch). Intelligence + review rows are left behind for audit."""
+    user = await get_current_user(request)
+    ids = [i for i in (payload.ids or []) if isinstance(i, str) and i.strip()]
+    if not ids:
+        return {"ok": True, "deleted": 0}
+    ids = ids[:200]
+
+    # Pull rows so we can purge their storage_keys. Scoped to the user.
+    cursor = db.cortex_assets.find(
+        {"id": {"$in": ids}, "user_id": user.user_id,
+         "deleted_at": {"$exists": False}},
+        {"_id": 0, "id": 1, "storage_key": 1})
+    targets = [r async for r in cursor]
+    target_ids = [r["id"] for r in targets]
+    if not target_ids:
+        return {"ok": True, "deleted": 0, "requested": len(ids)}
+
+    # Best-effort storage purge — never let one bad key fail the batch.
+    for r in targets:
+        key = r.get("storage_key")
+        if not key:
+            continue
+        try:
+            await storage.delete(key)
+        except Exception:
+            logger.exception("bulk_delete_assets: storage purge failed for %s", key)
+
+    now = datetime.now(timezone.utc)
+    res = await db.cortex_assets.update_many(
+        {"id": {"$in": target_ids}, "user_id": user.user_id},
+        {"$set": {"deleted_at": now, "status": "deleted"}},
+    )
+    return {"ok": True,
+             "deleted":   int(res.modified_count),
+             "requested": len(ids)}
 
 
 @api.post("/cortex/assets/{asset_id}/reanalyze")

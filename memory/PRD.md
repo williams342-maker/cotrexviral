@@ -35,6 +35,27 @@ Pixel-perfect clone of `agent.enrichlabs.ai/marketing` rebuilt and rebranded twi
 ```
 
 ## Implemented (cumulative)
+- 2026-06-02 **🧹 Bulk-select + bulk-delete across noisy lists (Reports, Assets, Cortex Memory)**
+  - Shared interaction pattern: "Select" toggle → checkboxes appear on every row/card → sticky violet selection bar with `N selected · Select all visible · Cancel · Delete N`.
+  - **Reports** (`/dashboard/reports`) — `POST /api/reports/bulk-delete` + heuristic "Clear failed scans" shortcut (detects scans whose summary starts with "Could not"/"Failed"/"Scan could not"/"lacked … protocol" or empty body). Hard delete, user-scoped.
+  - **Assets** (`/dashboard/assets`) — `POST /api/cortex/assets/bulk-delete` + "Clear failed uploads" shortcut. Soft delete (sets `deleted_at` + `status='deleted'`) and best-effort storage purge per asset; intelligence + review rows preserved for audit. Cap 200/batch.
+  - **Cortex Memory** (Account Settings) — `POST /api/cortex/memory/bulk-delete` + "Select unpinned" shortcut (pinned turns protected so survival pruner contract still holds). Cap 500/batch.
+  - Per-item delete (X button on hover) and select-all-visible flows added everywhere for consistency.
+- 2026-06-02 **⚡ Asset pipeline speedup (~8-10× end-to-end)**
+  - Parallelized intel + review LLM tool-calls (`asyncio.gather`); review no longer waits on intel for prompt context.
+  - Deferred creative-brief generation off the upload critical path (still lazily generated on first `/brief` read).
+  - Switched intel + review to **Claude Haiku 4.5** (`claude-haiku-4-5-20251001`) via new `haiku` provider preference in `cortex/llm_provider.py` (Sonnet remains default everywhere else; failover chain haiku → claude → gpt).
+  - Persist a `text_excerpt` (first 1200 chars of extracted text) onto the asset row at extraction time so Cortex can chat about the file ~3-5s after upload instead of waiting for the full ~9s analysis.
+  - Composer chip status now flips to "ready to chat" the moment extraction completes; preamble feeds either intel summary (when ready) or the raw text excerpt.
+- 2026-06-02 **📎 Upload document/image in Cortex chat composer**
+  - Added paperclip button to `Composer.jsx` — uploads via existing `POST /api/cortex/assets/upload` and polls `/cortex/assets/{id}` for status.
+  - Multi-attach supported (PDF/PPTX/JPG/PNG/WebP/MP4/MOV/WebM). Each chip shows live status (queued → reading… → ready to chat → ready).
+  - Send pipeline: chat bubble shows just message + 📎 chips for the user; the LLM receives a hidden preamble with `[Attached N files]` + per-file (name, kind, asset id, summary OR text excerpt).
+- 2026-06-02 **❌ Per-item close/cancel buttons on Active Missions + Report cards**
+  - Active Mission tiles: hover → small X top-right → `POST /api/missions/{id}/cancel` → status flips to `cancelled`, tile vanishes from rail.
+  - Report cards: hover → X → `DELETE /api/reports/{id}` → row removed (also handles deletion of the currently-open detail view by falling back to list).
+
+
 - 2026-02-28 (part 128) **🎨 P2 + P3 + P4 — Memory tab, platform visual signatures, learned posting times**
   - **P2 — Cortex Memory tab in Account Settings**:
     - New backend endpoints in `routes/cortex_memory.py`:

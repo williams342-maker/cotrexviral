@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Loader2, Trash2, ShieldAlert, User as UserIcon, Mail, Crown, Sparkles, Gift, ExternalLink, KeyRound, Eye, EyeOff, AlertCircle, CheckCircle2, LogOut, PauseCircle, Monitor, Brain, Pin, PinOff, Search } from 'lucide-react';
+import { Loader2, Trash2, ShieldAlert, User as UserIcon, Mail, Crown, Sparkles, Gift, ExternalLink, KeyRound, Eye, EyeOff, AlertCircle, CheckCircle2, LogOut, PauseCircle, Monitor, Brain, Pin, PinOff, Search, CheckSquare, Square, X } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useAuth, API } from '../../context/AuthContext';
 import { useToast } from '../../hooks/use-toast';
@@ -788,6 +788,11 @@ function CortexMemorySection() {
   const [busyId, setBusyId] = useState(null);
   const searchTimer = useRef(null);
 
+  // ---- bulk selection state ----
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   const load = async (query = '') => {
     setLoading(true);
     try {
@@ -852,6 +857,59 @@ function CortexMemorySection() {
               description: e?.response?.data?.detail || e.message,
               variant: 'destructive' });
     } finally { setBusyId(null); }
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else              next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setSelectMode(false);
+  };
+
+  const selectAllUnpinned = () => {
+    const ids = items.filter((t) => !t.pinned).map((t) => t.id);
+    if (ids.length === 0) {
+      toast({ title: 'Nothing to select',
+              description: 'All visible turns are pinned.' });
+      return;
+    }
+    setSelectMode(true);
+    setSelectedIds(new Set(ids));
+  };
+
+  const bulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Delete ${ids.length} memory turn${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    setBulkBusy(true);
+    try {
+      const r = await axios.post(`${API}/cortex/memory/bulk-delete`,
+                                    { ids }, { withCredentials: true });
+      const deleted = r.data?.deleted ?? ids.length;
+      // Count pinned among the about-to-be-deleted set so stats stay
+      // accurate after the optimistic update.
+      const pinnedDeleted = items.filter((t) =>
+        selectedIds.has(t.id) && t.pinned).length;
+      setItems((prev) => prev.filter((t) => !selectedIds.has(t.id)));
+      setStats((s) => ({
+        total_stored: Math.max(0, s.total_stored - deleted),
+        pinned_count: Math.max(0, s.pinned_count - pinnedDeleted),
+      }));
+      clearSelection();
+      toast({ title: 'Memory cleared',
+              description: `Removed ${deleted} of ${ids.length} turns.` });
+    } catch (e) {
+      toast({ title: "Bulk delete failed",
+              description: e?.response?.data?.detail || e.message,
+              variant: 'destructive' });
+    } finally { setBulkBusy(false); }
   };
 
   const wipeAll = async () => {
@@ -936,16 +994,74 @@ function CortexMemorySection() {
               />
             </div>
             {stats.total_stored > 0 && (
-              <button
-                onClick={() => setShowWipe(true)}
-                data-testid="memory-wipe-btn"
-                className="h-8 text-[11.5px] font-medium text-rose-300 hover:text-rose-200 hover:bg-rose-500/10 px-2.5 rounded-md border border-rose-500/20 inline-flex items-center gap-1.5"
-              >
-                <Trash2 size={11} /> Wipe all
-              </button>
+              <>
+                <button
+                  onClick={() => {
+                    if (selectMode) clearSelection();
+                    else setSelectMode(true);
+                  }}
+                  data-testid="memory-toggle-select-mode"
+                  title={selectMode ? 'Exit selection mode' : 'Select multiple turns'}
+                  className={`h-8 text-[11.5px] font-medium px-2.5 rounded-md border inline-flex items-center gap-1.5 transition ${
+                    selectMode
+                      ? 'bg-violet-500/20 text-violet-100 border-violet-500/40'
+                      : 'text-zinc-300 border-white/10 hover:bg-white/[0.05]'}`}>
+                  {selectMode ? <CheckSquare size={11} /> : <Square size={11} />}
+                  {selectMode ? 'Selecting' : 'Select'}
+                </button>
+                {items.some((t) => !t.pinned) && (
+                  <button
+                    onClick={selectAllUnpinned}
+                    data-testid="memory-select-unpinned"
+                    title="Select every unpinned turn"
+                    className="h-8 text-[11.5px] font-medium px-2.5 rounded-md border inline-flex items-center gap-1.5 text-amber-200 hover:bg-amber-500/10 border-amber-500/25 transition">
+                    <PinOff size={11} /> Select unpinned
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowWipe(true)}
+                  data-testid="memory-wipe-btn"
+                  className="h-8 text-[11.5px] font-medium text-rose-300 hover:text-rose-200 hover:bg-rose-500/10 px-2.5 rounded-md border border-rose-500/20 inline-flex items-center gap-1.5"
+                >
+                  <Trash2 size={11} /> Wipe all
+                </button>
+              </>
             )}
           </div>
         </div>
+
+        {selectedIds.size > 0 && (
+          <div data-testid="memory-selection-bar"
+               className="mb-3 rounded-xl border border-violet-500/30 bg-violet-500/[0.08] px-3 py-2 flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-[12px] text-violet-100 font-semibold">
+              <CheckSquare size={13} />
+              <span data-testid="memory-selection-count">
+                {selectedIds.size} selected
+              </span>
+              <span className="text-violet-300/70 font-normal">· of {items.length} visible</span>
+            </div>
+            <button onClick={() => setSelectedIds(new Set(items.map((t) => t.id)))}
+                    data-testid="memory-selection-select-all"
+                    disabled={bulkBusy || selectedIds.size >= items.length}
+                    className="text-[11px] font-semibold px-2 py-1 rounded-md bg-white/[0.04] hover:bg-white/[0.08] text-zinc-200 border border-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed">
+              Select all visible
+            </button>
+            <div className="flex-1" />
+            <button onClick={clearSelection}
+                    data-testid="memory-selection-cancel"
+                    disabled={bulkBusy}
+                    className="text-[11px] font-semibold px-2 py-1 rounded-md text-zinc-300 hover:text-white hover:bg-white/[0.06] transition flex items-center gap-1">
+              <X size={11} /> Cancel
+            </button>
+            <button onClick={bulkDelete}
+                    data-testid="memory-selection-delete"
+                    disabled={bulkBusy}
+                    className="text-[11.5px] font-semibold px-3 py-1.5 rounded-md bg-rose-500 hover:bg-rose-400 text-white transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-rose-500/20">
+              <Trash2 size={12} />
+              {bulkBusy ? 'Deleting…' : `Delete ${selectedIds.size}`}
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div className="py-10 text-center text-zinc-500">
@@ -957,10 +1073,26 @@ function CortexMemorySection() {
           </div>
         ) : (
           <ul className="divide-y divide-white/5" data-testid="memory-list">
-            {items.map((t) => (
+            {items.map((t) => {
+              const isSelected = selectedIds.has(t.id);
+              const inSelectMode = selectMode || selectedIds.size > 0;
+              const onRowClick = inSelectMode ? () => toggleSelect(t.id) : undefined;
+              return (
               <li key={t.id}
-                   className="py-3 flex items-start gap-3"
+                   onClick={onRowClick}
+                   className={`py-3 flex items-start gap-3 transition ${
+                     inSelectMode ? 'cursor-pointer hover:bg-white/[0.02] -mx-2 px-2 rounded' : ''
+                   } ${isSelected ? 'bg-violet-500/[0.07] -mx-2 px-2 rounded' : ''}`}
                    data-testid={`memory-turn-${t.id}`}>
+                {inSelectMode && (
+                  <span data-testid={`memory-checkbox-${t.id}`}
+                        className={`mt-0.5 w-4 h-4 rounded shrink-0 flex items-center justify-center border transition ${
+                          isSelected
+                            ? 'bg-violet-500 border-violet-400 text-white'
+                            : 'bg-white/[0.04] border-white/20 text-transparent'}`}>
+                    {isSelected ? <CheckSquare size={10} /> : null}
+                  </span>
+                )}
                 <span className={`mt-0.5 text-[9.5px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded shrink-0 ${
                   t.role === 'cortex'
                     ? 'bg-violet-500/15 text-violet-200 border border-violet-500/25'
@@ -981,7 +1113,8 @@ function CortexMemorySection() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-1 shrink-0"
+                     onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => togglePin(t, !t.pinned)}
                     disabled={busyId === t.id}
@@ -1004,7 +1137,8 @@ function CortexMemorySection() {
                   </button>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

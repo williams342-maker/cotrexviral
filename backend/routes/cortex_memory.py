@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import HTTPException, Request
 from pydantic import BaseModel, Field
@@ -134,6 +134,25 @@ async def delete_memory(turn_id: str, request: Request):
     if res.deleted_count == 0:
         raise HTTPException(404, "Memory turn not found")
     return {"deleted": True, "id": turn_id}
+
+
+class BulkDeleteMemoryPayload(BaseModel):
+    ids: List[str] = Field(default_factory=list)
+
+
+@api.post("/cortex/memory/bulk-delete")
+async def bulk_delete_memory(payload: BulkDeleteMemoryPayload, request: Request):
+    """Bulk-delete memory turns owned by the current user. User-scoped:
+    a spoofed id list can never touch another user's vectors. Capped at
+    500 ids per batch to match the per-user vector cap."""
+    user = await get_current_user(request)
+    ids = [i for i in (payload.ids or []) if isinstance(i, str) and i.strip()]
+    if not ids:
+        return {"ok": True, "deleted": 0}
+    ids = ids[:500]
+    res = await db[cmem.COLLECTION_V2].delete_many(
+        {"id": {"$in": ids}, "user_id": user.user_id})
+    return {"ok": True, "deleted": int(res.deleted_count), "requested": len(ids)}
 
 
 @api.delete("/cortex/memory/all")

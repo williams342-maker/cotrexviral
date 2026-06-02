@@ -7,7 +7,7 @@ import {
   Presentation, Film,
   Sparkles, RefreshCw, Trash2, ArrowLeft, Target, TrendingUp, AlertCircle,
   Lightbulb, Users, Tag, Megaphone, X, ChevronRight, AlertTriangle, CheckCircle2,
-  Rocket,
+  Rocket, CheckSquare, Square,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import CreativeBriefPanel from './cortex/CreativeBriefPanel';
@@ -48,6 +48,11 @@ export default function Assets() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeId = searchParams.get('id');
 
+  // ---- bulk selection state ----
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   const load = useCallback(async () => {
     try {
       const r = await axios.get(`${API}/cortex/assets?limit=80`,
@@ -68,6 +73,54 @@ export default function Assets() {
   }, [assets, load]);
 
   const active = assets.find((a) => a.id === activeId);
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else              next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setSelectMode(false);
+  };
+
+  const failedAssetIds = assets.filter((a) => a.status === 'failed').map((a) => a.id);
+
+  const selectFailed = () => {
+    if (failedAssetIds.length === 0) {
+      window.alert('No failed uploads found.');
+      return;
+    }
+    setSelectMode(true);
+    setSelectedIds(new Set(failedAssetIds));
+  };
+
+  const bulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Delete ${ids.length} asset${ids.length > 1 ? 's' : ''}? Stored files will be purged. This cannot be undone.`)) return;
+    setBulkBusy(true);
+    try {
+      const r = await axios.post(`${API}/cortex/assets/bulk-delete`,
+                                    { ids }, { withCredentials: true });
+      const deleted = r.data?.deleted ?? ids.length;
+      setAssets((prev) => prev.filter((a) => !selectedIds.has(a.id)));
+      if (activeId && selectedIds.has(activeId)) setSearchParams({});
+      clearSelection();
+      if (deleted !== ids.length) {
+        window.alert(`Deleted ${deleted} of ${ids.length} assets.`);
+      }
+    } catch (err) {
+      const detail = err?.response?.data?.detail || err?.message || 'Bulk delete failed';
+      window.alert(detail);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -94,12 +147,101 @@ export default function Assets() {
         ) : assets.length === 0 ? (
           <EmptyState />
         ) : (
-          <AssetGrid assets={assets}
-                      onOpen={(id) => setSearchParams({ id })}
-                      onRefresh={load} />
+          <>
+            <AssetBulkToolbar
+              total={assets.length}
+              failedCount={failedAssetIds.length}
+              selectMode={selectMode}
+              onToggleSelectMode={() => {
+                if (selectMode) clearSelection();
+                else            setSelectMode(true);
+              }}
+              onSelectFailed={selectFailed}
+            />
+            {selectedIds.size > 0 && (
+              <AssetSelectionBar
+                count={selectedIds.size}
+                total={assets.length}
+                busy={bulkBusy}
+                onSelectAll={() => setSelectedIds(new Set(assets.map((a) => a.id)))}
+                onClear={clearSelection}
+                onDelete={bulkDelete}
+              />
+            )}
+            <AssetGrid assets={assets}
+                        onOpen={(id) => setSearchParams({ id })}
+                        onRefresh={load}
+                        selectMode={selectMode || selectedIds.size > 0}
+                        selectedIds={selectedIds}
+                        onToggleSelect={toggleSelect} />
+          </>
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+
+function AssetBulkToolbar({ total, failedCount, selectMode, onToggleSelectMode, onSelectFailed }) {
+  return (
+    <div data-testid="assets-bulk-toolbar"
+         className="flex flex-wrap items-center gap-2">
+      <span className="text-[11px] text-zinc-500 mr-1">
+        {total} asset{total === 1 ? '' : 's'}
+      </span>
+      {failedCount > 0 && (
+        <button onClick={onSelectFailed}
+                data-testid="assets-select-failed"
+                title={`Select all ${failedCount} failed upload${failedCount > 1 ? 's' : ''}`}
+                className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-200 border border-rose-500/25 transition flex items-center gap-1">
+          <AlertTriangle size={10} /> Clear failed uploads ({failedCount})
+        </button>
+      )}
+      <button onClick={onToggleSelectMode}
+              data-testid="assets-toggle-select-mode"
+              title={selectMode ? 'Exit selection mode' : 'Select multiple assets'}
+              className={`text-[10.5px] font-semibold px-2 py-1 rounded-md border transition flex items-center gap-1 ${
+                selectMode
+                  ? 'bg-violet-500/20 text-violet-100 border-violet-500/40'
+                  : 'bg-white/[0.02] text-zinc-300 border-white/10 hover:bg-white/[0.05]'}`}>
+        {selectMode ? <CheckSquare size={10} /> : <Square size={10} />}
+        {selectMode ? 'Selecting' : 'Select'}
+      </button>
+    </div>
+  );
+}
+
+
+function AssetSelectionBar({ count, total, busy, onSelectAll, onClear, onDelete }) {
+  return (
+    <div data-testid="assets-selection-bar"
+         className="sticky top-2 z-20 rounded-xl border border-violet-500/30 bg-violet-500/[0.08] backdrop-blur-md px-3 py-2 flex items-center gap-3">
+      <div className="flex items-center gap-1.5 text-[12px] text-violet-100 font-semibold">
+        <CheckSquare size={13} />
+        <span data-testid="assets-selection-count">{count} selected</span>
+        <span className="text-violet-300/70 font-normal">· of {total} visible</span>
+      </div>
+      <button onClick={onSelectAll}
+              data-testid="assets-selection-select-all"
+              disabled={busy || count >= total}
+              className="text-[11px] font-semibold px-2 py-1 rounded-md bg-white/[0.04] hover:bg-white/[0.08] text-zinc-200 border border-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed">
+        Select all visible
+      </button>
+      <div className="flex-1" />
+      <button onClick={onClear}
+              data-testid="assets-selection-cancel"
+              disabled={busy}
+              className="text-[11px] font-semibold px-2 py-1 rounded-md text-zinc-300 hover:text-white hover:bg-white/[0.06] transition flex items-center gap-1">
+        <X size={11} /> Cancel
+      </button>
+      <button onClick={onDelete}
+              data-testid="assets-selection-delete"
+              disabled={busy}
+              className="text-[11.5px] font-semibold px-3 py-1.5 rounded-md bg-rose-500 hover:bg-rose-400 text-white transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-rose-500/20">
+        <Trash2 size={12} />
+        {busy ? 'Deleting…' : `Delete ${count}`}
+      </button>
+    </div>
   );
 }
 
@@ -216,14 +358,17 @@ function AssetUploader({ onUploaded }) {
 
 
 /* ------------------------------------------------------- Asset Grid */
-function AssetGrid({ assets, onOpen, onRefresh }) {
+function AssetGrid({ assets, onOpen, onRefresh, selectMode, selectedIds, onToggleSelect }) {
   return (
     <div data-testid="asset-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
       <AnimatePresence>
         {assets.map((a) => (
           <AssetCard key={a.id} asset={a}
                       onOpen={() => onOpen(a.id)}
-                      onChanged={onRefresh} />
+                      onChanged={onRefresh}
+                      selectMode={selectMode}
+                      selected={selectedIds?.has(a.id)}
+                      onToggleSelect={() => onToggleSelect?.(a.id)} />
         ))}
       </AnimatePresence>
     </div>
@@ -231,13 +376,19 @@ function AssetGrid({ assets, onOpen, onRefresh }) {
 }
 
 
-function AssetCard({ asset, onOpen, onChanged }) {
+function AssetCard({ asset, onOpen, onChanged, selectMode, selected, onToggleSelect }) {
   const meta = KIND_META[asset.kind] || KIND_META.image;
   const stat = STATUS_META[asset.status] || STATUS_META.queued;
   const Icon = meta.icon;
   const StatusIcon = stat.icon;
   const score = asset.review?.scores?.overall;
   const animate = ['queued', 'extracting', 'analyzing'].includes(asset.status);
+
+  // In select mode, the whole card toggles selection instead of opening.
+  const handleClick = () => {
+    if (selectMode) onToggleSelect?.();
+    else            onOpen();
+  };
 
   return (
     <motion.div layout
@@ -246,9 +397,22 @@ function AssetCard({ asset, onOpen, onChanged }) {
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.25 }}
                   data-testid={`asset-card-${asset.id}`}
-                  className={`rounded-xl border p-4 transition cursor-pointer hover:bg-white/[0.04] ${meta.tone}`}
-                  onClick={onOpen}>
+                  data-selected={selected ? 'true' : 'false'}
+                  className={`rounded-xl border p-4 transition cursor-pointer ${meta.tone} ${
+                    selected
+                      ? 'ring-2 ring-violet-400/60 ring-offset-2 ring-offset-zinc-950'
+                      : 'hover:bg-white/[0.04]'}`}
+                  onClick={handleClick}>
       <div className="flex items-center gap-2 mb-2">
+        {selectMode && (
+          <span data-testid={`asset-checkbox-${asset.id}`}
+                className={`w-4 h-4 rounded shrink-0 flex items-center justify-center border transition ${
+                  selected
+                    ? 'bg-violet-500 border-violet-400 text-white'
+                    : 'bg-white/[0.04] border-white/20 text-transparent'}`}>
+            {selected ? <CheckSquare size={10} /> : null}
+          </span>
+        )}
         <span className="w-7 h-7 rounded-md bg-white/[0.05] border border-white/5 flex items-center justify-center shrink-0">
           <Icon size={12} />
         </span>
