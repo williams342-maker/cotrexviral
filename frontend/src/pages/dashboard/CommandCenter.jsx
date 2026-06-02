@@ -274,9 +274,31 @@ const CommandCenter = () => {
   }, []);
 
   // ----- Send (SSE-streamed) ----------------------------------------
-  const send = async () => {
-    const msg = draft.trim();
-    if (!msg || sending) return;
+  const send = async (attachments = []) => {
+    const msgText = draft.trim();
+    if (!msgText && (!attachments || attachments.length === 0)) return;
+    if (sending) return;
+
+    // Build a context preamble from any attached assets so Cortex can
+    // reason over them. Includes name, kind, asset id, and (when ready)
+    // a short summary pulled from the intelligence run.
+    let preamble = '';
+    if (Array.isArray(attachments) && attachments.length > 0) {
+      const lines = attachments.map((a, i) => {
+        const intel = a.intelligence || {};
+        const summary = intel.summary || intel.executive_summary || intel.headline || '';
+        const ready = a.status === 'complete';
+        const head  = `${i + 1}. ${a.name} [${a.kind}] (asset:${a.id})`;
+        const body  = ready
+          ? (summary ? ` — ${summary}` : ' — analyzed, no summary available')
+          : ' — still analyzing; reference the asset id above.';
+        return head + body;
+      });
+      preamble =
+        `[Attached ${attachments.length} file${attachments.length > 1 ? 's' : ''}]\n` +
+        lines.join('\n') + '\n\n';
+    }
+    const msg = preamble + (msgText || 'Please review the attached file(s).');
 
     // "Show me around" — manual replay trigger. Bumps onboarding without
     // sending to the LLM (saves cost + is the persistent replay handle).
@@ -288,7 +310,7 @@ const CommandCenter = () => {
 
     // Signal onboarding orchestrator so it can capture the user's goal
     // during the `set_goal` step.
-    setOnbLastUserMsg(msg);
+    setOnbLastUserMsg(msgText);
     setOnbGoalSignal((s) => s + 1);
 
     setSending(true);
@@ -301,7 +323,9 @@ const CommandCenter = () => {
     ));
 
     const userTurn = {
-      id: `u-${Date.now()}`, role: 'user', message: msg,
+      id: `u-${Date.now()}`, role: 'user',
+      message: msgText || `Please review the attached file(s).`,
+      attachments: (attachments || []).map((a) => ({ id: a.id, name: a.name, kind: a.kind })),
       created_at: new Date().toISOString(),
     };
     setThread((t) => [...t, userTurn]);

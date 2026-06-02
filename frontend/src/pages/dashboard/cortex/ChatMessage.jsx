@@ -28,6 +28,18 @@ export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick, on
     return (
       <div data-testid="chat-user-turn" className="flex justify-end mb-3">
         <div className="max-w-[80%] rounded-2xl rounded-tr-md bg-violet-500/15 border border-violet-500/30 px-4 py-2.5 text-[13.5px] text-zinc-100 leading-relaxed">
+          {(turn.attachments && turn.attachments.length > 0) && (
+            <div data-testid="chat-user-attachments"
+                 className="flex flex-wrap gap-1.5 mb-2 -mt-0.5">
+              {turn.attachments.map((a) => (
+                <span key={a.id} data-testid={`chat-user-attachment-${a.id}`}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-500/20 border border-violet-400/30 text-[11px] text-violet-100">
+                  <span className="opacity-70">📎</span>
+                  <span className="truncate max-w-[180px]">{a.name}</span>
+                </span>
+              ))}
+            </div>
+          )}
           {turn.message}
         </div>
       </div>
