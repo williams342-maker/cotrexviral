@@ -452,6 +452,17 @@ const CommandCenter = () => {
       setTimeout(send, 80);
       return;
     }
+    if (action === 'continue-analysis') {
+      // Mark the stranded turn so the CTA disappears on next render —
+      // marking `_stale` also stops the fallback card from re-showing.
+      setThread((t) => t.map((x) => x.id === turn.id
+        ? { ...x, _stale: true } : x));
+      setDraft(
+        "Continue the analysis you started — surface the specific findings now."
+      );
+      setTimeout(send, 80);
+      return;
+    }
     if (!rec) return;
     if (action === 'preview') {
       toast({ title: 'Preview',

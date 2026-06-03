@@ -24,6 +24,10 @@ PRODUCT REQUIREMENTS: Mission-focused architecture, Autonomy Control Center, Eve
 - `backend/scripts/migrate_legacy_assets.py`                      ← one-shot disk→object-store migration CLI
 
 ## Completed (latest session)
+- 2026-06-03  **"Stranded analysis" bug fix** (reported on production cortexviral.com). Cortex's narrative would say "Let me pull together a picture..." but the backend's stage controller only emits one turn per user message. Two-pronged fix:
+  - (a) **Prompt-level**: tightened `cortex/stages.py` with an **ANALYSIS DELIVERY RULE** (analysis turns MUST return ≥1 finding OR ≥1 clarifying question) and forbids "I'll work on it" hedges in the tone block.
+  - (b) **UX fallback**: new `StrandedAnalysisCard` in `ChatMessage.jsx` shows an amber "Cortex is waiting for your go-ahead" card with a "Generate the full analysis →" CTA when an analysis turn returns empty findings AND empty clarifying questions. Wired into `CommandCenter.handleAction('continue-analysis')` which re-fires the chat with a synthetic prompt. Screenshot-verified.
+  - Guard tests at `tests/test_stage_prompt_guards.py` (3 tests) pin the prompt text so a future refactor can't silently delete the rule.
 - 2026-06-03  **Legacy disk → Emergent object storage migration completed.** Ran `python -m scripts.migrate_legacy_assets --delete-after` — 24 files / 16.2 MiB moved in 8.1s, 0 failures. `/app/backend/uploads/assets/` now empty. HybridStorage fallback remains as a safety net.
 - 2026-06-03  **S3-compatible adapter shipped.** New `S3Storage` class (AWS S3, Cloudflare R2, Backblaze B2 via `AWS_S3_ENDPOINT_URL`). Activated by `ASSET_STORAGE_BACKEND=s3` + bucket/region/creds env vars. boto3 calls run via `asyncio.to_thread` so the event loop never blocks. Includes optional `presigned_get_url()` for large-video direct downloads.
 - 2026-06-03  Tests: `test_migration_and_s3.py` (20 tests, all passing) covers iter/key helpers, dry-run, idempotency, delete-after, refuse-into-local safety, CLI subprocess smoke, and full S3Storage adapter unit coverage with boto3 patched out.

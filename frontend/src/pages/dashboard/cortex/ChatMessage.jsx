@@ -1,6 +1,6 @@
 import React from 'react';
 import axios from 'axios';
-import { Brain, CheckCircle2, AlertTriangle, ChevronRight, RotateCw, Bug } from 'lucide-react';
+import { Brain, CheckCircle2, AlertTriangle, ChevronRight, RotateCw, Bug, Sparkles, Activity } from 'lucide-react';
 import PlanCard from './PlanCard';
 import MissionEventStream from './MissionEventStream';
 import RecommendationBridgeCard from './RecommendationBridgeCard';
@@ -52,6 +52,14 @@ export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick, on
     && ((turn.clarifying_questions || []).length > 0
         || (turn.answer_shortcuts || []).length > 0);
   const showAnalysis = stage === 'analysis' && (turn.findings || []).length > 0;
+  // Fallback: analysis-stage turn that came back with no findings and no
+  // clarifying questions. The user is staring at a message that
+  // narratively promises work but the backend already finished its turn.
+  // Surface an explicit CTA so the user knows the ball is in their court.
+  const showStrandedAnalysis = stage === 'analysis'
+    && !isStale
+    && (turn.findings || []).length === 0
+    && (turn.clarifying_questions || []).length === 0;
   const showRecLite = stage === 'recommendation' && (
     turn.recommendation_summary
     || (turn.findings || []).length > 0
@@ -124,6 +132,12 @@ export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick, on
           <FindingsCard findings={turn.findings} />
         )}
 
+        {showStrandedAnalysis && (
+          <StrandedAnalysisCard
+            onContinue={() => onAction?.('continue-analysis', turn)}
+          />
+        )}
+
         {showRecLite && !isStale && (
           <RecommendationLiteCard
             summary={turn.recommendation_summary}
@@ -153,6 +167,36 @@ export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick, on
 };
 
 export default ChatMessage;
+
+
+/* StrandedAnalysisCard — explicit "ball in your court" surface for
+   analysis-stage turns that returned with no findings AND no
+   clarifying questions. The backend's stage controller finished its
+   turn — Cortex isn't silently working in the background — so we tell
+   the user honestly and give a one-click "Generate the full analysis"
+   action that re-fires the chat with a synthetic prompt. */
+function StrandedAnalysisCard({ onContinue }) {
+  return (
+    <div data-testid="cortex-stranded-analysis"
+         className="rounded-xl border border-amber-500/25 bg-amber-500/[0.04] p-3">
+      <div className="text-[10px] uppercase tracking-widest text-amber-300 font-semibold mb-1.5 flex items-center gap-1">
+        <Activity size={10} /> Cortex is waiting for your go-ahead
+      </div>
+      <p className="text-[12px] text-zinc-300 leading-relaxed mb-2.5">
+        Cortex hands off here — it won't keep working in the background.
+        Click the button to run the full analysis now.
+      </p>
+      <button onClick={onContinue}
+              data-testid="cortex-continue-analysis-btn"
+              className="inline-flex items-center gap-1.5 text-[12px] font-semibold
+                         px-3 py-1.5 rounded-md bg-amber-500/90 hover:bg-amber-400
+                         text-amber-950 transition shadow-sm shadow-amber-500/30">
+        <Sparkles size={12} /> Generate the full analysis
+        <ChevronRight size={12} />
+      </button>
+    </div>
+  );
+}
 
 
 /* ActionDataCard — inline summary rendered for stage=action turns.
