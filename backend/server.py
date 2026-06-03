@@ -10,7 +10,7 @@ import list below. No other change to server.py is required.
 from starlette.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
 
-from core import app, api, client, logger  # noqa: F401  (logger imported for side-effect)
+from core import app, api, client, db, logger  # noqa: F401  (logger imported for side-effect)
 
 # Import each route module so its decorators register on the shared `api`/`app`.
 # Order matters only for routes that hit `app` directly (sitemap, scheduler events).
@@ -104,6 +104,29 @@ app.include_router(api)
 
 
 # Provision Stripe products on startup (idempotent — only creates missing ones).
+@app.on_event("startup")
+async def _ensure_ttl_indexes():
+    """Self-pruning indexes for high-volume internal logs. Without these,
+    `cortex_optimization_log` (and any future high-volume audit table)
+    grows unbounded — over months that's one row per detection per user.
+    Mongo's TTL monitor will quietly delete documents whose `created_at`
+    is older than the configured horizon."""
+    try:
+        # Optimization detections — 90 days is plenty for "did our
+        # last fix actually move the metric?" learning + audit.
+        await db.cortex_optimization_log.create_index(
+            "created_at",
+            expireAfterSeconds=90 * 24 * 3600,
+            name="optlog_created_at_ttl_90d",
+            background=True,
+        )
+        logger.debug("ttl: cortex_optimization_log ready (90d)")
+    except Exception:
+        # Idempotent — already-present indexes raise OperationFailure;
+        # we never want a startup hook to crash the worker.
+        logger.exception("ttl index ensure failed (non-fatal)")
+
+
 @app.on_event("startup")
 async def _provision_stripe():
     try:
