@@ -22,6 +22,8 @@ PRODUCT REQUIREMENTS: Mission-focused architecture, Autonomy Control Center, Eve
 - `backend/routes/public_tools.py`                                ← unauthenticated lead-magnet endpoints
 
 ## Completed (latest session)
+- 2026-06-03  **Asset storage migrated to managed object storage** (`EmergentObjStorage` + `_HybridStorage` wrapping legacy local-disk reads). New uploads go to Emergent's `/objstore/api/v1/storage` via `EMERGENT_LLM_KEY`. Selection driven by `ASSET_STORAGE_BACKEND=emergent`. Live e2e upload→download round-trip verified through `/api/cortex/assets/upload` + `/api/cortex/assets/file/{key}`.
+- 2026-06-03  **Regression tests for bulk endpoints** added at `/app/backend/tests/test_bulk_endpoints.py` (18 tests) + `/app/backend/tests/test_asset_storage.py` (11 tests). All 29 pass plus 26 of 27 pre-existing asset-pipeline tests (1 skipped, pre-existing).
 - 2026-06-03  Verified Cortex "Analyzing" right-rail card + in-chat FindingsCard progress bar render correctly (screenshot smoke test).
 - 2026-05-29..06-02
   - Cortex "Analyzing" progress bar + right-rail thinking card wired (`CortexThinkingCard`, `FindingsCard`, `cv-indeterminate` keyframe).
@@ -35,8 +37,8 @@ PRODUCT REQUIREMENTS: Mission-focused architecture, Autonomy Control Center, Eve
 
 ## P0 / P1 / P2 backlog
 - P1: WordPress Connect — Option A (self-hosted basic auth).
-- P2: Replace mocked local-disk asset storage with real S3.
-- P2: Test files under `/app/backend/tests` for regression of bulk-delete + bulk-retry endpoints.
+- P2: One-shot migration script to push pre-existing `/app/backend/uploads/assets/` files to Emergent obj storage (currently served via HybridStorage fallback).
+- P3: Future S3-compatible adapter (Cloudflare R2 / Backblaze B2) if egress costs ever justify the switch — the AssetStorage protocol already supports a drop-in replacement.
 
 ## Notes
 - Production vs Preview: prod bakes `REACT_APP_BACKEND_URL` at build time. ALWAYS ask the user whether a reported bug is on preview or prod before debugging.
