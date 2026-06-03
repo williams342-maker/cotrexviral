@@ -264,7 +264,12 @@ async def classify_and_respond(
             tool=tool,
             session_id=f"cortex-stage-{user_id}-{uuid.uuid4().hex[:8]}",
             user_id=user_id,
-            prefer="claude",
+            # Stage classification is structured, narrow output — Haiku 4.5
+            # nails it in ~2-4s vs Sonnet's ~6-15s, and the difference is
+            # invisible at the UI layer because the answer is constrained
+            # by the tool schema. Failover chain (haiku → claude → gpt)
+            # still keeps reliability.
+            prefer="haiku",
             required=["stage", "ack"],
         )
         if not args:

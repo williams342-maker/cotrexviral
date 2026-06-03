@@ -92,13 +92,24 @@ async def cortex_chat_stream(request: Request, message: str = "",
                 "label": "Understanding your goal…",
             }))
 
-            # ----- Phase 2: recalling memory -------------------
+            # ----- Phase 2: recalling memory + loading history -------
+            # All three reads are independent (Mongo strategy lookup,
+            # embedding-backed semantic recall, Mongo history) — run them
+            # concurrently. Saves ~1-2s vs the previous sequential chain.
             await queue.put(_sse("phase", {
                 "phase": "recalling",
                 "label": "Recalling our prior conversations…",
             }))
-            strategy = await cmem.get_strategy(user.user_id)
-            recalled = await cmem.recall_semantic(user.user_id, msg, k=5)
+            hist_cur = db.cortex_conversations.find(
+                {"user_id": user.user_id},
+                {"_id": 0, "role": 1, "message": 1, "stage": 1},
+            ).sort("created_at", -1).limit(10)
+            strategy, recalled, history = await asyncio.gather(
+                cmem.get_strategy(user.user_id),
+                cmem.recall_semantic(user.user_id, msg, k=5),
+                hist_cur.to_list(10),
+            )
+            history.reverse()
             memory_block = cmem.render_memory_block(strategy, recalled)
             await queue.put(_sse("memory", {
                 "strategy_summary": (strategy or {}).get("summary", ""),
@@ -115,13 +126,6 @@ async def cortex_chat_stream(request: Request, message: str = "",
                 "phase": "planning",
                 "label": "Cortex is thinking through your goal…",
             }))
-
-            hist_cur = db.cortex_conversations.find(
-                {"user_id": user.user_id},
-                {"_id": 0, "role": 1, "message": 1, "stage": 1},
-            ).sort("created_at", -1).limit(10)
-            history = [h async for h in hist_cur]
-            history.reverse()
 
             stage_data = await classify_and_respond(
                 user_message=msg,
@@ -141,34 +145,42 @@ async def cortex_chat_stream(request: Request, message: str = "",
                 )
 
             now = datetime.now(timezone.utc)
-            await db.cortex_conversations.insert_one({
-                "id": uuid.uuid4().hex, "user_id": user.user_id,
-                "conversation_id": conv_id,
-                "role": "user", "message": msg,
-                "stage": stage_data["stage"], "created_at": now,
-            })
-            await db.cortex_conversations.insert_one({
-                "id": uuid.uuid4().hex, "user_id": user.user_id,
-                "conversation_id": conv_id,
-                "role": "cortex", "message": stage_data["ack"],
-                "stage": stage_data["stage"],
-                "intent": stage_data.get("intent"),
-                "params": stage_data.get("params"),
-                "clarifying_questions": stage_data.get("clarifying_questions"),
-                "findings": stage_data.get("findings"),
-                "recommendation_summary": stage_data.get("recommendation_summary"),
-                "alternatives": stage_data.get("alternatives"),
-                "recommendation": rec, "created_at": now,
-            })
-            try:
-                await cmem.record_turn(user.user_id, "user", msg,
-                                        meta={"stage": stage_data["stage"]})
-                await cmem.record_turn(user.user_id, "cortex", stage_data["ack"],
-                                        meta={"stage": stage_data["stage"],
-                                               "intent": stage_data.get("intent"),
-                                               "rec_id": (rec or {}).get("id")})
-            except Exception:
-                logger.exception("stream: record_turn failed (non-fatal)")
+            # Persist both turns in parallel — independent inserts.
+            await asyncio.gather(
+                db.cortex_conversations.insert_one({
+                    "id": uuid.uuid4().hex, "user_id": user.user_id,
+                    "conversation_id": conv_id,
+                    "role": "user", "message": msg,
+                    "stage": stage_data["stage"], "created_at": now,
+                }),
+                db.cortex_conversations.insert_one({
+                    "id": uuid.uuid4().hex, "user_id": user.user_id,
+                    "conversation_id": conv_id,
+                    "role": "cortex", "message": stage_data["ack"],
+                    "stage": stage_data["stage"],
+                    "intent": stage_data.get("intent"),
+                    "params": stage_data.get("params"),
+                    "clarifying_questions": stage_data.get("clarifying_questions"),
+                    "findings": stage_data.get("findings"),
+                    "recommendation_summary": stage_data.get("recommendation_summary"),
+                    "alternatives": stage_data.get("alternatives"),
+                    "recommendation": rec, "created_at": now,
+                }),
+            )
+            # Memory-write embedding calls are ~1-2s each. They're not on
+            # the user's critical path — fire and forget so we can flush
+            # `ready` immediately. Errors are logged but never block.
+            async def _memo_record():
+                try:
+                    await cmem.record_turn(user.user_id, "user", msg,
+                                            meta={"stage": stage_data["stage"]})
+                    await cmem.record_turn(user.user_id, "cortex", stage_data["ack"],
+                                            meta={"stage": stage_data["stage"],
+                                                   "intent": stage_data.get("intent"),
+                                                   "rec_id": (rec or {}).get("id")})
+                except Exception:
+                    logger.exception("stream: record_turn failed (non-fatal)")
+            asyncio.create_task(_memo_record())
 
             # ----- Phase 4: ready ------------------------------
             await queue.put(_sse("ready", {

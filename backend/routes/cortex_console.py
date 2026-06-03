@@ -25,6 +25,7 @@ metrics, costs, and outcomes are all derived from real DB state by
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import uuid
@@ -248,21 +249,23 @@ async def console_chat(payload: ChatPayload, request: Request):
     # for backwards-compat with pre-multi-thread rows.
     conv_id = (payload.conversation_id or "").strip() or "legacy"
 
-    # ---- Memory snapshot before classification ----
+    # ---- Memory snapshot before classification (parallelized) ----
+    # Strategy / semantic recall / chat history are independent reads —
+    # run them concurrently to shave ~1-2s off every chat turn.
     from cortex import memory as cmem
     from cortex.stages import classify_and_respond, should_render_plan_card
     from cortex.action_first import match_action_intent, execute_action
-    strategy = await cmem.get_strategy(user.user_id)
-    recalled = await cmem.recall_semantic(user.user_id, payload.message, k=5)
-    memory_block = cmem.render_memory_block(strategy, recalled)
-
-    # Pull last ~10 turns for stage continuity.
     hist_cur = db.cortex_conversations.find(
         {"user_id": user.user_id, "conversation_id": conv_id},
         {"_id": 0, "role": 1, "message": 1, "stage": 1},
     ).sort("created_at", -1).limit(10)
-    history = [h async for h in hist_cur]
+    strategy, recalled, history = await asyncio.gather(
+        cmem.get_strategy(user.user_id),
+        cmem.recall_semantic(user.user_id, payload.message, k=5),
+        hist_cur.to_list(10),
+    )
     history.reverse()
+    memory_block = cmem.render_memory_block(strategy, recalled)
 
     # ---- Action-First fast path ------------------------------------
     # Senior consultants don't interview before showing the data. If
@@ -300,8 +303,7 @@ async def console_chat(payload: ChatPayload, request: Request):
         )
 
     now = datetime.now(timezone.utc)
-    # Persist the chat turn so the Conversations history works.
-    await db.cortex_conversations.insert_one({
+    user_turn = {
         "id":              uuid.uuid4().hex,
         "user_id":         user.user_id,
         "conversation_id": conv_id,
@@ -309,8 +311,8 @@ async def console_chat(payload: ChatPayload, request: Request):
         "message":         payload.message[:1000],
         "stage":           stage_data["stage"],
         "created_at":      now,
-    })
-    await db.cortex_conversations.insert_one({
+    }
+    cortex_turn = {
         "id":              uuid.uuid4().hex,
         "user_id":         user.user_id,
         "conversation_id": conv_id,
@@ -330,43 +332,45 @@ async def console_chat(payload: ChatPayload, request: Request):
         "action_kind":     stage_data.get("action_kind"),
         "action_data":     stage_data.get("action_data"),
         "created_at":      now,
-    })
+    }
+    # Both inserts are independent — fire concurrently.
+    await asyncio.gather(
+        db.cortex_conversations.insert_one(user_turn),
+        db.cortex_conversations.insert_one(cortex_turn),
+    )
 
-    # ---- Embed into Qdrant (best-effort) ----
-    try:
-        await cmem.record_turn(user.user_id, "user", payload.message,
-                                meta={"stage": stage_data["stage"]})
-        await cmem.record_turn(user.user_id, "cortex", stage_data["ack"],
-                                meta={"stage": stage_data["stage"],
-                                       "intent": stage_data.get("intent"),
-                                       "rec_id": (rec or {}).get("id")})
-    except Exception:
-        logger.exception("cortex chat: memory record_turn failed (non-fatal)")
-
-    # ---- Periodic strategy refresh (every 8 turns) ----
-    try:
-        if await db.cortex_conversations.count_documents(
-            {"user_id": user.user_id}) % 8 == 0:
-            await cmem.update_strategy_summary(user.user_id)
-    except Exception:
-        logger.exception("cortex chat: strategy refresh failed (non-fatal)")
-
-    # ---- Auto-rename conversation after 4+ turns ----
-    # On the 4th total turn (2nd round-trip), let Claude generate a
-    # concise 3-7 word title that replaces the verbose first-message
-    # default. Stored on cortex_conversation_meta so the history
-    # sidebar picks it up immediately.
-    try:
-        if conv_id and conv_id != "legacy":
-            cnt = await db.cortex_conversations.count_documents(
-                {"user_id": user.user_id, "conversation_id": conv_id})
-            existing_meta = await db.cortex_conversation_meta.find_one(
-                {"user_id": user.user_id, "conversation_id": conv_id},
-                {"_id": 0, "auto_renamed": 1})
-            if cnt >= 4 and not (existing_meta or {}).get("auto_renamed"):
-                await _maybe_auto_rename(user.user_id, conv_id)
-    except Exception:
-        logger.exception("cortex chat: auto-rename failed (non-fatal)")
+    # ---- Background-fire the slow follow-ups -----------------------
+    # Memory-record embedding + strategy refresh + auto-rename are
+    # collectively ~2-5s of work but NONE of them gate the user's
+    # response. Schedule them as a background task and return now.
+    async def _post_chat_followups():
+        try:
+            await cmem.record_turn(user.user_id, "user", payload.message,
+                                    meta={"stage": stage_data["stage"]})
+            await cmem.record_turn(user.user_id, "cortex", stage_data["ack"],
+                                    meta={"stage": stage_data["stage"],
+                                           "intent": stage_data.get("intent"),
+                                           "rec_id": (rec or {}).get("id")})
+        except Exception:
+            logger.exception("cortex chat: memory record_turn failed (non-fatal)")
+        try:
+            if await db.cortex_conversations.count_documents(
+                {"user_id": user.user_id}) % 8 == 0:
+                await cmem.update_strategy_summary(user.user_id)
+        except Exception:
+            logger.exception("cortex chat: strategy refresh failed (non-fatal)")
+        try:
+            if conv_id and conv_id != "legacy":
+                cnt = await db.cortex_conversations.count_documents(
+                    {"user_id": user.user_id, "conversation_id": conv_id})
+                existing_meta = await db.cortex_conversation_meta.find_one(
+                    {"user_id": user.user_id, "conversation_id": conv_id},
+                    {"_id": 0, "auto_renamed": 1})
+                if cnt >= 4 and not (existing_meta or {}).get("auto_renamed"):
+                    await _maybe_auto_rename(user.user_id, conv_id)
+        except Exception:
+            logger.exception("cortex chat: auto-rename failed (non-fatal)")
+    asyncio.create_task(_post_chat_followups())
 
     return {
         "conversation_id":         conv_id,
