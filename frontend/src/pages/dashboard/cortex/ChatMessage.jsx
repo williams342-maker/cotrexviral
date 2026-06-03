@@ -1,6 +1,6 @@
 import React from 'react';
 import axios from 'axios';
-import { Brain, CheckCircle2, AlertTriangle, ChevronRight, RotateCw, Bug, Sparkles, Activity } from 'lucide-react';
+import { Brain, CheckCircle2, AlertTriangle, ChevronRight, RotateCw, Bug, Sparkles, Activity, ArrowUpRight, Compass } from 'lucide-react';
 import PlanCard from './PlanCard';
 import MissionEventStream from './MissionEventStream';
 import RecommendationBridgeCard from './RecommendationBridgeCard';
@@ -18,7 +18,7 @@ import { API } from '../../../context/AuthContext';
      · mission_proposal/execution → full plan card
      · analysis_complete / analysis_failed → embedded job CTAs (View / Retry / Debug) */
 
-export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick, onShortcutPick, discoveryBudgetUsed = 0 }) => {
+export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick, onShortcutPick, discoveryBudgetUsed = 0, isLastTurn = false, onPickPrompt }) => {
   if (turn._kind === 'mission_events') {
     return <MissionEventStream missionTitle={turn.missionTitle}
                                   events={turn.events || []} />;
@@ -65,6 +65,15 @@ export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick, on
     || (turn.findings || []).length > 0
     || (turn.alternatives || []).length > 0
   );
+  // Post-mission handoff: render once when this is the LAST turn in the
+  // thread AND the conversation reached a terminal "Cortex is now doing
+  // it in the background" state (execution stage OR a launched plan
+  // card). Cortex isn't waiting for a reply at this point — point the
+  // user at the right rail's mission tracker and suggest what to do
+  // next instead of stranding them at a dead-end.
+  const showNextSteps = isLastTurn
+    && !isStale
+    && (stage === 'execution' || turn._launched === true);
 
   return (
     <div data-testid="chat-cortex-turn"
@@ -161,6 +170,11 @@ export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick, on
                     onCancel={(onDone) => onAction('cancel', turn, onDone)}
                     onEmail={() => onAction('email', turn)} />
         )}
+
+        {showNextSteps && (
+          <NextStepsCard onPickPrompt={onPickPrompt}
+                          onTrackInSidebar={() => onAction?.('highlight-mission', turn)} />
+        )}
       </div>
     </div>
   );
@@ -194,6 +208,83 @@ function StrandedAnalysisCard({ onContinue }) {
         <Sparkles size={12} /> Generate the full analysis
         <ChevronRight size={12} />
       </button>
+    </div>
+  );
+}
+
+
+/* NextStepsCard — post-mission handoff surface. After Cortex launches a
+   mission the conversation reaches a "done — Scout is now running in
+   the background" terminal state. Without an explicit next-step
+   affordance the user is left staring at a dead-end chat. This card:
+     1. Tells the user the conversation has handed off.
+     2. Offers a primary button to track the live mission in the right
+        rail (scrolls it into view + pulse-highlights the card).
+     3. Suggests 4 starter prompts to start the NEXT conversation —
+        clicked, they fill the composer so the user can iterate. */
+const NEXT_PROMPTS = [
+  { label: "What are my top opportunities right now?",
+    icon: Sparkles },
+  { label: "Run an SEO scan on my homepage",
+    icon: Compass },
+  { label: "Find sellers at risk of churning",
+    icon: AlertTriangle },
+  { label: "Draft this week's content plan",
+    icon: ChevronRight },
+];
+
+function NextStepsCard({ onTrackInSidebar, onPickPrompt }) {
+  return (
+    <div data-testid="cortex-next-steps-card"
+         className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.04] p-3.5
+                    backdrop-blur-sm">
+      <div className="flex items-start gap-2 mb-2">
+        <span className="w-5 h-5 rounded-md bg-gradient-to-br from-emerald-500 to-teal-500
+                          flex items-center justify-center shadow-sm shadow-emerald-500/30
+                          shrink-0">
+          <CheckCircle2 size={11} className="text-white" />
+        </span>
+        <div className="flex-1">
+          <div className="text-[10.5px] uppercase tracking-widest font-bold
+                          text-emerald-200">
+            Mission handed off
+          </div>
+          <p className="text-[12px] text-zinc-300 leading-relaxed mt-0.5">
+            Cortex is running this in the background — progress is in your
+            sidebar. What would you like to tackle next?
+          </p>
+        </div>
+      </div>
+
+      <button onClick={onTrackInSidebar}
+              data-testid="cortex-track-in-sidebar-btn"
+              className="inline-flex items-center gap-1.5 text-[12px] font-semibold
+                         px-3 py-1.5 rounded-md bg-emerald-500/90 hover:bg-emerald-400
+                         text-emerald-950 transition shadow-sm shadow-emerald-500/30
+                         mb-3">
+        <ArrowUpRight size={12} /> Track mission in sidebar
+      </button>
+
+      <div className="text-[9.5px] uppercase tracking-widest text-zinc-500
+                      font-semibold mb-1.5">
+        Try next
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+        {NEXT_PROMPTS.map((p, i) => {
+          const Icon = p.icon;
+          return (
+            <button key={i} onClick={() => onPickPrompt?.(p.label)}
+                    data-testid={`cortex-next-prompt-${i}`}
+                    className="text-left text-[11.5px] text-zinc-300 hover:text-white
+                               px-2.5 py-1.5 rounded-md bg-white/[0.03] hover:bg-white/[0.07]
+                               border border-white/5 hover:border-emerald-500/30
+                               transition flex items-center gap-1.5">
+              <Icon size={11} className="text-emerald-300 shrink-0" />
+              <span className="truncate">{p.label}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

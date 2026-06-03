@@ -226,6 +226,20 @@ code {
 }
 
 
+/* cv-pulse-highlight — temporary glow applied to the right-rail mission
+   card when Cortex's NextStepsCard fires "Track in sidebar". Tells the
+   eye exactly where the live mission is now living. */
+@keyframes cv-pulse-glow {
+  0%   { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.45); }
+  60%  { box-shadow: 0 0 0 18px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+.cv-pulse-highlight {
+  border-radius: 0.75rem;
+  animation: cv-pulse-glow 1.2s ease-out 2;
+}
+
+
 
 /* Blog prose (article body) */
 .cv-prose h2 {

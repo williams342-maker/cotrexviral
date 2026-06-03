@@ -463,6 +463,18 @@ const CommandCenter = () => {
       setTimeout(send, 80);
       return;
     }
+    if (action === 'highlight-mission') {
+      // Scroll the active-mission rail card into view + pulse it for a
+      // beat so the user can see Cortex's progress without leaving the
+      // dashboard. No backend call needed — pure UX nudge.
+      const rail = document.querySelector('[data-testid="active-mission-rail"]');
+      if (rail) {
+        rail.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        rail.classList.add('cv-pulse-highlight');
+        setTimeout(() => rail.classList.remove('cv-pulse-highlight'), 2400);
+      }
+      return;
+    }
     if (!rec) return;
     if (action === 'preview') {
       toast({ title: 'Preview',
@@ -646,6 +658,7 @@ const CommandCenter = () => {
                                 busyId={busyId}
                                 isStale={turn._stale}
                                 discoveryBudgetUsed={budgetUsed}
+                                isLastTurn={idx === thread.length - 1}
                                 onClarifyPick={(q) => setDraft(`${q} — `)}
                                 onShortcutPick={(s) => {
                                   // Submit the shortcut as a tagged user
@@ -656,6 +669,7 @@ const CommandCenter = () => {
                                   setDraft(s);
                                   setTimeout(() => send(), 30);
                                 }}
+                                onPickPrompt={(p) => setDraft(p)}
                                 onAction={handleAction} />
               );
             })}
