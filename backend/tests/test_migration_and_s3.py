@@ -87,9 +87,11 @@ def test_migrate_dry_run_uploads_nothing(tmp_path):
     assert fp.exists()
 
 
-def test_migrate_uploads_to_emergent_and_keeps_local_by_default(tmp_path):
+def test_migrate_uploads_to_destination_and_keeps_local_by_default(tmp_path):
     """Default mode: upload, do NOT delete local copy. Verify the bytes
-    are actually retrievable from the destination."""
+    are actually retrievable from the destination backend (whichever
+    one ASSET_STORAGE_BACKEND resolves to — Emergent or S3-compatible
+    like R2)."""
     payload = b"migration-roundtrip-" + uuid.uuid4().hex.encode()
     fp = (tmp_path / "user_mig" /
           f"{uuid.uuid4().hex}.bin")
@@ -102,9 +104,13 @@ def test_migrate_uploads_to_emergent_and_keeps_local_by_default(tmp_path):
     assert result["failed"] == 0
     # Local copy preserved unless --delete-after is passed.
     assert fp.exists()
-    # Bytes are retrievable from the destination backend (Emergent).
+    # Bytes are retrievable from whichever destination backend the env
+    # var selected. We don't hard-code EmergentObjStorage here because
+    # the script honors ASSET_STORAGE_BACKEND.
+    from scripts.migrate_legacy_assets import _resolve_destination
+    dest, _label = _resolve_destination()
     key = _storage_key(fp, tmp_path)
-    got = _run(EmergentObjStorage().read(key))
+    got = _run(dest.read(key))
     assert got == payload
 
 
