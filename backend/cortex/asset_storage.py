@@ -295,6 +295,154 @@ class EmergentObjStorage:
 
 
 # --------------------------------------------------------------------------
+# S3-compatible backend (AWS S3, Cloudflare R2, Backblaze B2 — anything
+# that speaks the S3 API). Activated by ASSET_STORAGE_BACKEND=s3.
+# --------------------------------------------------------------------------
+class S3Storage:
+    """S3-compatible adapter. boto3 client is constructed lazily on first
+    use so importing this module never costs an HTTP HEAD against an
+    unreachable bucket (tests + dev keep working with no AWS creds).
+
+    Env vars (all required when activated):
+      • AWS_S3_BUCKET       — bucket name
+      • AWS_REGION          — bucket region (e.g. us-east-1)
+      • AWS_ACCESS_KEY_ID   — IAM access key with PutObject/GetObject/DeleteObject
+      • AWS_SECRET_ACCESS_KEY
+    Optional:
+      • AWS_S3_ENDPOINT_URL — override for R2 / B2 / MinIO
+                              (e.g. https://<account>.r2.cloudflarestorage.com)
+      • S3_KEY_PREFIX       — extra prefix applied to every object (default empty)
+
+    boto3 calls are sync — we offload to a thread executor via
+    `asyncio.to_thread` so the FastAPI event loop never blocks.
+    """
+
+    def __init__(self,
+                  bucket: Optional[str] = None,
+                  region: Optional[str] = None,
+                  endpoint_url: Optional[str] = None,
+                  key_prefix: Optional[str] = None):
+        self._bucket = bucket or os.environ.get("AWS_S3_BUCKET")
+        self._region = region or os.environ.get("AWS_REGION")
+        self._endpoint_url = (endpoint_url
+                              or os.environ.get("AWS_S3_ENDPOINT_URL")
+                              or None)
+        self._key_prefix = (key_prefix
+                            or os.environ.get("S3_KEY_PREFIX")
+                            or "").strip("/")
+        if not self._bucket or not self._region:
+            raise RuntimeError(
+                "S3Storage requires AWS_S3_BUCKET + AWS_REGION env vars.")
+        self._client = None  # lazy
+
+    def _get_client(self):
+        if self._client is None:
+            try:
+                import boto3   # local import keeps boto3 optional at import time
+            except ImportError as e:
+                raise RuntimeError(
+                    "boto3 is required for S3Storage; install with "
+                    "`pip install boto3`") from e
+            self._client = boto3.client(
+                "s3",
+                region_name=self._region,
+                endpoint_url=self._endpoint_url,
+                aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+                aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+            )
+        return self._client
+
+    def _remote_key(self, key: str) -> str:
+        """Map an internal storage_key to its remote object key. We
+        guard against path traversal and apply the optional prefix."""
+        safe = key.lstrip("/").replace("..", "_")
+        if self._key_prefix:
+            return f"{self._key_prefix}/{safe}"
+        return safe
+
+    async def save(self, key: str, data: bytes,
+                     max_bytes: int = MAX_ASSET_BYTES) -> str:
+        if len(data) > max_bytes:
+            raise ValueError(f"asset exceeds {max_bytes} byte cap")
+        client = self._get_client()
+        remote = self._remote_key(key)
+
+        def _put():
+            client.put_object(Bucket=self._bucket, Key=remote, Body=data)
+        await asyncio.to_thread(_put)
+        return key
+
+    async def read(self, key: str) -> bytes:
+        from botocore.exceptions import ClientError   # local import
+        client = self._get_client()
+        remote = self._remote_key(key)
+
+        def _get() -> bytes:
+            try:
+                resp = client.get_object(Bucket=self._bucket, Key=remote)
+                return resp["Body"].read()
+            except ClientError as e:
+                code = e.response.get("Error", {}).get("Code", "")
+                if code in ("NoSuchKey", "404", "NotFound"):
+                    raise FileNotFoundError(key)
+                raise
+        return await asyncio.to_thread(_get)
+
+    async def delete(self, key: str) -> None:
+        from botocore.exceptions import ClientError   # local import
+        client = self._get_client()
+        remote = self._remote_key(key)
+
+        def _del():
+            try:
+                client.delete_object(Bucket=self._bucket, Key=remote)
+            except ClientError:
+                logger.exception("s3: delete failed for %s", remote)
+        await asyncio.to_thread(_del)
+
+    def public_url(self, key: str) -> str:
+        # Keep auth checks in front of every byte — always proxy.
+        return f"/api/cortex/assets/file/{key}"
+
+    def presigned_get_url(self, key: str, *, ttl_seconds: int = 3600) -> str:
+        """Optional escape hatch for very large videos: short-lived
+        direct-from-S3 download URL. Not used by the default pipeline."""
+        client = self._get_client()
+        return client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": self._bucket, "Key": self._remote_key(key)},
+            ExpiresIn=max(60, min(ttl_seconds, 7 * 86400)),
+        )
+
+    def total_bytes(self, user_id: str | None = None) -> int:
+        # Not cheap to compute server-side (would need ListObjects). Skip.
+        return 0
+
+    def purge_user(self, user_id: str) -> int:
+        # Bulk delete by prefix — use sparingly.
+        client = self._get_client()
+        prefix = self._remote_key(f"assets/{user_id}/")
+        deleted = 0
+        token = None
+        while True:
+            kwargs = {"Bucket": self._bucket, "Prefix": prefix}
+            if token:
+                kwargs["ContinuationToken"] = token
+            resp = client.list_objects_v2(**kwargs)
+            objs = resp.get("Contents") or []
+            if objs:
+                client.delete_objects(
+                    Bucket=self._bucket,
+                    Delete={"Objects": [{"Key": o["Key"]} for o in objs]},
+                )
+                deleted += len(objs)
+            if not resp.get("IsTruncated"):
+                break
+            token = resp.get("NextContinuationToken")
+        return deleted
+
+
+# --------------------------------------------------------------------------
 # Singleton — selected at import time via ASSET_STORAGE_BACKEND.
 # --------------------------------------------------------------------------
 class _HybridStorage:
@@ -367,13 +515,22 @@ def _build_storage() -> "AssetStorage":
     if backend in ("emergent", "emergent_obj", "emergent-obj"):
         try:
             primary = EmergentObjStorage()
-            # Hybrid: serve legacy disk files until they're migrated.
             legacy = LocalDiskStorage()
             logger.info("asset_storage: backend=emergent_obj (with disk fallback)")
             return _HybridStorage(primary, legacy)
         except Exception:
             logger.exception(
                 "asset_storage: emergent backend init failed, "
+                "falling back to local disk")
+    elif backend in ("s3", "aws", "r2", "b2", "s3_compatible"):
+        try:
+            primary = S3Storage()
+            legacy = LocalDiskStorage()
+            logger.info("asset_storage: backend=s3_compatible (with disk fallback)")
+            return _HybridStorage(primary, legacy)
+        except Exception:
+            logger.exception(
+                "asset_storage: s3 backend init failed, "
                 "falling back to local disk")
     logger.info("asset_storage: backend=local (disk)")
     return LocalDiskStorage()

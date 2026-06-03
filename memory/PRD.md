@@ -20,11 +20,16 @@ PRODUCT REQUIREMENTS: Mission-focused architecture, Autonomy Control Center, Eve
 - `frontend/src/lib/backendUrlGuard.js`                          ← runtime guard for prod backend-URL mismatch
 - `backend/cortex/optimization_loop.py` & `backend/routes/cortex_stream.py` ← async optimized
 - `backend/routes/public_tools.py`                                ← unauthenticated lead-magnet endpoints
+- `backend/cortex/asset_storage.py`                               ← AssetStorage protocol + LocalDisk / EmergentObj / S3 backends + HybridStorage
+- `backend/scripts/migrate_legacy_assets.py`                      ← one-shot disk→object-store migration CLI
 
 ## Completed (latest session)
-- 2026-06-03  **Asset storage migrated to managed object storage** (`EmergentObjStorage` + `_HybridStorage` wrapping legacy local-disk reads). New uploads go to Emergent's `/objstore/api/v1/storage` via `EMERGENT_LLM_KEY`. Selection driven by `ASSET_STORAGE_BACKEND=emergent`. Live e2e upload→download round-trip verified through `/api/cortex/assets/upload` + `/api/cortex/assets/file/{key}`.
-- 2026-06-03  **Regression tests for bulk endpoints** added at `/app/backend/tests/test_bulk_endpoints.py` (18 tests) + `/app/backend/tests/test_asset_storage.py` (11 tests). All 29 pass plus 26 of 27 pre-existing asset-pipeline tests (1 skipped, pre-existing).
-- 2026-06-03  Verified Cortex "Analyzing" right-rail card + in-chat FindingsCard progress bar render correctly (screenshot smoke test).
+- 2026-06-03  **Legacy disk → Emergent object storage migration completed.** Ran `python -m scripts.migrate_legacy_assets --delete-after` — 24 files / 16.2 MiB moved in 8.1s, 0 failures. `/app/backend/uploads/assets/` now empty. HybridStorage fallback remains as a safety net.
+- 2026-06-03  **S3-compatible adapter shipped.** New `S3Storage` class (AWS S3, Cloudflare R2, Backblaze B2 via `AWS_S3_ENDPOINT_URL`). Activated by `ASSET_STORAGE_BACKEND=s3` + bucket/region/creds env vars. boto3 calls run via `asyncio.to_thread` so the event loop never blocks. Includes optional `presigned_get_url()` for large-video direct downloads.
+- 2026-06-03  Tests: `test_migration_and_s3.py` (20 tests, all passing) covers iter/key helpers, dry-run, idempotency, delete-after, refuse-into-local safety, CLI subprocess smoke, and full S3Storage adapter unit coverage with boto3 patched out.
+- 2026-06-03  **Asset storage migrated off local disk → managed object storage** (`EmergentObjStorage` + `_HybridStorage`). Selection driven by `ASSET_STORAGE_BACKEND=emergent`.
+- 2026-06-03  **Regression tests for bulk endpoints**: `tests/test_bulk_endpoints.py` (18) + `tests/test_asset_storage.py` (11). 49/49 total new tests pass; 26/27 pre-existing asset-pipeline tests still green.
+- 2026-06-03  Verified Cortex "Analyzing" right-rail card + in-chat FindingsCard progress bar render correctly.
 - 2026-05-29..06-02
   - Cortex "Analyzing" progress bar + right-rail thinking card wired (`CortexThinkingCard`, `FindingsCard`, `cv-indeterminate` keyframe).
   - Optimized Cortex chat latency (~20s → ~4-7s) and optimization-loop scheduler (~100ms/user → ~2ms/user).
@@ -37,8 +42,7 @@ PRODUCT REQUIREMENTS: Mission-focused architecture, Autonomy Control Center, Eve
 
 ## P0 / P1 / P2 backlog
 - P1: WordPress Connect — Option A (self-hosted basic auth).
-- P2: One-shot migration script to push pre-existing `/app/backend/uploads/assets/` files to Emergent obj storage (currently served via HybridStorage fallback).
-- P3: Future S3-compatible adapter (Cloudflare R2 / Backblaze B2) if egress costs ever justify the switch — the AssetStorage protocol already supports a drop-in replacement.
+- P3: Activate S3-compatible backend in production (adapter ready — just flip `ASSET_STORAGE_BACKEND=s3` + AWS_S3_BUCKET/REGION/keys, or point at R2 via `AWS_S3_ENDPOINT_URL`).
 
 ## Notes
 - Production vs Preview: prod bakes `REACT_APP_BACKEND_URL` at build time. ALWAYS ask the user whether a reported bug is on preview or prod before debugging.

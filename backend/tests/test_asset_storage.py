@@ -182,10 +182,12 @@ def test_e2e_upload_then_download_via_api():
 
     try:
         # Stream it back via the backend proxy. This proves the proxy
-        # reads through the Emergent adapter correctly.
+        # reads through the Emergent adapter correctly. Generous timeout
+        # because the upload route kicks off an async LLM analysis
+        # pipeline that may briefly tie up the worker.
         r2 = requests.get(
             f"{API_URL}/api/cortex/assets/file/{storage_key}",
-            headers=HEADERS_AUTH, timeout=30,
+            headers=HEADERS_AUTH, timeout=90,
         )
         assert r2.status_code == 200, r2.text
         # Byte identity end-to-end.
