@@ -191,15 +191,24 @@ export const RecommendationLiteCard = ({
 };
 
 
-/* FindingsCard — shown in stage=analysis as Cortex scans/researches. */
-export const FindingsCard = ({ findings = [] }) => {
+/* FindingsCard — shown in stage=analysis as Cortex scans/researches.
+   Includes an animated indeterminate progress bar so the user can see
+   the analysis is in progress (not just static findings). */
+export const FindingsCard = ({ findings = [], live = true }) => {
   if (!findings.length) return null;
   return (
     <div data-testid="analysis-findings-card"
          className="rounded-xl border border-amber-500/15 bg-amber-500/[0.03] p-3">
       <div className="text-[10px] uppercase tracking-widest text-amber-300 font-semibold mb-2 flex items-center gap-1">
-        <Activity size={10} className="animate-pulse" /> What I'm finding
+        <Activity size={10} className={live ? 'animate-pulse' : ''} /> What I'm finding
+        {live && <span className="ml-auto normal-case tracking-normal text-amber-400/70 font-normal">analyzing…</span>}
       </div>
+      {live && (
+        <div data-testid="analysis-progress-bar"
+             className="h-1 bg-amber-500/10 rounded-full overflow-hidden mb-2.5 relative">
+          <div className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-amber-400 to-transparent rounded-full animate-[cv-indeterminate_1.4s_ease-in-out_infinite]" />
+        </div>
+      )}
       <ul className="space-y-1">
         {findings.map((f, i) => (
           <li key={i} className="text-[12px] text-zinc-300 leading-relaxed flex items-start gap-1.5">

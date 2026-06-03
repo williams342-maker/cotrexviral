@@ -4,6 +4,7 @@ import ActiveMissionRail from './ActiveMissionRail';
 import ActiveWorkRail from './ActiveWorkRail';
 import OptimizationStatus from './OptimizationStatus';
 import ExecutiveInsights from './ExecutiveInsights';
+import CortexThinkingCard from './CortexThinkingCard';
 
 /* OpportunityRail — right sidebar showing AI-surfaced opportunities,
    recommended actions, and recent discoveries. Each card is a
@@ -19,10 +20,19 @@ export const OpportunityRail = ({
   opportunities = [], loading, onPrompt, strategy,
   activeMissions = [], missionsLoading = false, onOpenMission, onMissionCancelled,
   onDiscussFinding, onLaunchScan,
+  thinkingTurn, onScrollToTurn,
 }) => {
   return (
     <aside data-testid="cortex-opportunity-rail"
            className="h-full flex flex-col gap-4 overflow-y-auto pr-1">
+      {/* Live "Cortex is analyzing" card — surfaces the in-flight
+          conversational analysis stage into the right rail so the user
+          sees the progress bar regardless of chat scroll position. */}
+      {thinkingTurn && (
+        <CortexThinkingCard turn={thinkingTurn}
+                              onScrollToTurn={onScrollToTurn} />
+      )}
+
       {/* Autonomous monitoring status — TOP (the headline) */}
       <OptimizationStatus onDiscuss={onDiscussFinding} />
 

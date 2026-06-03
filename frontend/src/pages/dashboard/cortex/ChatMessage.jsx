@@ -59,7 +59,9 @@ export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick, on
   );
 
   return (
-    <div data-testid="chat-cortex-turn" className="flex items-start gap-3 mb-4">
+    <div data-testid="chat-cortex-turn"
+          data-turn-id={turn.id}
+          className="flex items-start gap-3 mb-4">
       <span className="shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shadow-lg shadow-violet-500/20">
         <Brain size={14} className="text-white" />
       </span>

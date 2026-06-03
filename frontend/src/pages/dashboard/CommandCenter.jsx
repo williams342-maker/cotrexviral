@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -76,6 +76,20 @@ const CommandCenter = () => {
 
   const scrollRef = useRef(null);
   const esRef = useRef(null);
+
+  // The "Cortex is analyzing…" thinking card surfaces into the right
+  // rail when the most recent cortex turn is still in stage=analysis.
+  // A trailing user turn means the analysis is done from Cortex's
+  // perspective — only show while the *last* turn in the thread is
+  // an analysis-stage cortex turn (and we're either sending or the
+  // turn has live=true).
+  const thinkingTurn = useMemo(() => {
+    if (!Array.isArray(thread) || thread.length === 0) return null;
+    const last = thread[thread.length - 1];
+    if (!last || last.role !== 'cortex' || last.stage !== 'analysis') return null;
+    if (!Array.isArray(last.findings) || last.findings.length === 0) return null;
+    return last;
+  }, [thread]);
 
   // ----- Initial + periodic data loaders -----------------------------
   const loadHistory = useCallback(async (convId) => {
@@ -669,6 +683,13 @@ const CommandCenter = () => {
                 setDraft(`I see Cortex flagged: "${f.bottleneck}". What's your reasoning, and what would you recommend?`);
               }}
               onPrompt={handlePrompt}
+              thinkingTurn={thinkingTurn}
+              onScrollToTurn={(tid) => {
+                const node = document.querySelector(`[data-turn-id="${tid}"]`);
+                if (node && scrollRef.current) {
+                  node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+              }}
               onLaunchScan={async (jobType) => {
                 // Friendly prompt for URL/target then enqueue a real job.
                 // Real job IDs are the only way Cortex is allowed to claim

@@ -217,6 +217,16 @@ code {
 }
 
 
+/* Indeterminate progress bar — used by Cortex analysis FindingsCard
+   and the right-rail "Cortex is analyzing" card so users see motion
+   while the LLM is thinking. */
+@keyframes cv-indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
+
+
 /* Blog prose (article body) */
 .cv-prose h2 {
   font-family: 'Space Grotesk', 'Inter', sans-serif;
