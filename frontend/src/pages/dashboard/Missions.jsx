@@ -103,6 +103,10 @@ const Missions = () => {
             ))}
           </div>
         )}
+
+        {!loading && missions.some((m) => m.status === 'cancelled') && (
+          <ClearCancelledButton missions={missions} reload={load} />
+        )}
       </div>
 
       {showNew && (
@@ -153,6 +157,48 @@ const EmptyState = ({ onStart }) => (
     </button>
   </div>
 );
+
+const ClearCancelledButton = ({ missions, reload }) => {
+  const { toast } = useToast();
+  const [pending, setPending] = useState(false);
+  const cancelled = missions.filter((m) => m.status === 'cancelled');
+  if (cancelled.length === 0) return null;
+  const clearAll = async () => {
+    if (!window.confirm(
+      `Remove all ${cancelled.length} cancelled mission(s) from your dashboard? They're already cancelled — this just hides the cards.`,
+    )) return;
+    setPending(true);
+    // Fire deletes in parallel; the route is fast (single Mongo delete).
+    const results = await Promise.allSettled(
+      cancelled.map((m) => axios.delete(`${API}/missions/${m.id}`, { withCredentials: true })),
+    );
+    const ok = results.filter((r) => r.status === 'fulfilled').length;
+    const failed = results.length - ok;
+    if (failed > 0) {
+      toast({
+        title: `Cleared ${ok}/${results.length}`,
+        description: `${failed} dismissal(s) failed — they'll stay on the dashboard.`,
+        variant: 'destructive',
+      });
+    } else {
+      toast({ title: `Cleared ${ok} cancelled mission${ok === 1 ? '' : 's'}` });
+    }
+    setPending(false);
+    reload();
+  };
+  return (
+    <div className="flex justify-end">
+      <button onClick={clearAll} disabled={pending}
+              data-testid="missions-clear-cancelled"
+              className="text-[12px] font-semibold px-3 py-1.5 rounded-md
+                         bg-white/5 hover:bg-rose-500/15 text-zinc-400 hover:text-rose-200
+                         border border-white/5 hover:border-rose-500/30
+                         transition flex items-center gap-1.5 disabled:opacity-50">
+        <X size={12} /> Clear {cancelled.length} cancelled
+      </button>
+    </div>
+  );
+};
 
 const MissionCard = ({ mission, navigate, reload }) => {
   const p = mission.progress || {};
@@ -256,6 +302,20 @@ const MissionAction = ({ mission, reload }) => {
       toast({ title: `Failed to ${path}`, description: e?.response?.data?.detail || e.message, variant: 'destructive' });
     } finally { setPending(false); }
   };
+  const dismiss = async () => {
+    if (!window.confirm(`Remove "${mission.title}" from your dashboard? It's already ${mission.status}; this just hides the card.`)) return;
+    setPending(true);
+    try {
+      await axios.delete(`${API}/missions/${mission.id}`, { withCredentials: true });
+      reload();
+    } catch (e) {
+      toast({
+        title: 'Failed to dismiss',
+        description: e?.response?.data?.detail || e.message,
+        variant: 'destructive',
+      });
+    } finally { setPending(false); }
+  };
   if (mission.status === 'running') {
     return (
       <div className="flex items-center gap-1.5">
@@ -290,6 +350,20 @@ const MissionAction = ({ mission, reload }) => {
           <XCircle size={11} />
         </button>
       </div>
+    );
+  }
+  // Terminal states (cancelled/failed/succeeded/archived) have no
+  // forward actions, but the cards still clutter Mission Control —
+  // surface a quiet Dismiss button so the user can remove them.
+  if (['cancelled', 'failed', 'succeeded', 'archived'].includes(mission.status)) {
+    return (
+      <button onClick={dismiss} disabled={pending} title="Remove from dashboard"
+              className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md
+                         bg-white/5 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-200
+                         transition flex items-center gap-1 disabled:opacity-50"
+              data-testid={`mission-dismiss-${mission.id}`}>
+        <X size={11} /> Dismiss
+      </button>
     );
   }
   return null;
