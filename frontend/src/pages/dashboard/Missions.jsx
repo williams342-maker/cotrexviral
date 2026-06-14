@@ -325,6 +325,13 @@ const MissionAction = ({ mission, reload }) => {
           <Pause size={11} /> Pause
         </button>
         <button onClick={() => {
+          if (window.confirm(`Mark "${mission.title}" as succeeded? Use this for outcomes Cortex can't measure (offline deals, partnerships, etc.).`)) fire('succeed');
+        }} disabled={pending} title="Mark mission as succeeded"
+                className="text-[11.5px] font-semibold w-7 h-7 rounded-md bg-emerald-500/10 hover:bg-emerald-500/25 text-emerald-300 transition flex items-center justify-center disabled:opacity-50"
+                data-testid={`mission-succeed-${mission.id}`}>
+          <Trophy size={11} />
+        </button>
+        <button onClick={() => {
           if (window.confirm(`Cancel "${mission.title}"? This stops further automation.`)) fire('cancel');
         }} disabled={pending} title="Cancel mission"
                 className="text-[11.5px] font-semibold w-7 h-7 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 transition flex items-center justify-center disabled:opacity-50"
@@ -342,6 +349,15 @@ const MissionAction = ({ mission, reload }) => {
                 data-testid={`mission-start-${mission.id}`}>
           <Play size={11} /> {mission.status === 'paused' ? 'Resume' : 'Start'}
         </button>
+        {mission.status === 'paused' && (
+          <button onClick={() => {
+            if (window.confirm(`Mark "${mission.title}" as succeeded? Use this for outcomes Cortex can't measure (offline deals, partnerships, etc.).`)) fire('succeed');
+          }} disabled={pending} title="Mark mission as succeeded"
+                  className="text-[11.5px] font-semibold w-7 h-7 rounded-md bg-emerald-500/10 hover:bg-emerald-500/25 text-emerald-300 transition flex items-center justify-center disabled:opacity-50"
+                  data-testid={`mission-succeed-${mission.id}`}>
+            <Trophy size={11} />
+          </button>
+        )}
         <button onClick={() => {
           if (window.confirm(`Cancel "${mission.title}"? This stops further automation.`)) fire('cancel');
         }} disabled={pending} title="Cancel mission"

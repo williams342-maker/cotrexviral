@@ -504,3 +504,41 @@ async def cancel_mission(mission_id: str, request: Request):
     fresh = await db.missions.find_one({"id": mission_id})
     return {**_serialize(fresh), "progress": await compute_progress(fresh)}
 
+
+@api.post("/missions/{mission_id}/succeed")
+async def mark_mission_succeeded(mission_id: str, request: Request):
+    """Manually mark a mission as succeeded — for outcomes Cortex can't
+    measure on its own (offline deals, partnerships, etc.). Auto-success
+    via progress hitting target still works; this is an override.
+
+    Refuses to transition out of an already-terminal state so accidental
+    double-clicks can't, e.g., re-open a cancelled mission."""
+    user = await get_current_user(request)
+    doc = await db.missions.find_one({"id": mission_id, "user_id": user.user_id})
+    if not doc:
+        raise HTTPException(404, "Mission not found")
+    cur = doc.get("status")
+    if cur in ("succeeded", "cancelled", "failed", "archived", "abandoned"):
+        raise HTTPException(400, f"Cannot mark succeeded — already {cur}")
+    now = datetime.now(timezone.utc)
+    await db.missions.update_one(
+        {"id": mission_id},
+        {"$set": {"status":       "succeeded",
+                   "completed_at": now,
+                   "updated_at":   now}},
+    )
+    # Audit event so analytics + the execution log can distinguish a
+    # manual override from an auto-success at progress = target.
+    try:
+        await db.mission_events.insert_one({
+            "id":         uuid.uuid4().hex,
+            "user_id":    user.user_id,
+            "mission_id": mission_id,
+            "event":      "succeeded",
+            "body":       "Marked succeeded by user (manual override)",
+            "created_at": now,
+        })
+    except Exception:
+        pass
+    fresh = await db.missions.find_one({"id": mission_id})
+    return {**_serialize(fresh), "progress": await compute_progress(fresh)}
