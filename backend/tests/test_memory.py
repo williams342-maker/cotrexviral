@@ -34,14 +34,17 @@ def _wipe_test_memories(prefix: str):
 
 
 class TestEmbedding:
-    def test_embed_text_returns_384_dim(self):
+    def test_embed_text_returns_1536_dim(self):
+        """OpenAI text-embedding-3-small returns 1536-dim vectors.
+        (Was 384-dim back when fastembed/BAAI was the backend; that was
+        migrated out to fix prod OOM — see cortex/memory.py docstring.)"""
         import sys
         sys.path.insert(0, "/app/backend")
         from routes.memory import embed_text
 
         vec = asyncio.get_event_loop().run_until_complete(embed_text("hello world"))
         assert isinstance(vec, list)
-        assert len(vec) == 384
+        assert len(vec) == 1536
         assert all(isinstance(x, float) for x in vec[:10])
 
     def test_embed_blank_returns_empty(self):

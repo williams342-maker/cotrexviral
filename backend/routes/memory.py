@@ -74,51 +74,53 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Embedding model — lazy-loaded so the worker boots fast
+# Embedding model — delegates to cortex.memory's OpenAI embedding layer.
+# Previously this used `fastembed` (a ~90 MB ONNX model) but the platform
+# migrated everything to OpenAI text-embedding-3-small to fix prod OOM.
+# This module is the legacy `routes/memory.py` ingest surface — many
+# routes still call `remember()` here, so we wrap the new embedding
+# function instead of duplicating it.
 # ---------------------------------------------------------------------------
-_EMBED_MODEL = None
-_EMBED_LOCK = asyncio.Lock()
-
-
-async def _get_embed_model():
-    """Lazy + singleton. First call downloads the ONNX weights (~90 MB)
-    and takes ~2s. Subsequent calls are instant."""
-    global _EMBED_MODEL
-    if _EMBED_MODEL is not None:
-        return _EMBED_MODEL
-    async with _EMBED_LOCK:
-        if _EMBED_MODEL is not None:
-            return _EMBED_MODEL
-
-        def _load():
-            from fastembed import TextEmbedding
-            return TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
-        # Run blocking download/load in a thread so we don't stall the event loop.
-        _EMBED_MODEL = await asyncio.to_thread(_load)
-    return _EMBED_MODEL
 
 
 async def embed_text(text: str) -> list[float]:
-    """Return a normalized embedding vector for `text`."""
+    """Return an OpenAI text-embedding-3-small vector for `text`.
+
+    Returns an empty list (NOT None) for empty input or on transient
+    failure — callers downstream short-circuit on empty vectors and
+    degrade gracefully to no-semantic-recall instead of crashing."""
     if not text or not text.strip():
         return []
-    model = await _get_embed_model()
-    # fastembed yields ndarray rows; we materialise + cast to list[float] so
-    # MongoDB can BSON-encode it.
-    vecs = await asyncio.to_thread(lambda: list(model.embed([text])))
-    if not vecs:
-        return []
-    return [float(x) for x in vecs[0]]
+    # cortex.memory owns the shared httpx client + OpenAI key wiring.
+    from cortex.memory import _embed as _cortex_embed
+    vec = await _cortex_embed(text[:4000])
+    return vec or []
 
 
 async def embed_many(texts: list[str]) -> list[list[float]]:
-    """Batch variant — much faster than calling embed_text in a loop."""
+    """Batch variant. OpenAI embeddings accept an array `input`, so this
+    is one HTTP call instead of len(texts) calls."""
     texts = [t for t in texts if t and t.strip()]
     if not texts:
         return []
-    model = await _get_embed_model()
-    vecs = await asyncio.to_thread(lambda: list(model.embed(texts)))
-    return [[float(x) for x in v] for v in vecs]
+    # cortex.memory has no batch helper exposed, but its httpx client +
+    # auth header are already configured — reuse them here.
+    from cortex.memory import _get_http, EMBED_MODEL
+    try:
+        client = await _get_http()
+        r = await client.post(
+            "https://api.openai.com/v1/embeddings",
+            json={"model": EMBED_MODEL,
+                  "input": [t[:4000] for t in texts]},
+        )
+        if r.status_code != 200:
+            logger.warning("routes.memory: batch embed HTTP %d: %s",
+                            r.status_code, r.text[:200])
+            return []
+        return [row["embedding"] for row in r.json().get("data", [])]
+    except Exception:
+        logger.exception("routes.memory: batch embed failed")
+        return []
 
 
 def _cosine(a: list[float], b: list[float]) -> float:

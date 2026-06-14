@@ -380,18 +380,26 @@ async def refresh_trends_for_all_users():
     """Iterates every active user and ingests their trend feed. Bounded
     at 100 users per tick to keep the loop predictable."""
     cursor = db.users.find(
-        {"status": {"$ne": "suspended"}},
+        {"status": {"$ne": "suspended"},
+         "user_id": {"$exists": True, "$ne": None}},
         {"_id": 0, "user_id": 1, "niche": 1,
          "niche_subreddits": 1, "niche_keywords": 1, "brand_name": 1},
     ).limit(100)
     ingested = 0
     async for u in cursor:
+        uid = u.get("user_id")
+        if not uid:
+            # Defence in depth — the query filter above already excludes
+            # these rows, but a future schema change could reintroduce
+            # docs with `user_id: null`. Skip silently instead of
+            # KeyError-crashing the whole sweep.
+            continue
         try:
-            res = await ingest_trends_for_user(u["user_id"])
+            res = await ingest_trends_for_user(uid)
             if res["reddit"] or res["gtrends"]:
                 ingested += 1
         except Exception:
-            logger.exception("Trend ingestion failed for %s", u.get("user_id"))
+            logger.exception("Trend ingestion failed for %s", uid)
     if ingested:
         logger.info("Trend refresh: ingested for %s user(s)", ingested)
 
