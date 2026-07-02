@@ -31,6 +31,7 @@ import CommandPalette from './CommandPalette';
 */
 const SECTIONS = [
   { id: 'home',     label: 'Command Center', icon: Brain, to: '/dashboard' },
+  { id: 'ai',       label: 'AI Command Center', icon: Sparkles, to: '/dashboard/ai' },
   { id: 'missions', label: 'Mission Control', icon: LayoutDashboard, to: '/dashboard/missions' },
   {
     id: 'campaigns', label: 'Campaigns', icon: Rocket,

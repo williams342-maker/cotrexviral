@@ -94,6 +94,9 @@ const AccountSettings = () => {
       {/* Cortex preferences */}
       <CortexPreferencesSection />
 
+      {/* AI autonomy */}
+      <AIAutonomySection />
+
       {/* Active sessions */}
       <SessionsSection />
 
@@ -777,6 +780,99 @@ function CortexPreferencesSection() {
 // pin important turns so they survive the per-user cap pruner, delete
 // individual turns, and nuke everything.
 // ---------------------------------------------------------------------
+
+const AI_AUTONOMY_LEVELS = [
+  { level: 0, title: 'L0 · Suggest only', hint: 'Ideas and recommendations only—no finished drafts.' },
+  { level: 1, title: 'L1 · Draft only', hint: 'Creates reviewable drafts. Nothing is executed.', recommended: true },
+  { level: 2, title: 'L2 · Prepare for approval', hint: 'Prepares actions and marks external work as needing approval.' },
+  { level: 3, title: 'L3 · Explicit approval', hint: 'Execution would require explicit approval. External execution remains disabled.' },
+  { level: 4, title: 'L4 · Rules-bounded', hint: 'Reserved for predefined rules. External execution remains disabled.' },
+  { level: 5, title: 'L5 · Fully autonomous', hint: 'Disabled by platform safety policy.' },
+];
+
+function AIAutonomySection() {
+  const { toast } = useToast();
+  const [level, setLevel] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    axios.get(`${API}/user/preferences`, { withCredentials: true })
+      .then((r) => setLevel(Number(r.data?.preferences?.ai_autonomy_level ?? 1)))
+      .catch(() => setLevel(1));
+  }, []);
+
+  const save = async (next) => {
+    if (next === level || saving) return;
+    const previous = level;
+    setLevel(next);
+    setSaving(true);
+    try {
+      await axios.put(
+        `${API}/user/preferences`,
+        { ai_autonomy_level: next },
+        { withCredentials: true },
+      );
+      toast({
+        title: `AI autonomy set to L${next}`,
+        description: AI_AUTONOMY_LEVELS[next].hint,
+      });
+    } catch (e) {
+      setLevel(previous);
+      toast({
+        title: 'Could not save autonomy level',
+        description: e?.response?.data?.detail || e.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="mb-6" data-testid="account-ai-autonomy-section">
+      <SectionHeader icon={Brain} label="AI autonomy" />
+      <div className="cv-glass rounded-2xl p-5">
+        <div className="text-[13px] font-semibold text-white mb-1">Default autonomy level</div>
+        <div className="text-[11.5px] text-zinc-500 mb-4">
+          This becomes the default for AI Command Center and migrated AI generators.
+          Publishing, email, ads, and marketplace execution remain disabled at every level.
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {AI_AUTONOMY_LEVELS.map((option) => {
+            const active = level === option.level;
+            return (
+              <button
+                key={option.level}
+                type="button"
+                onClick={() => save(option.level)}
+                disabled={level === null || saving}
+                data-testid={`ai-autonomy-level-${option.level}`}
+                className={`text-left p-3 rounded-lg border transition ${
+                  active
+                    ? 'border-cyan-500/50 bg-cyan-500/10'
+                    : 'border-white/10 bg-white/[0.02] hover:border-white/20'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`w-3.5 h-3.5 rounded-full border flex-shrink-0 ${
+                    active ? 'border-cyan-400 bg-cyan-400' : 'border-white/30'
+                  }`} />
+                  <span className="text-[12.5px] font-semibold text-white">{option.title}</span>
+                  {option.recommended && (
+                    <span className="text-[9px] uppercase tracking-wider font-bold text-cyan-300 bg-cyan-500/20 border border-cyan-500/30 px-1.5 py-0.5 rounded">
+                      Recommended
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-zinc-500 leading-relaxed">{option.hint}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
 function CortexMemorySection() {
   const { toast } = useToast();
   const [strategy, setStrategy] = useState(null);

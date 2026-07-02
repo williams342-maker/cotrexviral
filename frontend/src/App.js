@@ -41,6 +41,7 @@ import AccountSettings from './pages/dashboard/AccountSettings';
 import AgentWorkspace from './pages/dashboard/AgentWorkspace';
 import AITeam from './pages/dashboard/AITeam';
 import CommandCenter from './pages/dashboard/CommandCenter';
+import AICommandCenter from './pages/dashboard/AICommandCenter';
 import LegacyCommandCenter from './pages/dashboard/LegacyCommandCenter';
 import CampaignDetail from './pages/dashboard/CampaignDetail';
 import ActiveCampaigns from './pages/dashboard/ActiveCampaigns';
@@ -140,6 +141,7 @@ function AppRouter() {
       <Route path="/blog" element={<BlogIndex />} />
       <Route path="/blog/:slug" element={<BlogPost />} />
       <Route path="/dashboard" element={<ProtectedRoute><CommandCenter /></ProtectedRoute>} />
+      <Route path="/dashboard/ai" element={<ProtectedRoute><AICommandCenter /></ProtectedRoute>} />
       <Route path="/dashboard/command-center" element={<ProtectedRoute><CommandCenter /></ProtectedRoute>} />
       <Route path="/dashboard/legacy" element={<ProtectedRoute><LegacyCommandCenter /></ProtectedRoute>} />
       <Route path="/dashboard/missions" element={<ProtectedRoute><Missions /></ProtectedRoute>} />

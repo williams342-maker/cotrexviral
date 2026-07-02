@@ -85,6 +85,7 @@ mccabe==0.7.0
 mdurl==0.1.2
 mmh3==5.2.1
 motor==3.7.1
+mongomock-motor==0.0.36
 multidict==6.7.1
 mypy==2.1.0
 mypy_extensions==1.1.0

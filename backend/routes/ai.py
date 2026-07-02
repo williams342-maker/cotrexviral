@@ -577,3 +577,36 @@ def _safe_json(raw: str):
             except Exception:
                 pass
         return {"raw": raw}
+
+
+# -----------------------------------------------------------------------------
+# Central orchestration API. New AI features use this path; legacy endpoints
+# remain temporarily available while they are migrated one feature at a time.
+# -----------------------------------------------------------------------------
+from ai.ai_logs import get_run as get_ai_run, list_runs as list_ai_runs
+from ai.orchestrator import AIExecutionRequest, execute as execute_ai_task
+
+
+@api.post("/ai/execute")
+async def ai_execute(payload: AIExecutionRequest, request: Request):
+    user = await _gated_user(request)
+    try:
+        response = await execute_ai_task(db, user.user_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return response
+
+
+@api.get("/ai/runs")
+async def ai_run_history(request: Request, limit: int = 50):
+    user = await get_current_user(request)
+    return {"runs": await list_ai_runs(db, user.user_id, limit)}
+
+
+@api.get("/ai/runs/{run_id}")
+async def ai_run_detail(run_id: str, request: Request):
+    user = await get_current_user(request)
+    run = await get_ai_run(db, user.user_id, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="AI run not found")
+    return run

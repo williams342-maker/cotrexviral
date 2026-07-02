@@ -18,8 +18,12 @@ const SeoReview = () => {
     setLoading(true);
     setReport(null);
     try {
-      const res = await axios.post(`${API}/ai/seo-review`, { url }, { withCredentials: true });
-      setReport(res.data.report);
+      const res = await axios.post(`${API}/ai/execute`, {
+        task_type: 'seo_recommendation',
+        user_goal: `Audit ${url} and prioritize the SEO improvements.`,
+        context: { url },
+      }, { withCredentials: true });
+      setReport(res.data.result);
     } catch (err) {
       toast({ title: 'Failed', description: err.response?.data?.detail || 'Could not run audit' });
     } finally {

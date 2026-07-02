@@ -438,8 +438,12 @@ const VideoTab = ({ onGenerated }) => {
     setLoading(true);
     setResult(null);
     try {
-      const r = await axios.post(`${API}/ai/generate-video-script`, form, { withCredentials: true });
-      setResult(r.data);
+      const r = await axios.post(`${API}/ai/execute`, {
+        task_type: 'ad_script',
+        user_goal: `Create a ${form.duration_seconds}-second ${form.platform} video ad about ${form.topic}.`,
+        context: form,
+      }, { withCredentials: true });
+      setResult(r.data.result);
       onGenerated?.();
     } catch (e) {
       if (!paywall(e)) toast({ title: 'Generation failed' });

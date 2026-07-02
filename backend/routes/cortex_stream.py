@@ -101,7 +101,7 @@ async def cortex_chat_stream(request: Request, message: str = "",
                 "label": "Recalling our prior conversations…",
             }))
             hist_cur = db.cortex_conversations.find(
-                {"user_id": user.user_id},
+                {"user_id": user.user_id, "conversation_id": conv_id},
                 {"_id": 0, "role": 1, "message": 1, "stage": 1},
             ).sort("created_at", -1).limit(10)
             strategy, recalled, history = await asyncio.gather(
@@ -110,6 +110,11 @@ async def cortex_chat_stream(request: Request, message: str = "",
                 hist_cur.to_list(10),
             )
             history.reverse()
+            discovery_count = sum(
+                1 for turn in history
+                if turn.get("role") == "cortex"
+                and turn.get("stage") == "discovery"
+            )
             memory_block = cmem.render_memory_block(strategy, recalled)
             await queue.put(_sse("memory", {
                 "strategy_summary": (strategy or {}).get("summary", ""),
@@ -133,6 +138,7 @@ async def cortex_chat_stream(request: Request, message: str = "",
                 history=history,
                 memory_block=memory_block,
                 intent_types=INTENT_TYPES,
+                discovery_count=discovery_count,
             )
 
             rec = None
@@ -161,6 +167,7 @@ async def cortex_chat_stream(request: Request, message: str = "",
                     "intent": stage_data.get("intent"),
                     "params": stage_data.get("params"),
                     "clarifying_questions": stage_data.get("clarifying_questions"),
+                    "answer_shortcuts": stage_data.get("answer_shortcuts") or [],
                     "findings": stage_data.get("findings"),
                     "recommendation_summary": stage_data.get("recommendation_summary"),
                     "alternatives": stage_data.get("alternatives"),
@@ -194,6 +201,7 @@ async def cortex_chat_stream(request: Request, message: str = "",
                 "params":                  stage_data.get("params") or {},
                 "ack":                     stage_data["ack"],
                 "clarifying_questions":    stage_data.get("clarifying_questions") or [],
+                "answer_shortcuts":        stage_data.get("answer_shortcuts") or [],
                 "findings":                stage_data.get("findings") or [],
                 "recommendation_summary":  stage_data.get("recommendation_summary") or "",
                 "alternatives":            stage_data.get("alternatives") or [],
