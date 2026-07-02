@@ -62,7 +62,7 @@ async def channels_catalog(request: Request):
 @api.get("/channels")
 async def list_channels(request: Request):
     user = await get_current_user(request)
-    docs = await db.channels.find({"user_id": user.user_id}, {"_id": 0}).to_list(50)
+    docs = await db.channels.find({"user_id": user.user_id}, {"_id": 0, "credentials": 0}).to_list(50)
     connected = {d["platform"]: d for d in docs}
     return [
         {
@@ -70,6 +70,9 @@ async def list_channels(request: Request):
             "connected": p in connected,
             "handle": connected.get(p, {}).get("handle"),
             "connected_at": connected.get(p, {}).get("connected_at"),
+            # WordPress self-hosted publishes real posts — surface site URL
+            # so the UI can render it under the platform card.
+            "site_url": connected.get(p, {}).get("site_url"),
         }
         for p in SUPPORTED_PLATFORMS
     ]
@@ -237,6 +240,14 @@ async def publish(payload: PublishRequest, request: Request):
         from routes.oauth_meta import publish_to_instagram  # lazy import (circular safe)
         dispatch["instagram"] = await publish_to_instagram(
             user.user_id, payload.content, image_url=payload.media_url,
+        )
+    if not is_scheduled and "wordpress_selfhosted" in (payload.platforms or []):
+        from routes.wordpress_selfhosted import publish_to_wordpress  # lazy import
+        # Use the first line as the title (or first 80 chars if there's no line break).
+        first_line = (payload.content or "").split("\n", 1)[0].strip()
+        wp_title = (first_line[:80] or "Untitled post") if first_line else "Untitled post"
+        dispatch["wordpress_selfhosted"] = await publish_to_wordpress(
+            user.user_id, wp_title, payload.content, status="publish",
         )
     if dispatch:
         await db.posts.update_one({"id": post["id"]}, {"$set": {"dispatch": dispatch}})

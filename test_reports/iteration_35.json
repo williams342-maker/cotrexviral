@@ -1,0 +1,29 @@
+{
+  "summary": "P1 WordPress (Self-Hosted) connector — full end-to-end validation. Backend: 13/13 unit tests (test_wordpress_selfhosted.py) still pass after all code changes; wrote 8 additional live API tests (test_wordpress_api.py) hitting the preview URL covering auth guards on /wordpress/{test,connect,status}, https-only validation on both /test and /connect, bogus-domain -> 400 (not 500), status:{connected:false} when no channel exists, and site_url field surfaces on GET /channels for the wordpress_selfhosted row. Frontend: verified via Playwright with test_session_1779636592168 — WP self-hosted card opens WordPressConnectDialog (not the fake instant-connect toast), all 5 data-testids (wp-site-input/wp-username-input/wp-app-password-input/wp-test-btn/wp-connect-btn) present, Connect button correctly disabled until Test succeeds, http:// site URL surfaces backend's exact 'Basic Auth over http:// is refused' error inside wp-connect-error, closing dialog (Escape) + reopening resets all fields and error state (no stale values), seeded connected WP row -> card flips to '@jane / Disconnect' -> click Disconnect -> reloads to Connect state. Regression: LinkedIn/Facebook/Pinterest/YouTube show Connect, TikTok/Instagram already Disconnect (OAuth-configured on this test user) — no OAuth flow was disturbed. Total: 21/21 pytest passing, all 12 review-request checks verified.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_wordpress_selfhosted.py",
+    "/app/backend/tests/test_wordpress_api.py",
+    "/app/test_reports/pytest/wordpress_iter35_final.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes/wordpress_selfhosted.py cleanly separates concerns (Fernet loader, URL normalizer, WP verifier, endpoints, publish helper). MultiFernet fallback is a nice touch for key rotation without downtime.",
+    "publish_to_wordpress() correctly never raises — always returns {ok, error?} — so a broken WP integration cannot crash the channels.publish() dispatcher (same contract as LinkedIn / TikTok). Verified by unit tests test_publish_to_wordpress_returns_ok_false_when_no_channel and test_publish_to_wordpress_wordpress_rejects.",
+    "Encrypted app_password is stored under credentials.encrypted_app_password and the /wordpress/status endpoint explicitly excludes {credentials: 0} — no secret ever reaches the client. GET /api/channels also uses {credentials: 0} projection. Good.",
+    "The dialog's site URL helper link (Users -> Profile -> Application Passwords) uses siteUrl.replace(/\\/$/, '') so it will not double-slash even if the user typed a trailing slash. Small, but polished.",
+    "Minor code-quality suggestion (NOT a bug): _wp_verify accepts context=edit but the code queries roles from the response; on WP sites where the caller's role cannot see 'context=edit' (e.g., some hardened plugins) WP returns 401 -> our error is 'Invalid credentials' which can be misleading. A follow-up could probe /users/me without context=edit first and only fall through to context=edit on 200. Not blocking for P1.",
+    "Consider adding a rate limiter / lockout on /wordpress/test to prevent someone using an authenticated session as a WP-credentials brute-force oracle against arbitrary sites — right now the endpoint hits any site the caller supplies. Not a P1 blocker, but worth a P2 ticket."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_wordpress_api.py (NEW — 8 API-level tests, includes autouse cleanup fixture that disconnects the WP channel before/after each test)"
+  ],
+  "success_rate": {"backend": "100% (21/21 pytest, both unit + live-API suites)", "frontend": "100% (all 12 review-request scenarios pass: dialog open, disabled-until-tested Connect, https-only error surface, reset-on-close, seeded connect->disconnect flip, OAuth regression cards render)"},
+  "test_credentials": "test_session_1779636592168 (user_test1779636592168 / test@automatex.dev) from /app/memory/test_credentials.md — session valid, /api/auth/me returns 200.",
+  "seed_data_creation": "Temporarily upserted db.channels row for user_test1779636592168 to simulate a connected WordPress channel (site_url=https://example.com, handle=@jane, encrypted_app_password Fernet-encoded). Row was cleaned up via POST /api/channels/disconnect after each pytest test (autouse fixture) and after the Playwright disconnect flow. Final DB state: no wordpress_selfhosted row for the test user.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The WordPress self-hosted connector is production-ready for P1. To re-run: `cd /app/backend && python -m pytest tests/test_wordpress_selfhosted.py tests/test_wordpress_api.py -v`. The API suite uses the persistent test session; if that session is ever rotated, update TEST_SESSION at the top of test_wordpress_api.py. For frontend disconnect testing, seed a channel row via the snippet in the iter35 execution log (uses the backend CORTEXVIRAL_WORDPRESS_FERNET_KEY to encrypt a placeholder pw), then reload /dashboard/channels. Note that /api/wordpress/test WILL make real outbound HTTP to whatever site_url the caller provides — do not aim it at production WP sites during CI. The bogus-domain test (this-domain-does-not-exist-9876.com) is safe because it fails at DNS.",
+  "rca of the issue": "N/A — no bugs found in this iteration. Every review-request assertion passed on first execution."
+}

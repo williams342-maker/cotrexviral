@@ -87,6 +87,7 @@ from routes import (  # noqa: F401
     cortex_campaigns,       # Autonomous Campaign Builder (Phase C — full bundle)
     cortex_optimization,     # OODA loop endpoints: status, log, run-now
     cortex_onboarding,       # AI-guided first-run onboarding mission (replaces tour)
+    wordpress_selfhosted,    # WordPress self-hosted connector (App Passwords + Basic Auth)
     mission_loop,    # Event-driven relay: scout→creator→operator→intelligence
     seller_leads,        # Seller Acquisition OS — leads pipeline
     seller_discovery,    # Seller Acquisition OS — Discovery Scout

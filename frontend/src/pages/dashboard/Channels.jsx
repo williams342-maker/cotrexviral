@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import { usePaywallHandler } from '../../hooks/use-paywall';
+import WordPressConnectDialog from './WordPressConnectDialog';
 
 // Build a colored letter "logo" component for platforms without a lucide icon
 const Letter = ({ ch, className = '' }) => (
@@ -87,6 +88,7 @@ const Channels = () => {
   const [pinterestOAuth, setPinterestOAuth] = useState({ configured: false, connected: false });
   const [youtubeOAuth, setYoutubeOAuth] = useState({ configured: false, connected: false });
   const [disabledPlatforms, setDisabledPlatforms] = useState([]);
+  const [wpDialogOpen, setWpDialogOpen] = useState(false);
   const { toast } = useToast();
   const paywall = usePaywallHandler();
 
@@ -161,6 +163,28 @@ const Channels = () => {
   const toggle = async (platform) => {
     const meta = PLATFORM_META[platform];
     const ch = statusMap[platform];
+
+    // WordPress self-hosted: real Basic Auth via Application Passwords.
+    // Opens a modal to collect (site_url, username, app_password), tests
+    // the connection live, then persists an encrypted credential row.
+    if (platform === 'wordpress_selfhosted') {
+      if (ch?.connected) {
+        setBusy(platform);
+        try {
+          await axios.post(`${API}/channels/disconnect`, { platform }, { withCredentials: true });
+          toast({ title: 'Disconnected WordPress' });
+          await load();
+        } catch (e) {
+          if (!paywall(e)) toast({ title: 'Disconnect failed' });
+        } finally {
+          setBusy(null);
+        }
+      } else {
+        setWpDialogOpen(true);
+      }
+      return;
+    }
+
     setBusy(platform);
     try {
       // Real OAuth path for LinkedIn (when credentials are configured server-side)
@@ -326,6 +350,11 @@ const Channels = () => {
           })}
         </div>
       )}
+      <WordPressConnectDialog
+        open={wpDialogOpen}
+        onOpenChange={setWpDialogOpen}
+        onConnected={async () => { setWpDialogOpen(false); await load(); }}
+      />
     </DashboardLayout>
   );
 };
