@@ -226,7 +226,7 @@ const Overview = () => {
       <div className="grid md:grid-cols-2 gap-4">
         {quickActions.map((a) => (
           <Link
-            key={a.to}
+            key={a.title}
             to={a.to}
             className={`group relative overflow-hidden rounded-3xl bg-gradient-to-br ${a.color} p-7 border border-neutral-200/50 hover:shadow-lg transition-all hover:-translate-y-0.5`}
           >
