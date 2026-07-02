@@ -196,8 +196,6 @@ async def classify_and_respond(
     current conversation. Used to enforce the Discovery Budget —
     after 2 rounds, the classifier output is post-processed to force
     progression to analysis/recommendation."""
-    from core import EMERGENT_LLM_KEY
-
     # ----- Fast-path: explicit execution override --------------------
     if _EXEC_OVERRIDE.search(user_message):
         fallback_intent = _regex_intent(user_message, intent_types)
@@ -217,9 +215,6 @@ async def classify_and_respond(
         }
 
     # ----- LLM-driven stage classification ---------------------------
-    if not EMERGENT_LLM_KEY:
-        return _heuristic_response(user_message, intent_types)
-
     try:
         from cortex.llm_provider import cortex_tool_call
         system = STAGE_CLASSIFIER_PROMPT % {"intents": ", ".join(intent_types)}
@@ -291,7 +286,11 @@ async def classify_and_respond(
             required=["stage", "ack"],
         )
         if not args:
-            return _heuristic_response(user_message, intent_types)
+            return _heuristic_response(
+                user_message,
+                intent_types,
+                discovery_count=discovery_count,
+            )
         result = _normalize(args, intent_types)
 
         # ----- Discovery Budget enforcement -------------------------
@@ -315,7 +314,11 @@ async def classify_and_respond(
         return result
     except Exception:
         logger.exception("classify_and_respond: LLM failed, using heuristic fallback")
-        return _heuristic_response(user_message, intent_types)
+        return _heuristic_response(
+            user_message,
+            intent_types,
+            discovery_count=discovery_count,
+        )
 
 
 # ---------------------------------------------------------------- helpers
@@ -373,7 +376,12 @@ def _normalize(data: dict, intent_types: list[str]) -> dict:
     }
 
 
-def _heuristic_response(message: str, intent_types: list[str]) -> dict:
+def _heuristic_response(
+    message: str,
+    intent_types: list[str],
+    *,
+    discovery_count: int = 0,
+) -> dict:
     """Offline fallback when LLM is unavailable. Defaults to discovery
     unless an _EXEC_OVERRIDE phrase appeared (already handled) or the
     message reads like a clear "yes accept"."""
@@ -389,12 +397,40 @@ def _heuristic_response(message: str, intent_types: list[str]) -> dict:
             "intent":                  fb.get("intent") or "find_opportunities",
             "params":                  fb.get("params") or {},
         }, intent_types)
+
+    # One discovery response is enough for the offline path. Unlike an
+    # LLM, this fallback cannot infer which detail is still missing, so
+    # asking the same two questions again traps the user in a loop.
+    # Preserve their answer as a finding and move the conversation on.
+    if discovery_count >= 1:
+        answer = " ".join((message or "").split()).strip()
+        if not answer:
+            answer = "The user supplied additional discovery context."
+        return _normalize({
+            "stage":                "analysis",
+            "discovery_complete":   True,
+            "analysis_complete":    False,
+            "ack":                  (
+                f"Thanks — I captured that: {answer[:180]}. "
+                "I have enough to move forward and will refine the "
+                "remaining details as we go."
+            ),
+            "findings":             [f"Primary user context: {answer[:200]}"],
+            "clarifying_questions": [],
+        }, intent_types)
+
     # Default discovery prompt.
     return _normalize({
         "stage":                "discovery",
         "ack":                  "Tell me a bit more so I can help. What outcome are you trying to achieve, and what's the biggest blocker right now?",
         "clarifying_questions": ["What outcome are you trying to achieve?",
                                   "What's your biggest blocker right now?"],
+        "answer_shortcuts":     [
+            "Drive more website traffic",
+            "Generate qualified leads",
+            "Increase sales",
+            "Help me choose the best goal",
+        ],
     }, intent_types)
 
 

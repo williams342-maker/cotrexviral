@@ -168,6 +168,70 @@ def _strip_code_fence(text: str) -> str:
 # fails closed (graceful fallback to `cortex_chat(json_mode=True)`).
 # Risk is isolated to this file by design. Track _TOOL_CALL_STATS to
 # decide when to refactor to LiteLLM-direct.
+async def _registry_tool_call(
+    system: str,
+    user_text: str,
+    *,
+    tool: dict,
+    required: Optional[list[str]],
+) -> Tuple[Optional[dict], str]:
+    """Use the central provider registry for structured Cortex calls.
+
+    The shared adapters already request JSON output from OpenAI, Gemini,
+    and OpenRouter, so the tool schema is supplied as an output contract.
+    Returning ``None`` lets the legacy Emergent provider remain a fallback.
+    """
+    if os.environ.get("CORTEX_USE_PROVIDER_REGISTRY", "false").lower() == "false":
+        return None, "none"
+    if os.environ.get("AI_OFFLINE_MODE", "false").lower() == "true":
+        return None, "none"
+
+    try:
+        from ai.model_router import select_model
+        from ai.providers import generate_with_fallback
+
+        model = select_model(
+            os.environ.get("CORTEX_PROVIDER_TASK_TYPE", "social_post")
+        )
+        schema = json.dumps(tool.get("parameters") or {}, indent=2)
+        registry_system = (
+            system.rstrip()
+            + f"\n\n---\nReturn STRICT JSON matching this schema:\n{schema}\n"
+            "No prose, no markdown fences, no extra fields."
+        )
+        response, attempts = await generate_with_fallback(
+            candidates=model["candidates"],
+            system_prompt=registry_system,
+            user_prompt=user_text,
+        )
+        args = _safe_parse_json(response.text)
+        if not isinstance(args, dict):
+            logger.warning(
+                "cortex_tool_call: provider registry returned invalid JSON via %s",
+                response.provider,
+            )
+            return None, response.provider
+        if required and not all(key in args for key in required):
+            logger.warning(
+                "cortex_tool_call: provider registry missing required keys %s",
+                required,
+            )
+            return None, response.provider
+        logger.info(
+            "cortex_tool_call: provider registry succeeded via %s (%s)",
+            response.provider,
+            response.model,
+        )
+        return args, response.provider
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "cortex_tool_call: provider registry unavailable (%s); "
+            "trying legacy provider",
+            exc,
+        )
+        return None, "none"
+
+
 async def cortex_tool_call(
     system: str,
     user_text: str,
@@ -196,6 +260,28 @@ async def cortex_tool_call(
     _started = time.monotonic()
     tool_name = (tool or {}).get("name") or "extract"
     _TOOL_CALL_STATS["attempts"] += 1
+
+    # Central adapters are the primary path for local development. They
+    # use OPENAI_API_KEY / GEMINI_API_KEY / OPENROUTER_API_KEY and share
+    # the same provider ordering and failover configuration as /api/ai.
+    registry_args, registry_label = await _registry_tool_call(
+        system,
+        user_text,
+        tool=tool,
+        required=required,
+    )
+    if registry_args is not None:
+        _TOOL_CALL_STATS["json_fallback_ok"] += 1
+        await _persist_outcome(
+            user_id=user_id,
+            tool_name=tool_name,
+            mode="provider_registry",
+            label=registry_label,
+            success=True,
+            latency_ms=int((time.monotonic() - _started) * 1000),
+        )
+        return registry_args, registry_label, "provider_registry"
+
     from core import EMERGENT_LLM_KEY
     if not EMERGENT_LLM_KEY:
         result = await _json_fallback(system, user_text, tool=tool,

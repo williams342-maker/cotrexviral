@@ -167,12 +167,19 @@ const Compose = () => {
     }
     setGenerating(true);
     try {
-      const r = await axios.post(`${API}/ai/generate-post`, { topic, tone, platform }, { withCredentials: true });
-      const caption = r.data.caption || '';
-      const hook = r.data.hook ? r.data.hook + '\n\n' : '';
-      const cta = r.data.cta ? '\n\n' + r.data.cta : '';
+      const taskType = platform === 'pinterest' ? 'pinterest_pin' : 'social_post';
+      const r = await axios.post(`${API}/ai/execute`, {
+        task_type: taskType,
+        user_goal: topic,
+        context: { tone, platform, campaign },
+      }, { withCredentials: true });
+      const draft = r.data.result || {};
+      const caption = draft.caption || draft.description || '';
+      const hook = draft.hook ? draft.hook + '\n\n' : '';
+      const cta = draft.cta ? '\n\n' + draft.cta : '';
       setContent(`${hook}${caption}${cta}`);
-      setHashtags(r.data.hashtags || []);
+      setHashtags(draft.hashtags || draft.keywords || []);
+      if (platform === 'pinterest' && draft.title) setPinTitle(draft.title);
     } catch (e) {
       toast({ title: 'Generation failed' });
     } finally {

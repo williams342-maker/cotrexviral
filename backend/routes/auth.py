@@ -168,10 +168,14 @@ _CONVERSATION_MODES = {"fresh_every_visit", "resume_last"}
 
 _PREF_VALIDATORS: dict[str, callable] = {
     "conversation_mode": lambda v: isinstance(v, str) and v in _CONVERSATION_MODES,
+    "ai_autonomy_level": lambda v: (
+        isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 5
+    ),
 }
 
 _PREF_DEFAULTS = {
     "conversation_mode": "fresh_every_visit",
+    "ai_autonomy_level": 1,
 }
 
 

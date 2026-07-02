@@ -166,3 +166,19 @@ frontend/node_modules/.cache/default-development/14.pack
 credentials.json
 *.key
 .credentials
+
+# Local CortexViral development artifacts
+.venv-local/
+**/.local-packages/
+**/.pytest_cache/
+**/pytest-cache-files-*/
+*.bak
+.tmp/
+.tools/
+.preview/
+.gitconfig
+**/.qdrant_data/
+test_output.txt
+test_result.md
+test_reports/*
+!test_reports/.gitkeep

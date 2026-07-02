@@ -288,8 +288,10 @@ const CommandCenter = () => {
   }, []);
 
   // ----- Send (SSE-streamed) ----------------------------------------
-  const send = async (attachments = []) => {
-    const msgText = draft.trim();
+  const send = async (attachments = [], messageOverride = null) => {
+    const msgText = (
+      typeof messageOverride === 'string' ? messageOverride : draft
+    ).trim();
     if (!msgText && (!attachments || attachments.length === 0)) return;
     if (sending) return;
 
@@ -387,6 +389,7 @@ const CommandCenter = () => {
             intent: d?.intent,
             params: d?.params,
             clarifying_questions: d?.clarifying_questions || [],
+            answer_shortcuts: d?.answer_shortcuts || [],
             findings: d?.findings || [],
             recommendation_summary: d?.recommendation_summary || '',
             alternatives: d?.alternatives || [],
@@ -659,15 +662,12 @@ const CommandCenter = () => {
                                 isStale={turn._stale}
                                 discoveryBudgetUsed={budgetUsed}
                                 isLastTurn={idx === thread.length - 1}
-                                onClarifyPick={(q) => setDraft(`${q} — `)}
                                 onShortcutPick={(s) => {
-                                  // Submit the shortcut as a tagged user
-                                  // message — answers the discovery
-                                  // question + advances state. Bypasses
-                                  // the composer so the user doesn't
-                                  // have to retype the chip's text.
-                                  setDraft(s);
-                                  setTimeout(() => send(), 30);
+                                  // Submit the selected answer directly.
+                                  // Passing it explicitly avoids React's
+                                  // asynchronous state update sending the
+                                  // previous draft by accident.
+                                  send([], s);
                                 }}
                                 onPickPrompt={(p) => setDraft(p)}
                                 onAction={handleAction} />

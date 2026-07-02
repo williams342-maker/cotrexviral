@@ -61,9 +61,20 @@ export const StagePill = ({ stage }) => {
    hint so the user knows Cortex is wrapping discovery up. */
 export const ClarifyingQuestionsCard = ({
   questions = [], answerShortcuts = [], budgetUsed = 0,
-  onPick, onPickShortcut,
+  onPickShortcut,
 }) => {
   if (!questions.length && !answerShortcuts.length) return null;
+  // Conversations saved before answer shortcuts were introduced only
+  // contain the questions. Give those historical cards real answers too,
+  // so reopening an old thread never leaves the user at a dead end.
+  const shortcuts = answerShortcuts.length > 0
+    ? answerShortcuts
+    : [
+        'Drive more website traffic',
+        'Generate qualified leads',
+        'Increase sales',
+        'Help me choose the best goal',
+      ];
   return (
     <div data-testid="clarifying-questions"
          className="rounded-xl border border-cyan-500/15 bg-cyan-500/[0.03] p-3">
@@ -80,9 +91,9 @@ export const ClarifyingQuestionsCard = ({
       </div>
 
       {/* Primary affordance: answer shortcuts. Click → advance state. */}
-      {answerShortcuts.length > 0 && (
+      {shortcuts.length > 0 && (
         <div data-testid="answer-shortcuts" className="flex flex-wrap gap-1.5 mb-2">
-          {answerShortcuts.map((s, i) => (
+          {shortcuts.map((s, i) => (
             <button key={i} onClick={() => onPickShortcut?.(s)}
                     data-testid={`answer-shortcut-${i}`}
                     className="text-[11.5px] font-medium px-2.5 py-1.5 rounded-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-200 border border-cyan-500/30 hover:border-cyan-400/50 transition">
@@ -92,19 +103,19 @@ export const ClarifyingQuestionsCard = ({
         </div>
       )}
 
-      {/* Subordinate: clarifying questions stay click-to-insert but
-          appear smaller / secondary when shortcuts exist. */}
+      {/* Questions are context, not answer buttons. The actionable
+          controls above contain real answers and submit immediately. */}
       {questions.length > 0 && (
-        <div className={`space-y-1 ${answerShortcuts.length > 0 ? 'mt-2 pt-2 border-t border-white/5' : ''}`}>
+        <div className={`space-y-1 ${shortcuts.length > 0 ? 'mt-2 pt-2 border-t border-white/5' : ''}`}>
           {questions.map((q, i) => (
-            <button key={i} onClick={() => onPick?.(q)}
-                    data-testid={`clarifying-question-${i}`}
-                    className={`w-full text-left rounded-md transition px-2.5 py-1.5
-                                ${answerShortcuts.length > 0
-                                  ? 'text-[10.5px] text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.03]'
-                                  : 'text-[12px] text-zinc-300 hover:text-white bg-white/[0.02] hover:bg-white/[0.05] border border-white/5'}`}>
+            <div key={i}
+                 data-testid={`clarifying-question-${i}`}
+                 className={`w-full text-left rounded-md px-2.5 py-1.5
+                                ${shortcuts.length > 0
+                                  ? 'text-[10.5px] text-zinc-500'
+                                  : 'text-[12px] text-zinc-300 bg-white/[0.02] border border-white/5'}`}>
               {q}
-            </button>
+            </div>
           ))}
         </div>
       )}

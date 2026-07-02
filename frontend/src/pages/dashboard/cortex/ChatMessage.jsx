@@ -18,7 +18,7 @@ import { API } from '../../../context/AuthContext';
      · mission_proposal/execution → full plan card
      · analysis_complete / analysis_failed → embedded job CTAs (View / Retry / Debug) */
 
-export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick, onShortcutPick, discoveryBudgetUsed = 0, isLastTurn = false, onPickPrompt }) => {
+export const ChatMessage = ({ turn, onAction, busyId, isStale, onShortcutPick, discoveryBudgetUsed = 0, isLastTurn = false, onPickPrompt }) => {
   if (turn._kind === 'mission_events') {
     return <MissionEventStream missionTitle={turn.missionTitle}
                                   events={turn.events || []} />;
@@ -125,7 +125,6 @@ export const ChatMessage = ({ turn, onAction, busyId, isStale, onClarifyPick, on
             questions={turn.clarifying_questions || []}
             answerShortcuts={turn.answer_shortcuts || []}
             budgetUsed={discoveryBudgetUsed}
-            onPick={onClarifyPick}
             onPickShortcut={onShortcutPick}
           />
         )}
