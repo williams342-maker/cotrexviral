@@ -24,6 +24,7 @@ PRODUCT REQUIREMENTS: Mission-focused architecture, Autonomy Control Center, Eve
 - `backend/scripts/migrate_legacy_assets.py`                      ← one-shot disk→object-store migration CLI
 
 ## Completed (latest session)
+- 2026-07-02  **P1 WordPress Connect (Option A — self-hosted) SHIPPED.** New `routes/wordpress_selfhosted.py` implements Application-Password/Basic-Auth flow: `POST /api/wordpress/test` (verify without persist), `POST /api/wordpress/connect` (verify + Fernet-encrypt + upsert), `GET /api/wordpress/status`, and `publish_to_wordpress()` helper wired into `channels.publish()` dispatch for `platform="wordpress_selfhosted"`. Credentials stored encrypted under `db.channels.credentials.encrypted_app_password` using `CORTEXVIRAL_WORDPRESS_FERNET_KEY` (MultiFernet-ready for rotation). Refuses `http://` URLs, rejects subscribers (needs author/editor/admin), never leaks credentials in GET responses (`{credentials:0}` projection). New React `WordPressConnectDialog.jsx` modal intercepts the WP self-hosted card in `Channels.jsx` — three inputs + Test/Connect buttons + all data-testids, Connect disabled until Test succeeds. Tests: 13 unit (`tests/test_wordpress_selfhosted.py`) + 8 API (`tests/test_wordpress_api.py`, added by testing agent) = 21/21 passing. Backend regression 65/65. Testing agent iteration_35 → 12/12 scenarios PASS, zero bugs.
 - 2026-07-02  **P1 second-pass frontend route cleanup — SHIPPED.** Deleted 5 orphan dashboard pages (`LegacyCommandCenter.jsx`, `Chatter.jsx`, `Studio.jsx`, `Main.jsx`, `AITeam.jsx`) and replaced their routes in `App.js` with `<Navigate replace/>` redirects: `/dashboard/legacy → /dashboard`, `/dashboard/chatter → /dashboard/growth-team`, `/dashboard/studio → /dashboard/compose`, `/dashboard/main → /dashboard`, `/dashboard/team → /dashboard/growth-team`. Pruned stale menu items + unused icon imports (Activity, Wand2, MessagesSquare) in `CommandPalette.jsx`. Repointed the Overview "Open Content Studio" quick-action to `/dashboard/compose`. Fixed React duplicate-key warning by switching Overview quickActions map key to `key={a.title}`. Testing agent verified all 5 redirects, palette contents, and no console errors. Backend regression pytest 52/52 passing.
 - 2026-07-02  **P1 dead-code first pass** — see below.
 - 2026-06-03  **Legacy Emergent → R2 migration completed.**
@@ -57,7 +58,8 @@ PRODUCT REQUIREMENTS: Mission-focused architecture, Autonomy Control Center, Eve
   - Mission cancel button in `ActiveMissionRail`.
 
 ## P0 / P1 / P2 backlog
-- P1: WordPress Connect — Option A (self-hosted basic auth).
+- P2: Rate-limit / IP-throttle `/api/wordpress/test` to prevent using an authenticated CortexViral session as a WP-credential brute-force oracle against arbitrary sites (flagged by testing agent iter35).
+- P2: `/wordpress/test` fallback — probe `/wp/v2/users/me` (no `context=edit`) first, only escalate to `context=edit` on 200, so hardened WP installs don't get a misleading "Invalid credentials" error (testing agent iter35 note).
 - P3: Activate S3-compatible backend in production (adapter ready — just flip `ASSET_STORAGE_BACKEND=s3` + AWS_S3_BUCKET/REGION/keys, or point at R2 via `AWS_S3_ENDPOINT_URL`).
 
 ## Notes
