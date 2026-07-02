@@ -115,13 +115,31 @@ const MetricCard = ({ metric }) => {
   // when the underlying data feed isn't wired up yet (e.g. site
   // analytics pixel).
   if (metric.source === 'not_configured' || metric.value === null || metric.value === undefined) {
+    const options = metric.connect_options || ['Google Analytics', 'Search Console', 'Pixel'];
     return (
-      <div className="bg-white rounded-3xl p-6 border border-dashed border-neutral-300/70" data-testid={`perf-metric-empty-${metric.key}`}>
-        <div className="text-[11px] uppercase tracking-wider font-semibold text-neutral-400 mb-3">{metric.label}</div>
-        <div className="text-3xl font-medium tracking-tight text-neutral-400">—</div>
-        <div className="mt-2 text-[11.5px] text-neutral-500 leading-relaxed">
+      <div className="bg-white rounded-3xl p-6 border border-dashed border-neutral-300/70 flex flex-col" data-testid={`perf-metric-empty-${metric.key}`}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-[11px] uppercase tracking-wider font-semibold text-neutral-500">{metric.label}</div>
+          <span className="text-[9.5px] uppercase tracking-widest font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 border border-amber-200">
+            Coming soon
+          </span>
+        </div>
+        <div className="text-[11.5px] text-neutral-500 leading-relaxed mb-3">
           {metric.note || 'Not yet configured.'}
         </div>
+        <div className="text-[11px] uppercase tracking-wider font-semibold text-neutral-400 mb-1.5">Connect</div>
+        <ul className="space-y-0.5 mb-4">
+          {options.map((opt, i) => (
+            <li key={i} className="text-[12px] text-neutral-600 flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-neutral-100 text-neutral-500 text-[9px] font-bold inline-flex items-center justify-center">✓</span>
+              {opt}
+            </li>
+          ))}
+        </ul>
+        <a href="/dashboard/channels" className="mt-auto inline-flex items-center justify-center gap-1.5 text-[12px] font-semibold px-3 py-2 rounded-md bg-neutral-900 hover:bg-neutral-800 text-white transition self-start"
+           data-testid={`perf-metric-connect-${metric.key}`}>
+          Connect Analytics
+        </a>
       </div>
     );
   }

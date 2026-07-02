@@ -119,7 +119,8 @@ async def performance_overview(request: Request,
         {"user_id": user.user_id,
          "created_at": {"$gte": prev_window_start},
          "status": {"$in": ["paid", "succeeded", "complete"]}},
-        {"_id": 0, "created_at": 1, "amount": 1, "currency": 1},
+        {"_id": 0, "created_at": 1, "amount_cents": 1,
+         "amount": 1, "currency": 1},
     )
     async for row in cursor:
         ts = row.get("created_at")
@@ -127,9 +128,14 @@ async def performance_overview(request: Request,
             continue
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=timezone.utc)
-        amt = row.get("amount") or 0
-        # payment_transactions stores amount in cents for Stripe events.
-        dollars = int(amt / 100) if amt >= 100 else int(amt)
+        # Deterministic: `amount_cents` is the canonical field. Fall back
+        # to legacy `amount` (also cents by convention) only if the newer
+        # field is absent — no heuristic conversion. Presentation-layer
+        # divides by 100 to display dollars.
+        cents = row.get("amount_cents")
+        if cents is None:
+            cents = row.get("amount") or 0
+        dollars = cents // 100
         if ts < window_start:
             prev_revenue_total += dollars
             continue
@@ -154,15 +160,17 @@ async def performance_overview(request: Request,
              "color":      "violet",
              "source":     "real"},
             {"key":        "sessions",
-             "label":      "Site Sessions",
+             "label":      "Website Traffic",
              "value":      None,
              "change_pct": None,
              "color":      "amber",
              "source":     "not_configured",
-             "note":       (
-                 "Install the CortexViral analytics pixel on your site to "
-                 "populate this metric — until then it stays honest and empty."
-             )},
+             "connect_options": [
+                 "Google Analytics",
+                 "Search Console",
+                 "Pixel",
+             ],
+             "note":       "No website analytics have been configured yet."},
         ],
         "series": [
             {"key":   "posts",

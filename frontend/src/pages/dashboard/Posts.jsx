@@ -29,7 +29,7 @@ const Posts = () => {
       await load();
       toast({
         title: r.data.refreshed > 0 ? `Refreshed metrics for ${r.data.refreshed} post${r.data.refreshed === 1 ? '' : 's'}` : 'Metrics are up to date',
-        description: 'Pinterest is live. TikTok / LinkedIn / Meta coming soon.',
+        description: 'Per-post analytics: Pinterest is live. TikTok / LinkedIn / Meta / YouTube on the roadmap. (Publishing is live for all six.)',
       });
     } catch (e) {
       toast({ title: 'Refresh failed', description: e.response?.data?.detail || e.message });

@@ -48,16 +48,23 @@ const Listening = () => {
   useEffect(() => { load(); }, [filter]);
 
   const synthesize = async () => {
+    if (!window.confirm(
+      'Populate your feed with a batch of REALISTIC-LOOKING demo signals (labeled "Synthetic")? '
+      + 'Use this to preview the UX; real signals will start flowing once Reddit / X listening is fully wired.'
+    )) return;
     setSynthing(true);
     try {
       const r = await axios.post(`${API}/listening/synthesize`,
         { brand: 'CortexViral', competitors: ['Hootsuite', 'Buffer', 'Later'], n_signals: 6 },
         { withCredentials: true, timeout: 30000 },
       );
-      toast({ title: `Captured ${r.data.created} signals`, description: 'Lyra has logged them to your listening feed.' });
+      toast({
+        title: `Added ${r.data.created} demo signals`,
+        description: 'These are labeled "Synthetic" in your feed. Filter by source to see only real ones.',
+      });
       await load();
     } catch (e) {
-      toast({ title: 'Synthesize failed', description: e?.response?.data?.detail || e.message, variant: 'destructive' });
+      toast({ title: 'Demo signals failed', description: e?.response?.data?.detail || e.message, variant: 'destructive' });
     } finally { setSynthing(false); }
   };
 
@@ -89,9 +96,10 @@ const Listening = () => {
             disabled={synthing}
             className="text-[12px] font-semibold px-3 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 inline-flex items-center gap-1.5 shrink-0"
             data-testid="synthesize-btn"
+            title="Populate with realistic-looking demo signals (labeled 'Synthetic')"
           >
             {synthing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-            Capture signals
+            Add demo signals
           </button>
         </div>
 
@@ -131,7 +139,7 @@ const Listening = () => {
             <Ear className="mx-auto text-amber-400 mb-3" size={26} />
             <h3 className="text-lg font-bold text-neutral-800 mb-1">No signals yet</h3>
             <p className="text-[13px] text-neutral-500 mb-3 max-w-md mx-auto">
-              Connect a listening source (Reddit RSS, Twitter search, Mention.com) — or click "Capture signals" above to generate a realistic sample feed for now.
+              Connect a listening source (Reddit RSS, Twitter search, Mention.com) — or click "Add demo signals" above to populate a realistic-looking sample feed. Demo signals are always labeled "Synthetic".
             </p>
           </div>
         )}
@@ -142,10 +150,11 @@ const Listening = () => {
             {signals.map((s) => {
               const meta = SENTIMENT_META[s.sentiment] || SENTIMENT_META.neutral;
               const Icon = meta.icon;
+              const isSynthetic = s.source === 'synthetic';
               return (
                 <div
                   key={s.id}
-                  className="bg-white rounded-xl border border-neutral-200/70 p-4 hover:border-neutral-300 transition-colors"
+                  className={`bg-white rounded-xl border p-4 hover:border-neutral-300 transition-colors ${isSynthetic ? 'border-dashed border-violet-300/70 bg-violet-50/30' : 'border-neutral-200/70'}`}
                   data-testid={`signal-${s.id}`}
                 >
                   <div className="flex items-start gap-3">
@@ -155,6 +164,11 @@ const Listening = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-[11.5px] font-semibold text-neutral-700">{SOURCE_LABELS[s.source] || s.source}</span>
+                        {isSynthetic && (
+                          <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 font-bold uppercase tracking-widest border border-violet-200" title="LLM-generated demo signal, not from a real source">
+                            Demo
+                          </span>
+                        )}
                         {s.author && <span className="text-[11px] text-neutral-500">· {s.author}</span>}
                         {s.topic && <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-600 font-mono">{s.topic}</span>}
                         {s.urgency >= 4 && (

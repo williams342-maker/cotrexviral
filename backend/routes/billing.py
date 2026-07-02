@@ -361,7 +361,11 @@ async def create_checkout_session(payload: CheckoutRequest, request: Request):
         allow_promotion_codes=True,
     )
 
-    # Record the pending transaction
+    # Record the pending transaction. `amount_cents` is the canonical
+    # field going forward (deterministic Stripe convention). `amount`
+    # is retained as an alias during the migration window — both hold
+    # cents and are always equal.
+    amount_cents = PLANS[payload.plan][f"{'monthly' if payload.interval == 'month' else 'annual'}_amount"]
     await db.payment_transactions.insert_one({
         "id": str(uuid.uuid4()),
         "session_id": session.id,
@@ -369,7 +373,8 @@ async def create_checkout_session(payload: CheckoutRequest, request: Request):
         "stripe_customer_id": customer_id,
         "plan": payload.plan,
         "interval": payload.interval,
-        "amount": PLANS[payload.plan][f"{'monthly' if payload.interval == 'month' else 'annual'}_amount"],
+        "amount_cents": amount_cents,
+        "amount":       amount_cents,   # legacy alias (cents) — remove after migration
         "currency": "usd",
         "status": "pending",
         "created_at": datetime.now(timezone.utc),
