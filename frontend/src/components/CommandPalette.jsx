@@ -2,8 +2,8 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Command as CommandIcon, Compass, Target, FlaskConical, ShieldAlert,
-  MessagesSquare, Users2, Ear, Sparkles, Wand2, Search, Radar, Send,
-  LayoutDashboard, Activity, LifeBuoy, ShieldCheck, Users as UsersIcon,
+  Users2, Ear, Sparkles, Search, Radar, Send,
+  LayoutDashboard, LifeBuoy, ShieldCheck, Users as UsersIcon,
   Ticket as TicketIcon, History, Megaphone, Webhook, Settings as SettingsIcon,
   KeyRound, Map as MapIcon, Bot, Calendar, FileText, Inbox,
   Rocket, Brain, TrendingUp, CheckSquare, User as UserIcon, BarChart3,
@@ -48,7 +48,6 @@ const CommandPalette = () => {
       { to: '/dashboard/command-center',   label: 'Command Center',       icon: CommandIcon },
       { to: '/dashboard/team-performance', label: 'Team Performance',     icon: TrendingUp },
       { to: '/dashboard/overview',         label: 'Overview',             icon: LayoutDashboard },
-      { to: '/dashboard/main',             label: 'Activity feed',        icon: Activity },
     ];
     const cortexGroup = [
       { to: '/dashboard/cortex',           label: 'Cortex workspace',     icon: Brain,    hint: 'Master orchestrator' },
@@ -77,17 +76,14 @@ const CommandPalette = () => {
       { to: '/dashboard/goals',            label: 'Growth Goals',         icon: Target },
     ];
     const agents = [
-      { to: '/dashboard/team',             label: 'AI Team',              icon: Users2 },
       { to: '/dashboard/memory',           label: 'Agent Memory',         icon: Brain },
       { to: '/dashboard/trends',           label: 'Trend Engine',         icon: TrendingUp },
       { to: '/dashboard/growth-team',      label: 'Growth Team roster',   icon: Users2 },
-      { to: '/dashboard/chatter',          label: 'Agent Chatter',        icon: MessagesSquare },
       { to: '/dashboard/autonomy',         label: 'Autonomy budgets',     icon: ShieldAlert },
       { to: '/dashboard/listening',        label: 'Social Listening',     icon: Ear },
       { to: '/dashboard/agent',            label: 'Agent Workspace',      icon: Bot },
     ];
     const content = [
-      { to: '/dashboard/studio',           label: 'Content Studio',       icon: Wand2 },
       { to: '/dashboard/posts',            label: 'Posts',                icon: FileText },
       { to: '/dashboard/compose',          label: 'Compose & Publish',    icon: Send },
       { to: '/dashboard/insights',         label: 'AI Insights',          icon: Sparkles },

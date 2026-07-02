@@ -35,13 +35,10 @@ import Channels from './pages/dashboard/Channels';
 import Compose from './pages/dashboard/Compose';
 import Posts from './pages/dashboard/Posts';
 import Leads from './pages/dashboard/Leads';
-import Studio from './pages/dashboard/Studio';
 import Help from './pages/dashboard/Help';
 import AccountSettings from './pages/dashboard/AccountSettings';
 import AgentWorkspace from './pages/dashboard/AgentWorkspace';
-import AITeam from './pages/dashboard/AITeam';
 import CommandCenter from './pages/dashboard/CommandCenter';
-import LegacyCommandCenter from './pages/dashboard/LegacyCommandCenter';
 import CampaignDetail from './pages/dashboard/CampaignDetail';
 import ActiveCampaigns from './pages/dashboard/ActiveCampaigns';
 import Missions from './pages/dashboard/Missions';
@@ -61,7 +58,6 @@ import SellerAnalytics from './pages/dashboard/seller/Analytics';
 import Memory from './pages/dashboard/Memory';
 import Approvals from './pages/dashboard/Approvals';
 import Trends from './pages/dashboard/Trends';
-import Main from './pages/dashboard/Main';
 import Performance from './pages/dashboard/Performance';
 import MarketingCalendar from './pages/dashboard/MarketingCalendar';
 import Team from './pages/dashboard/Team';
@@ -71,7 +67,6 @@ import Goals from './pages/dashboard/Goals';
 import Experiments from './pages/dashboard/Experiments';
 import Briefs from './pages/dashboard/Briefs';
 import Autonomy from './pages/dashboard/Autonomy';
-import Chatter from './pages/dashboard/Chatter';
 import TeamPerformance from './pages/dashboard/TeamPerformance';
 import AdminOverview from './pages/admin/AdminOverview';
 import AdminUsers from './pages/admin/AdminUsers';
@@ -141,7 +136,7 @@ function AppRouter() {
       <Route path="/blog/:slug" element={<BlogPost />} />
       <Route path="/dashboard" element={<ProtectedRoute><CommandCenter /></ProtectedRoute>} />
       <Route path="/dashboard/command-center" element={<ProtectedRoute><CommandCenter /></ProtectedRoute>} />
-      <Route path="/dashboard/legacy" element={<ProtectedRoute><LegacyCommandCenter /></ProtectedRoute>} />
+      <Route path="/dashboard/legacy" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard/missions" element={<ProtectedRoute><Missions /></ProtectedRoute>} />
       <Route path="/dashboard/cortex" element={<ProtectedRoute><Missions /></ProtectedRoute>} />
       <Route path="/dashboard/cortex/:id" element={<ProtectedRoute><CortexWorkspace /></ProtectedRoute>} />
@@ -154,7 +149,7 @@ function AppRouter() {
       <Route path="/dashboard/overview" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
       <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
       <Route path="/auth/claim" element={<AuthClaim />} />
-      <Route path="/dashboard/main" element={<ProtectedRoute><Main /></ProtectedRoute>} />
+      <Route path="/dashboard/main" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard/performance" element={<ProtectedRoute><Performance /></ProtectedRoute>} />
       <Route path="/dashboard/calendar" element={<ProtectedRoute><MarketingCalendar /></ProtectedRoute>} />
       <Route path="/dashboard/growth-team" element={<ProtectedRoute><Team /></ProtectedRoute>} />
@@ -172,20 +167,20 @@ function AppRouter() {
       <Route path="/dashboard/seller-os/onboarding" element={<ProtectedRoute><SellerOnboarding /></ProtectedRoute>} />
       <Route path="/dashboard/seller-os/retention" element={<ProtectedRoute><SellerRetention /></ProtectedRoute>} />
       <Route path="/dashboard/seller-os/analytics" element={<ProtectedRoute><SellerAnalytics /></ProtectedRoute>} />
-      <Route path="/dashboard/chatter" element={<ProtectedRoute><Chatter /></ProtectedRoute>} />
+      <Route path="/dashboard/chatter" element={<Navigate to="/dashboard/growth-team" replace />} />
       <Route path="/dashboard/team-performance" element={<ProtectedRoute><TeamPerformance /></ProtectedRoute>} />
       <Route path="/dashboard/insights" element={<ProtectedRoute><Insights /></ProtectedRoute>} />
       <Route path="/dashboard/seo" element={<ProtectedRoute><SeoReview /></ProtectedRoute>} />
       <Route path="/dashboard/scan" element={<ProtectedRoute><SiteScan /></ProtectedRoute>} />
       <Route path="/dashboard/channels" element={<ProtectedRoute><Channels /></ProtectedRoute>} />
       <Route path="/dashboard/compose" element={<ProtectedRoute><Compose /></ProtectedRoute>} />
-      <Route path="/dashboard/studio" element={<ProtectedRoute><Studio /></ProtectedRoute>} />
+      <Route path="/dashboard/studio" element={<Navigate to="/dashboard/compose" replace />} />
       <Route path="/dashboard/posts" element={<ProtectedRoute><Posts /></ProtectedRoute>} />
       <Route path="/dashboard/leads" element={<ProtectedRoute><Leads /></ProtectedRoute>} />
       <Route path="/dashboard/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
       <Route path="/dashboard/agent" element={<ProtectedRoute><AgentWorkspace /></ProtectedRoute>} />
       <Route path="/dashboard/agent/:agentId" element={<ProtectedRoute><AgentWorkspace /></ProtectedRoute>} />
-      <Route path="/dashboard/team" element={<ProtectedRoute><AITeam /></ProtectedRoute>} />
+      <Route path="/dashboard/team" element={<Navigate to="/dashboard/growth-team" replace />} />
       <Route path="/dashboard/memory" element={<ProtectedRoute><Memory /></ProtectedRoute>} />
       <Route path="/dashboard/approvals" element={<ProtectedRoute><Approvals /></ProtectedRoute>} />
       <Route path="/dashboard/trends" element={<ProtectedRoute><Trends /></ProtectedRoute>} />

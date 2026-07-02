@@ -79,7 +79,7 @@ const Overview = () => {
   ];
 
   const quickActions = [
-    { to: '/dashboard/studio', icon: Wand2, title: 'Open Content Studio', desc: 'Newsletters, blog posts, video scripts, multi-platform.', color: 'from-rose-100 to-rose-50' },
+    { to: '/dashboard/compose', icon: Wand2, title: 'Open Content Studio', desc: 'Newsletters, blog posts, video scripts, multi-platform.', color: 'from-rose-100 to-rose-50' },
     { to: '/dashboard/seo', icon: Search, title: 'Run an SEO review', desc: 'Audit any URL with AI — score, issues, fixes.', color: 'from-blue-100 to-blue-50' },
     { to: '/dashboard/scan', icon: Radar, title: 'Scan your website', desc: 'Detect new listings & generate post ideas.', color: 'from-emerald-100 to-emerald-50' },
     { to: '/dashboard/compose', icon: Send, title: 'Compose & publish', desc: 'Push new posts across all your channels.', color: 'from-violet-100 to-violet-50' },
