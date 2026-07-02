@@ -167,3 +167,11 @@ credentials.json
 *.key
 .credentials
 frontend/node_modules/.cache/default-development/15.pack
+
+# Runtime data / caches added 2026-07-02 (backup-branch prep)
+backend/.qdrant_data/
+backend/uploads/
+test_output.txt
+test_output.log
+.emergent/automation_output/
+demo_recordings/
