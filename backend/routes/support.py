@@ -15,49 +15,116 @@ FAQ_ARTICLES = [
         "id": "getting-started",
         "category": "Getting Started",
         "title": "How do I get started with CortexViral?",
-        "body": "After signing in with Google, you'll land on the Overview page. From there you can: 1) Connect your social channels (mocked for now), 2) Run an SEO Review on your site, 3) Use Content Studio to generate newsletters, blog posts, or video scripts, and 4) Use Compose & Publish to push posts to your channels.",
+        "body": (
+            "After signing in, you land on the Command Center — that's your Cortex "
+            "chat. Type any growth outcome in plain English (e.g. \"get 50 seller "
+            "signups in 14 days\") and Cortex assembles the right team (Scout, "
+            "Creator, Operator, Intelligence), plans the mission, and executes at "
+            "your chosen autonomy level. From the sidebar you can connect real "
+            "social channels (Instagram, Facebook, LinkedIn, TikTok, Pinterest, "
+            "YouTube), track missions in Mission Control, and monitor performance "
+            "in Analytics."
+        ),
     },
     {
-        "id": "ai-agents",
+        "id": "how-cortex-works",
         "category": "AI Agents",
-        "title": "Who are Nova, Sam, Kai, and Angela?",
-        "body": "They are our 4 specialist AI marketing agents. Nova is your digital marketer, Sam handles SEO/GEO content, Kai manages social listening, and Angela writes email campaigns. Each agent powers a different part of the dashboard.",
+        "title": "How does Cortex work?",
+        "body": (
+            "Cortex is the master orchestrator. When you brief it, it runs a "
+            "5-stage loop: discovery (asks clarifying questions), analysis "
+            "(scans your site + market signals), recommendation (proposes a "
+            "concrete plan), execution (delegates to Scout / Creator / Operator "
+            "/ Intelligence), and measurement (feeds results back into memory "
+            "so the next mission is smarter). All of this is real — you can "
+            "watch it happen in the right-rail Active Mission Rail."
+        ),
+    },
+    {
+        "id": "autonomy-levels",
+        "category": "AI Agents",
+        "title": "What do the autonomy levels (L0–L5) mean?",
+        "body": (
+            "L0 = draft only, Cortex proposes and you do the work manually. "
+            "L1 = auto-create drafts you must approve. L2 = auto-publish with "
+            "your approval on each post. L3 = auto-optimize (Cortex reallocates "
+            "budget and pauses underperformers without asking). L4 = full "
+            "campaign automation with weekly review. L5 = full autonomous — "
+            "Cortex runs the mission end-to-end within your guardrails. "
+            "You can change the level on any running mission from the card."
+        ),
     },
     {
         "id": "seo-review",
         "category": "Features",
         "title": "How does SEO Review work?",
-        "body": "Paste any URL in /dashboard/seo and Sam fetches the page, analyzes content + meta + structure, and returns a scored audit (0-100) with strengths, prioritized issues, recommendations, and keyword suggestions.",
+        "body": (
+            "Paste any URL in /dashboard/seo and Cortex fetches the page, "
+            "analyzes content + meta + structure, and returns a scored audit "
+            "(0-100) with strengths, prioritized issues, recommendations, and "
+            "keyword suggestions. Findings that look actionable can be "
+            "converted into a mission with one click."
+        ),
     },
     {
         "id": "site-scan",
         "category": "Features",
         "title": "What does Site Scan do?",
-        "body": "Site Scan crawls a URL of your choice and uses Nova to detect notable items (products, listings, news), generate 3 ready-to-publish social post drafts, and suggest improvements.",
+        "body": (
+            "Site Scan crawls a URL of your choice and uses Cortex's Creator "
+            "team to detect notable items (products, listings, news), generate "
+            "ready-to-publish social post drafts, and suggest improvements."
+        ),
     },
     {
-        "id": "content-studio",
+        "id": "content-generation",
         "category": "Content",
-        "title": "How do I generate newsletters, blogs, or video scripts?",
-        "body": "Go to /dashboard/studio. Pick a tab (Newsletter, Blog Article, Product Update, Video Script, or Multi-Platform Posts), fill the form, and click Generate. Results are saved to your Reports.",
+        "title": "How do I generate posts, campaigns, and creatives?",
+        "body": (
+            "Ask Cortex directly in the Command Center — e.g. \"draft this "
+            "week's Instagram content\" or \"launch a 14-day paid campaign for "
+            "our new product.\" Cortex's Creator team drafts copy, generates "
+            "images (Gemini Nano Banana), and hands them to Operator for "
+            "scheduling. You can also brief a full campaign at "
+            "/dashboard/campaigns."
+        ),
     },
     {
-        "id": "channels-mocked",
+        "id": "channels-live",
         "category": "Channels & Publishing",
-        "title": "Why are channel connections labelled MOCKED?",
-        "body": "Real platform OAuth (Instagram, TikTok, X, etc.) requires developer credentials per platform and platform-specific app review. The toggles work in the demo but no posts are pushed to live platforms yet.",
+        "title": "Which social channels can I connect?",
+        "body": (
+            "Five platforms are live with real OAuth and publishing: Instagram, "
+            "Facebook (Meta Business), LinkedIn, TikTok, Pinterest, and "
+            "YouTube. Connect them under Settings → Channels. Once connected, "
+            "Cortex's Operator team can schedule and publish posts on your "
+            "behalf at your autonomy level. X (Twitter) and Reddit are on "
+            "the roadmap."
+        ),
     },
     {
         "id": "billing",
         "category": "Account",
         "title": "How does billing work?",
-        "body": "CortexViral is currently in demo mode — no billing is active. Plans start from $39/mo once we launch.",
+        "body": (
+            "CortexViral is subscription-based, billed monthly through Stripe. "
+            "You can see your current plan, usage, and next invoice under "
+            "Settings → Billing. Plans start at $39/mo. You can upgrade, "
+            "downgrade, or cancel at any time."
+        ),
     },
     {
         "id": "data-privacy",
         "category": "Privacy",
         "title": "Is my data safe?",
-        "body": "Your data is stored in our database and is not shared. Forms submitted on the public landing page are stored as leads and visible only to the account owner.",
+        "body": (
+            "Your data lives in our database and is not shared. Uploaded "
+            "assets are stored in Cloudflare R2 with per-user access "
+            "controls — bytes are only served to you after a session-cookie "
+            "auth check. OAuth tokens are encrypted at rest. Forms submitted "
+            "on the public landing page are stored as leads and visible only "
+            "to the account owner."
+        ),
     },
 ]
 
@@ -68,15 +135,22 @@ async def support_faq():
 
 
 SUPPORT_SYSTEM_PROMPT = (
-    "You are CortexBot, the friendly support assistant for CortexViral (cortexviral.com) — an AI marketing platform. "
-    "Help users with questions about features, navigation, and troubleshooting. "
-    "CortexViral includes: a Dashboard (Overview), AI Insights, Content Studio (Newsletter/Blog/Update/Video Script/Multi-Platform Posts), "
-    "SEO Review, Site Scan, Channels (Instagram/TikTok/X/Facebook/LinkedIn/Reddit — currently MOCKED, no real OAuth yet), "
-    "Compose & Publish, Posts feed, and Leads inbox. The AI agents are Nova (digital marketing), "
-    "Sam (SEO/GEO content), Kai (social listening), and Angela (email marketing). "
-    "Pricing starts from $39/mo when launched (currently demo). "
-    "If the user asks something you cannot answer, or wants to talk to a human, tell them to "
-    "click 'Talk to a human' to open a support ticket. Keep replies concise and friendly (under 120 words)."
+    "You are CortexBot, the friendly support assistant for CortexViral "
+    "(cortexviral.com) — an AI marketing OS. Help users with questions about "
+    "features, navigation, and troubleshooting. CortexViral is centered on "
+    "the Command Center (Cortex chat orchestrator) at /dashboard, backed by "
+    "Mission Control (/dashboard/missions), Campaigns (/dashboard/campaigns), "
+    "SEO Review (/dashboard/seo), Site Scan, Assets, Analytics, and Memory. "
+    "Cortex orchestrates 4 agent teams: Scout (discovery + qualification), "
+    "Creator (drafts + images), Operator (scheduling + publishing), "
+    "Intelligence (measurement + optimization). Autonomy levels run L0 "
+    "(draft only) → L5 (fully autonomous). Real social channels: Instagram, "
+    "Facebook, LinkedIn, TikTok, Pinterest, YouTube — all connect via real "
+    "OAuth and can publish live at the user's autonomy level. Billing is "
+    "live via Stripe, plans start at $39/mo. If the user asks something you "
+    "cannot answer, or wants to talk to a human, tell them to click 'Talk "
+    "to a human' to open a support ticket. Keep replies concise and "
+    "friendly (under 120 words)."
 )
 
 

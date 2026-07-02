@@ -284,13 +284,28 @@ const Compose = () => {
       const r = await axios.post(`${API}/channels/publish`, payload, { withCredentials: true });
       const isScheduled = r.data.status === 'scheduled';
       const wasSeries = Array.isArray(r.data.ids) && r.data.ids.length > 1;
+      // Honesty toast — /channels/publish dispatches to real OAuth
+      // adapters (Meta, LinkedIn, TikTok, Pinterest, YouTube) for
+      // immediate publishes on any connected channel; unconnected
+      // channels remain on the calendar. Scheduled posts always park
+      // on the calendar until the scheduler fires them.
+      const dispatch = r.data.dispatch || {};
+      const livePosts = Object.values(dispatch).filter(
+        (d) => d && (d.ok === true || d.status === 'published' || d.id),
+      ).length;
+      let desc = 'Saved to your feed & calendar.';
+      if (!isScheduled && livePosts > 0) {
+        desc = `Published live to ${livePosts} connected channel${livePosts > 1 ? 's' : ''}; other channels saved to your calendar.`;
+      } else if (isScheduled) {
+        desc = 'The scheduler will publish this at the scheduled time on every connected channel.';
+      }
       toast({
         title: wasSeries
           ? `Scheduled ${r.data.ids.length} weekly posts starting ${new Date(scheduleAt).toLocaleDateString()}`
           : isScheduled
             ? `Scheduled for ${new Date(scheduleAt).toLocaleString()}`
             : `Published to ${platforms.length} channel${platforms.length > 1 ? 's' : ''}!`,
-        description: 'MOCKED — stored in your feed/calendar.',
+        description: desc,
       });
       setContent('');
       setTopic('');
@@ -656,7 +671,7 @@ const Compose = () => {
               </div>
             )}
           </div>
-          <p className="mt-3 text-[11.5px] text-neutral-500 text-center">MOCKED: posts are stored in your feed/calendar, not pushed to live platforms.</p>
+          <p className="mt-3 text-[11.5px] text-neutral-500 text-center">Connected channels publish live via real OAuth; unconnected channels save to your feed & calendar.</p>
         </div>
       </div>
     </DashboardLayout>

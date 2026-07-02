@@ -28,7 +28,13 @@ const Performance = () => {
       axios.get(`${API}/performance/overview?range=${range}`, { withCredentials: true }),
       axios.get(`${API}/performance/sources?range=${range}`, { withCredentials: true }),
       axios.get(`${API}/performance/pages?range=${range}`, { withCredentials: true }),
-    ]).then(([o, s, p]) => { setOverview(o.data); setSources(s.data); setPages(p.data); })
+    ]).then(([o, s, p]) => {
+      setOverview(o.data);
+      setSources(Array.isArray(s.data) ? s.data : (s.data?.rows || []));
+      // /performance/pages now returns an envelope {rows, source, note}
+      // instead of a raw array — normalize both shapes here.
+      setPages(Array.isArray(p.data) ? p.data : (p.data?.rows || []));
+    })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [range]);
@@ -75,16 +81,20 @@ const Performance = () => {
           </div>
 
           <div className="grid lg:grid-cols-2 gap-5">
-            <DataTable title="Session Source / Medium" columns={['Source', 'Now', 'Prev', '% Change']} rows={sources} render={(r, i) => (
+            <DataTable title="Posts by Platform" columns={['Platform', 'Now', 'Prev', '% Change']} rows={sources}
+                        emptyLabel="No posts published in this window yet — publish from Compose or Cortex to see this fill in."
+                        render={(r, i) => (
               <tr key={i} className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50/40">
-                <td className="p-3 pl-5"><div className="flex items-center gap-2.5"><span className="w-5 h-5 rounded-full bg-neutral-100 text-neutral-500 text-[10px] font-semibold inline-flex items-center justify-center">{i + 1}</span><span className="text-[13.5px]">{r.source}</span></div></td>
+                <td className="p-3 pl-5"><div className="flex items-center gap-2.5"><span className="w-5 h-5 rounded-full bg-neutral-100 text-neutral-500 text-[10px] font-semibold inline-flex items-center justify-center">{i + 1}</span><span className="text-[13.5px] capitalize">{r.source}</span></div></td>
                 <td className="p-3 text-right text-[13.5px]">{r.now}</td>
                 <td className="p-3 text-right text-[13.5px] text-neutral-500">{r.prev}</td>
                 <td className="p-3 pr-5 text-right"><ChangeBadge value={r.change_pct} /></td>
               </tr>
             )} />
 
-            <DataTable title="Top Landing Pages" columns={['Page', 'Now', 'Prev', '% Change']} rows={pages} render={(r, i) => (
+            <DataTable title="Top Landing Pages" columns={['Page', 'Now', 'Prev', '% Change']} rows={pages}
+                        emptyLabel="Site analytics pixel not yet configured — install it on your site to populate this table."
+                        render={(r, i) => (
               <tr key={i} className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50/40">
                 <td className="p-3 pl-5"><div className="flex items-center gap-2.5"><span className="w-5 h-5 rounded-full bg-neutral-100 text-neutral-500 text-[10px] font-semibold inline-flex items-center justify-center">{i + 1}</span><span className="text-[13.5px] font-mono">{r.page}</span></div></td>
                 <td className="p-3 text-right text-[13.5px]">{r.now}</td>
@@ -100,14 +110,29 @@ const Performance = () => {
 };
 
 const MetricCard = ({ metric }) => {
-  const up = metric.change_pct >= 0;
+  // Not-configured metrics: show honest empty state instead of a
+  // fabricated number. `source: "not_configured"` is set by the backend
+  // when the underlying data feed isn't wired up yet (e.g. site
+  // analytics pixel).
+  if (metric.source === 'not_configured' || metric.value === null || metric.value === undefined) {
+    return (
+      <div className="bg-white rounded-3xl p-6 border border-dashed border-neutral-300/70" data-testid={`perf-metric-empty-${metric.key}`}>
+        <div className="text-[11px] uppercase tracking-wider font-semibold text-neutral-400 mb-3">{metric.label}</div>
+        <div className="text-3xl font-medium tracking-tight text-neutral-400">—</div>
+        <div className="mt-2 text-[11.5px] text-neutral-500 leading-relaxed">
+          {metric.note || 'Not yet configured.'}
+        </div>
+      </div>
+    );
+  }
+  const up = (metric.change_pct ?? 0) >= 0;
   return (
-    <div className="bg-white rounded-3xl p-6 border border-neutral-200/70">
+    <div className="bg-white rounded-3xl p-6 border border-neutral-200/70" data-testid={`perf-metric-${metric.key}`}>
       <div className="text-[11px] uppercase tracking-wider font-semibold text-[#1B7BFF] mb-3">{metric.label}</div>
       <div className="text-4xl font-medium tracking-tight">{metric.value}</div>
       <div className={`mt-2 inline-flex items-center gap-1 text-[13px] font-medium ${up ? 'text-emerald-600' : 'text-rose-600'}`}>
         {up ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
-        {Math.abs(metric.change_pct)}%
+        {Math.abs(metric.change_pct ?? 0)}%
       </div>
     </div>
   );
@@ -123,22 +148,28 @@ const ChangeBadge = ({ value }) => {
   );
 };
 
-const DataTable = ({ title, columns, rows, render }) => (
+const DataTable = ({ title, columns, rows, render, emptyLabel }) => (
   <div className="bg-white rounded-3xl border border-neutral-200/70 overflow-hidden">
     <div className="px-5 py-4 border-b border-neutral-200/70">
       <h3 className="text-[14.5px] font-semibold">{title}</h3>
     </div>
-    <table className="w-full">
-      <thead className="bg-neutral-50/40">
-        <tr className="text-[11px] uppercase tracking-wider text-neutral-500 font-medium">
-          <th className="p-3 pl-5 text-left">{columns[0]}</th>
-          <th className="p-3 text-right">{columns[1]}</th>
-          <th className="p-3 text-right">{columns[2]}</th>
-          <th className="p-3 pr-5 text-right">{columns[3]}</th>
-        </tr>
-      </thead>
-      <tbody>{rows.map(render)}</tbody>
-    </table>
+    {rows.length === 0 ? (
+      <div className="px-5 py-8 text-center">
+        <div className="text-[13px] text-neutral-500">{emptyLabel || 'No data yet for this range.'}</div>
+      </div>
+    ) : (
+      <table className="w-full">
+        <thead className="bg-neutral-50/40">
+          <tr className="text-[11px] uppercase tracking-wider text-neutral-500 font-medium">
+            <th className="p-3 pl-5 text-left">{columns[0]}</th>
+            <th className="p-3 text-right">{columns[1]}</th>
+            <th className="p-3 text-right">{columns[2]}</th>
+            <th className="p-3 pr-5 text-right">{columns[3]}</th>
+          </tr>
+        </thead>
+        <tbody>{rows.map(render)}</tbody>
+      </table>
+    )}
   </div>
 );
 

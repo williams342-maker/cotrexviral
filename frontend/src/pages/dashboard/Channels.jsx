@@ -228,20 +228,14 @@ const Channels = () => {
         await axios.post(`${API}/channels/disconnect`, { platform }, { withCredentials: true });
         toast({ title: `Disconnected from ${meta?.label || platform}` });
       } else {
+        // Fallback path: platform doesn't have a real OAuth flow yet
+        // (e.g. X / Twitter, Reddit). We still add it to the user's
+        // channel list so they can compose drafts, but posts are NOT
+        // pushed live. Toast copy is honest about that.
         await axios.post(`${API}/channels/connect`, { platform }, { withCredentials: true });
         toast({
-          title: `Connected to ${meta?.label || platform}`,
-          description: platform === 'linkedin'
-            ? 'MOCKED — admin: set LINKEDIN_CLIENT_ID + LINKEDIN_CLIENT_SECRET in .env to enable real OAuth.'
-            : platform === 'tiktok'
-            ? 'MOCKED — admin: set TIKTOK_CLIENT_KEY + TIKTOK_CLIENT_SECRET in .env to enable real OAuth.'
-            : (platform === 'facebook' || platform === 'instagram')
-            ? 'MOCKED — admin: set META_APP_ID + META_APP_SECRET in .env to enable real OAuth.'
-            : platform === 'pinterest'
-            ? 'MOCKED — admin: set PINTEREST_APP_ID + PINTEREST_APP_SECRET in .env to enable real OAuth.'
-            : platform === 'youtube'
-            ? 'MOCKED — admin: set YOUTUBE_CLIENT_ID + YOUTUBE_CLIENT_SECRET via /admin/integrations to enable real OAuth.'
-            : 'MOCKED — no real OAuth in this demo.',
+          title: `${meta?.label || platform} added to your channels`,
+          description: `Real OAuth for ${meta?.label || platform} isn't available yet — you can draft and schedule posts, but they won't publish live until we ship the integration.`,
         });
       }
       await load();
@@ -253,16 +247,34 @@ const Channels = () => {
   };
 
   const connectedCount = Object.values(statusMap).filter((c) => c.connected).length;
-  const liveOAuthCount = (linkedInOAuth.configured ? 1 : 0) + (tiktokOAuth.configured ? 1 : 0);
-  const liveOAuthLabel = [
-    linkedInOAuth.configured && 'LinkedIn',
-    tiktokOAuth.configured && 'TikTok',
-  ].filter(Boolean).join(' + ');
+  const oauthStatuses = [
+    { name: 'LinkedIn',  cfg: linkedInOAuth.configured },
+    { name: 'TikTok',    cfg: tiktokOAuth.configured },
+    { name: 'Facebook',  cfg: facebookOAuth.configured },
+    { name: 'Instagram', cfg: instagramOAuth.configured },
+    { name: 'Pinterest', cfg: pinterestOAuth.configured },
+    { name: 'YouTube',   cfg: youtubeOAuth.configured },
+  ];
+  const liveOAuth = oauthStatuses.filter((o) => o.cfg).map((o) => o.name);
+  const liveOAuthCount = liveOAuth.length;
+  const liveOAuthLabel = liveOAuth.join(', ');
+  // Subtitle honesty: only mention "mocked" when NO OAuth flow is
+  // configured. Otherwise list the platforms that are truly live and
+  // leave the rest quiet — publishing this copy publicly used to
+  // make the whole app read as a demo even when 5+ OAuth flows worked.
+  let subtitleTail = '';
+  if (liveOAuthCount === 0) {
+    subtitleTail = ' All channels are pending admin OAuth configuration.';
+  } else if (liveOAuthCount === oauthStatuses.length) {
+    subtitleTail = ' All platforms are live via real OAuth.';
+  } else {
+    subtitleTail = ` Live via real OAuth: ${liveOAuthLabel}.`;
+  }
 
   return (
     <DashboardLayout
       title="Integrations"
-      subtitle={`Connect ${Object.keys(PLATFORM_META).length}+ platforms to publish, analyze, and grow.${liveOAuthCount > 0 ? ` ${liveOAuthLabel} ${liveOAuthCount > 1 ? 'are' : 'is'} live OAuth — other platforms are still mocked.` : ' All platforms are currently mocked.'}`}
+      subtitle={`Connect ${Object.keys(PLATFORM_META).length}+ platforms to publish, analyze, and grow.${subtitleTail}`}
     >
       <div className="flex items-center gap-3 mb-7 flex-wrap">
         <div className="px-4 py-2 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700 text-[13px] font-medium">
