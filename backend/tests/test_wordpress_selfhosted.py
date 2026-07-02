@@ -1,17 +1,18 @@
 """Tests for the WordPress self-hosted connector.
 
 Covers:
-  - Fernet encrypt/decrypt round trip works and produces different
-    ciphertext each call (nonce)
-  - `_normalize_site_url` refuses http:// and strips trailing slash
-  - `_wp_verify` maps WP status codes to the right FastAPI errors
-  - `_wp_verify` refuses users whose roles are all below `author`
-  - `publish_to_wordpress` returns {ok:False,...} when channel row is
-    missing (no exceptions escape to the mission dispatcher)
+  - Fernet encrypt/decrypt round trip
+  - URL normalization
+  - _wp_verify two-step probe (base -> ?context=edit fallback)
+  - _wp_verify failure modes
+  - Roles unknown behaviour on hardened WP installs
+  - publish_to_wordpress dispatcher contract
+  - Rate limiter (per-user hourly + per-host 15-min sliding windows)
 """
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -21,13 +22,11 @@ import respx
 from httpx import Response
 from fastapi import HTTPException
 
-# Ensure the Fernet key exists before we import the module under test.
 os.environ.setdefault(
     "CORTEXVIRAL_WORDPRESS_FERNET_KEY",
     "9SdVQFxznii-Mydl2Q9pjbkhEp-7Z6-BOoO_IgLMn6Q=",
 )
 
-# Make sure the backend package is on the path when pytest is run from /app/backend
 BACKEND = Path(__file__).resolve().parents[1]
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
@@ -36,6 +35,8 @@ from routes.wordpress_selfhosted import (   # noqa: E402
     _encrypt, _decrypt,
     _normalize_site_url,
     _wp_verify,
+    _rate_limit_check, _rate_limit_reset,
+    MAX_PER_USER_HOURLY, MAX_PER_HOST_15MIN,
     publish_to_wordpress,
     WPCreds,
 )
@@ -53,8 +54,6 @@ def test_encrypt_decrypt_round_trip():
 
 
 def test_encrypt_produces_unique_ciphertext_per_call():
-    """Fernet uses a random IV so two encryptions of the same value must
-    differ. Guards against accidentally swapping to a deterministic scheme."""
     a = _encrypt("same-value")
     b = _encrypt("same-value")
     assert a != b
@@ -83,27 +82,44 @@ def test_normalize_site_url_refuses_empty():
 
 
 # ---------------------------------------------------------------------------
-# _wp_verify — status code mapping
+# _wp_verify — status code mapping (base probe)
 # ---------------------------------------------------------------------------
+
+# All test URLs live at https://example.com/wp-json/wp/v2/users/me (with or
+# without ?context=edit). respx matches by path only, so we use a side_effect
+# router that inspects the full URL to return different responses per variant.
+_USERS_ME_RX = re.compile(r"^https://example\.com/wp-json/wp/v2/users/me")
+
+
+def _route_users_me(base_resp: Response, edit_resp: Response | None = None):
+    """Return a side_effect that hands out different responses depending on
+    whether the outbound request had ?context=edit or not."""
+    def _handler(request):
+        if "context=edit" in str(request.url):
+            return edit_resp if edit_resp is not None else base_resp
+        return base_resp
+    return _handler
+
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_wp_verify_401_returns_400_with_credentials_hint():
-    route = respx.get("https://example.com/wp-json/wp/v2/users/me?context=edit").mock(
-        return_value=Response(401, json={"code": "rest_not_logged_in"}),
+async def test_wp_verify_401_on_base_probe_returns_400_with_credentials_hint():
+    """When the base probe (no context) returns 401 the App Password itself
+    is invalid — this is the case where we surface 'Invalid credentials'."""
+    respx.get(url__regex=_USERS_ME_RX).mock(
+        side_effect=_route_users_me(Response(401, json={"code": "rest_not_logged_in"})),
     )
     with pytest.raises(HTTPException) as ei:
         await _wp_verify(WPCreds(site_url="https://example.com", username="u", application_password="p"))
     assert ei.value.status_code == 400
     assert "401" in ei.value.detail
-    assert route.called
 
 
 @pytest.mark.asyncio
 @respx.mock
 async def test_wp_verify_404_returns_rest_api_error():
-    respx.get("https://example.com/wp-json/wp/v2/users/me?context=edit").mock(
-        return_value=Response(404),
+    respx.get(url__regex=_USERS_ME_RX).mock(
+        side_effect=_route_users_me(Response(404)),
     )
     with pytest.raises(HTTPException) as ei:
         await _wp_verify(WPCreds(site_url="https://example.com", username="u", application_password="p"))
@@ -114,45 +130,142 @@ async def test_wp_verify_404_returns_rest_api_error():
 @pytest.mark.asyncio
 @respx.mock
 async def test_wp_verify_500_returns_502():
-    respx.get("https://example.com/wp-json/wp/v2/users/me?context=edit").mock(
-        return_value=Response(503),
+    respx.get(url__regex=_USERS_ME_RX).mock(
+        side_effect=_route_users_me(Response(503)),
     )
     with pytest.raises(HTTPException) as ei:
         await _wp_verify(WPCreds(site_url="https://example.com", username="u", application_password="p"))
     assert ei.value.status_code == 502
 
 
+# ---------------------------------------------------------------------------
+# _wp_verify — happy path + two-step probe
+# ---------------------------------------------------------------------------
+
 @pytest.mark.asyncio
 @respx.mock
-async def test_wp_verify_success_returns_user():
-    respx.get("https://example.com/wp-json/wp/v2/users/me?context=edit").mock(
-        return_value=Response(200, json={
-            "id": 42, "name": "Jane Editor", "roles": ["editor"],
-        }),
+async def test_wp_verify_success_reads_roles_from_edit_context():
+    """Base probe returns minimal user (no roles), ?context=edit returns
+    roles. This is the standard flow on a normal WP install."""
+    respx.get(url__regex=_USERS_ME_RX).mock(
+        side_effect=_route_users_me(
+            base_resp=Response(200, json={"id": 42, "name": "Jane Editor"}),
+            edit_resp=Response(200, json={"id": 42, "name": "Jane Editor", "roles": ["editor"]}),
+        ),
     )
     info = await _wp_verify(WPCreds(
-        site_url="https://example.com/",   # trailing slash — should be stripped
+        site_url="https://example.com/",
         username="jane",
         application_password="app-pw",
     ))
     assert info["id"] == 42
     assert info["name"] == "Jane Editor"
     assert info["roles"] == ["editor"]
+    assert info["roles_unknown"] is False
     assert info["site_url"] == "https://example.com"
 
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_wp_verify_rejects_subscriber_role():
-    respx.get("https://example.com/wp-json/wp/v2/users/me?context=edit").mock(
-        return_value=Response(200, json={
-            "id": 7, "name": "Sub", "roles": ["subscriber"],
-        }),
+async def test_wp_verify_rejects_subscriber_when_roles_visible():
+    """If roles ARE visible via ?context=edit and none are author+, reject."""
+    respx.get(url__regex=_USERS_ME_RX).mock(
+        side_effect=_route_users_me(
+            base_resp=Response(200, json={"id": 7, "name": "Sub"}),
+            edit_resp=Response(200, json={"id": 7, "name": "Sub", "roles": ["subscriber"]}),
+        ),
     )
     with pytest.raises(HTTPException) as ei:
         await _wp_verify(WPCreds(site_url="https://example.com", username="s", application_password="p"))
     assert ei.value.status_code == 400
     assert "author" in ei.value.detail.lower()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_wp_verify_hardened_wp_accepts_with_roles_unknown_flag():
+    """Regression for the P2 fix: base probe succeeds (creds are valid) but
+    ?context=edit is blocked by a security plugin. We MUST accept the
+    connection and mark roles_unknown=True instead of raising a false
+    'Invalid credentials' error."""
+    respx.get(url__regex=_USERS_ME_RX).mock(
+        side_effect=_route_users_me(
+            base_resp=Response(200, json={"id": 1, "name": "Root"}),
+            edit_resp=Response(401, json={"code": "rest_forbidden_context"}),
+        ),
+    )
+    info = await _wp_verify(WPCreds(site_url="https://example.com", username="root", application_password="pw"))
+    assert info["id"] == 1
+    assert info["roles"] == []
+    assert info["roles_unknown"] is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_wp_verify_uses_base_roles_when_present_and_skips_edit_probe():
+    """If the base probe already exposes `roles` we shouldn't need the
+    second call at all."""
+    call_urls: list[str] = []
+    def _handler(request):
+        call_urls.append(str(request.url))
+        return Response(200, json={"id": 5, "name": "Admin", "roles": ["administrator"]})
+    respx.get(url__regex=_USERS_ME_RX).mock(side_effect=_handler)
+
+    info = await _wp_verify(WPCreds(site_url="https://example.com", username="a", application_password="pw"))
+    assert info["roles"] == ["administrator"]
+    assert info["roles_unknown"] is False
+    assert len(call_urls) == 1
+    assert "context=edit" not in call_urls[0]
+
+
+# ---------------------------------------------------------------------------
+# Rate limiter
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """Every test starts with a clean rate-limit history so ordering doesn't
+    matter."""
+    _rate_limit_reset()
+    yield
+    _rate_limit_reset()
+
+
+def test_rate_limit_allows_under_hourly_cap():
+    """First N calls (N = MAX_PER_USER_HOURLY) must succeed."""
+    # Vary the host so the 15-min per-host cap doesn't interfere.
+    for i in range(MAX_PER_USER_HOURLY):
+        _rate_limit_check("user-1", f"https://site-{i}.com")
+
+
+def test_rate_limit_blocks_over_hourly_cap():
+    for i in range(MAX_PER_USER_HOURLY):
+        _rate_limit_check("user-1", f"https://site-{i}.com")
+    with pytest.raises(HTTPException) as ei:
+        _rate_limit_check("user-1", "https://site-999.com")
+    assert ei.value.status_code == 429
+    assert "hour" in ei.value.detail.lower()
+    assert "Retry-After" in ei.value.headers
+
+
+def test_rate_limit_per_host_15min_cap():
+    """Even inside the hourly cap, hitting the SAME host too many times
+    should trip the 15-min per-host limit first."""
+    for i in range(MAX_PER_HOST_15MIN):
+        _rate_limit_check("user-1", "https://target.example.com")
+    with pytest.raises(HTTPException) as ei:
+        _rate_limit_check("user-1", "https://target.example.com")
+    assert ei.value.status_code == 429
+    assert "target.example.com" in ei.value.detail
+    assert "Retry-After" in ei.value.headers
+
+
+def test_rate_limit_isolates_users():
+    """One user's abuse must not block a different user."""
+    for i in range(MAX_PER_USER_HOURLY):
+        _rate_limit_check("user-a", f"https://site-{i}.com")
+    # user-b starts fresh.
+    _rate_limit_check("user-b", "https://site-0.com")
 
 
 # ---------------------------------------------------------------------------
@@ -161,9 +274,6 @@ async def test_wp_verify_rejects_subscriber_role():
 
 @pytest.mark.asyncio
 async def test_publish_to_wordpress_returns_ok_false_when_no_channel():
-    """If the user has no WordPress row in db.channels the helper must
-    return a structured error, not raise — otherwise it would crash the
-    entire channels.publish() dispatch."""
     with patch("routes.wordpress_selfhosted.db") as mock_db:
         mock_db.channels.find_one = AsyncMock(return_value=None)
         result = await publish_to_wordpress("user-with-no-wp", "Title", "<p>body</p>")
@@ -173,8 +283,6 @@ async def test_publish_to_wordpress_returns_ok_false_when_no_channel():
 @pytest.mark.asyncio
 @respx.mock
 async def test_publish_to_wordpress_success_path():
-    """Given a connected channel, publish_to_wordpress should hit the
-    /wp/v2/posts endpoint and return the WordPress post id + link."""
     respx.post("https://blog.example.com/wp-json/wp/v2/posts").mock(
         return_value=Response(201, json={
             "id": 987, "link": "https://blog.example.com/?p=987", "status": "publish",

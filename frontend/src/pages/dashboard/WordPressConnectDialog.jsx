@@ -147,7 +147,9 @@ const WordPressConnectDialog = ({ open, onOpenChange, onConnected }) => {
                 <Check size={14} /> Verified as <span className="font-semibold">{tested.wp_user_name}</span>
               </div>
               <div className="text-emerald-800 text-[11.5px]">
-                Roles: {(tested.wp_roles || []).join(', ') || '—'}
+                {tested.roles_unknown
+                  ? 'Roles: hidden by this WordPress site (security plugin). Credentials are valid — publish attempts will be authorized by the WP server itself.'
+                  : `Roles: ${(tested.wp_roles || []).join(', ') || '—'}`}
               </div>
             </div>
           )}

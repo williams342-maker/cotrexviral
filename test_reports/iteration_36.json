@@ -1,0 +1,30 @@
+{
+  "summary": "P2 WordPress hardening (rate limiter + safer two-step probe) — fully validated. Ran the pre-existing 27 unit tests (19 in test_wordpress_selfhosted.py + 8 in test_wordpress_api.py) and wrote 2 additional LIVE API tests (test_wordpress_rate_limit_api.py) that fire real POST /api/wordpress/test calls against the deployed backend to prove the rate limiter surfaces HTTP 429 with Retry-After and the expected detail wording ('hour' for the hourly cap, hostname for the per-host cap). Total 29/29 pytest green in a single combined run. UI regression: opened WP Self-Hosted connect dialog on /dashboard/channels via the test session cookie — dialog renders, http:// site URL surfaces the exact 'must start with https://' error in wp-connect-error, Escape closes and reopening resets all fields + clears error/success state. Rendering branch for roles_unknown soft-warning copy in WordPressConnectDialog.jsx (lines 150-152) is verified via static code review + covered by unit test test_wp_verify_hardened_wp_accepts_with_roles_unknown_flag. All 12 review-request assertions confirmed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_wordpress_selfhosted.py",
+    "/app/backend/tests/test_wordpress_api.py",
+    "/app/backend/tests/test_wordpress_rate_limit_api.py",
+    "/app/test_reports/pytest/wordpress_iter36_full.xml",
+    "/app/test_reports/pytest/wordpress_ratelimit_iter36.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Rate limiter is IN-MEMORY per backend process (dict on module scope). Comment already flags this: fine at P2, moves to Mongo TTL later if attackers spin up N pods. Also documented that this is intentionally rate-limited PRE-network-call so DNS failures still consume tokens — correctly prevents the oracle abuse.",
+    "One subtle counter behavior worth noting: when the per-host 429 fires, host_hist.append and user_hist.append are BOTH skipped (raise happens before the appends). Net effect: a rejected call does NOT count toward either counter. That's a defensible design (don't punish the caller twice), but the code comment doesn't spell it out — a future maintainer might expect otherwise. Not a bug, just a docs nit.",
+    "_wp_verify two-step probe correctly distinguishes 'App Password wrong' (401 on base) from 'security plugin blocked ?context=edit' (401/403 only on the edit probe). Returns roles_unknown=True in the latter case so the UI can render a soft-warning instead of a hard rejection. Covered by test_wp_verify_hardened_wp_accepts_with_roles_unknown_flag and test_wp_verify_uses_base_roles_when_present_and_skips_edit_probe (verifies the ?context=edit call is SKIPPED entirely when the base probe already returns roles inline — checked via a URL-capturing side_effect).",
+    "Frontend WordPressConnectDialog.jsx lines 150-152 render the soft-warning copy conditionally on tested.roles_unknown; the wp-test-success testid is stable so the UI copy switch is testable end-to-end when a hardened WP is available.",
+    "Consider surfacing Retry-After to end users in the UI (right now the axios catch just shows detail — a friendlier UX would parse the header and show a countdown). Non-blocking, purely polish."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_wordpress_rate_limit_api.py (NEW — 2 live-API tests that saturate the per-host 15-min cap and the per-user hourly cap, asserting 429 status + Retry-After header + correct detail wording. Written to be resilient to leftover in-process counter state so it can be run in any order alongside the existing suites.)"
+  ],
+  "success_rate": {"backend": "100% (29/29 pytest — 19 unit + 8 API auth/validation + 2 live rate-limit)", "frontend": "100% (dialog opens, https-only error surfaces in wp-connect-error, Escape closes, reopen resets state)"},
+  "test_credentials": "test_session_1779636592168 (user_test1779636592168 / test@automatex.dev) from /app/memory/test_credentials.md — session valid, /api/auth/me returns 200. For frontend, cookie name is session_token (matches deps.py line 14).",
+  "seed_data_creation": "No seed data required this iteration. The rate-limit tests use bogus non-existent domains (rl-per-host-test-target-8843.com, rl-per-user-fresh-N-8843.com) so DNS fails fast, no outbound WP traffic. No DB state written.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Rate limiter state is in-memory per backend process. If /api/wordpress/test has been exercised in the same process (by prior tests or manual clicks), the per-user hourly counter for test_session_1779636592168 will already be non-zero. To run the live tests deterministically: `sudo supervisorctl restart backend && sleep 4 && cd /app/backend && python -m pytest tests/test_wordpress_selfhosted.py tests/test_wordpress_api.py tests/test_wordpress_rate_limit_api.py -v`. The rate-limit live tests are counter-agnostic (they fire calls until 429 and then assert on the 429 semantics), so they're robust to leftover state, but the per-user hourly window persists ~1 hour, so if a hammering test just ran, subsequent /wordpress/test calls will 429 for that user until the counter drains or backend restarts.",
+  "rca of the issue": "N/A — P2 hardening lands cleanly. Rate limiter (30/hour per user, 6/15min per (user, host)) enforces correctly against the live deployment; two-step _wp_verify correctly returns roles_unknown=True on 401/403 for the ?context=edit probe (fallback branch verified via unit tests) and skips the second probe entirely when the base probe already exposes roles."
+}

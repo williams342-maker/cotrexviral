@@ -97,24 +97,116 @@ def _normalize_site_url(raw: str) -> str:
 _AUTHOR_ROLES = {"administrator", "editor", "author"}
 
 
-async def _wp_verify(creds: WPCreds) -> dict:
-    """Call GET /wp-json/wp/v2/users/me?context=edit and return the user
-    record. Raises HTTPException on any failure with a user-friendly message."""
-    site = _normalize_site_url(creds.site_url)
-    url = f"{site}/wp-json/wp/v2/users/me?context=edit"
+# ---------------------------------------------------------------------------
+# Rate limiter for /wordpress/test.
+#
+# The endpoint takes user-supplied (site_url, username, app_password) and makes
+# a live outbound HTTP call. Without a limit, an authenticated CortexViral user
+# could turn the endpoint into a WP-credentials brute-force oracle aimed at
+# arbitrary third-party sites (or their own).
+#
+# Two sliding-window limits, tracked per-process in memory:
+#   • Per user:                  MAX_PER_USER_HOURLY / hour
+#   • Per (user, target-host):   MAX_PER_HOST / 15 min
+#
+# In-memory is fine at P2 — worst case a distributed attacker with N pods gets
+# Nx headroom. Move to Mongo TTL if that ever matters.
+# ---------------------------------------------------------------------------
+import time
+from urllib.parse import urlparse
+
+MAX_PER_USER_HOURLY = 30
+MAX_PER_HOST_15MIN  = 6
+
+_wp_test_hits: dict[tuple[str, str], list[float]] = {}   # (user_id, host) -> timestamps
+_wp_test_user_hits: dict[str, list[float]] = {}          # user_id       -> timestamps
+
+
+def _extract_host(site_url: str) -> str:
     try:
-        async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
-            resp = await client.get(
-                url,
-                auth=(creds.username, creds.application_password),
-                headers={"Accept": "application/json"},
+        return (urlparse(site_url).hostname or "").lower()
+    except Exception:
+        return ""
+
+
+def _rate_limit_check(user_id: str, site_url: str) -> None:
+    """Raise HTTP 429 if the caller has exceeded either window. Mutates the
+    per-user / per-host history lists to record this call on success."""
+    now = time.monotonic()
+    host = _extract_host(site_url)
+
+    # Per-user hourly window
+    user_hist = _wp_test_user_hits.setdefault(user_id, [])
+    user_hist[:] = [t for t in user_hist if now - t < 3600]
+    if len(user_hist) >= MAX_PER_USER_HOURLY:
+        oldest = user_hist[0]
+        retry = int(3600 - (now - oldest)) + 1
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many WordPress test attempts in the past hour. Try again in {retry}s.",
+            headers={"Retry-After": str(retry)},
+        )
+
+    # Per-(user, host) 15-minute window — only if host was parseable.
+    if host:
+        key = (user_id, host)
+        host_hist = _wp_test_hits.setdefault(key, [])
+        host_hist[:] = [t for t in host_hist if now - t < 900]
+        if len(host_hist) >= MAX_PER_HOST_15MIN:
+            oldest = host_hist[0]
+            retry = int(900 - (now - oldest)) + 1
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many WordPress test attempts against {host}. Try again in {retry}s.",
+                headers={"Retry-After": str(retry)},
             )
-    except httpx.ConnectError as e:
-        raise HTTPException(status_code=400, detail=f"Could not reach WordPress site: {e}")
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=400, detail="WordPress site timed out (12s).")
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=400, detail=f"HTTP error contacting WordPress: {e}")
+        host_hist.append(now)
+
+    user_hist.append(now)
+
+
+def _rate_limit_reset() -> None:
+    """Test hook — flush all counters. Not exposed as an endpoint."""
+    _wp_test_hits.clear()
+    _wp_test_user_hits.clear()
+
+
+async def _wp_verify(creds: WPCreds) -> dict:
+    """Verify WordPress credentials in two steps to avoid false negatives on
+    hardened WP installs where `context=edit` is blocked by a security plugin.
+
+    Step 1 — call `/wp/v2/users/me` (no context param). This validates that
+             the Application Password is correct. On 401 here, creds are
+             genuinely wrong.
+    Step 2 — only if Step 1 succeeded, additionally probe `?context=edit` to
+             fetch the user's roles. If this call is blocked (401/403), we
+             DO NOT reject the connection — we keep the roles list empty and
+             mark `roles_unknown=True` on the response so the UI can render a
+             soft warning ("we couldn't verify publish permissions").
+
+    Raises HTTPException with a user-friendly message on any hard failure.
+    Returns {id, name, roles, roles_unknown, site_url}.
+    """
+    site = _normalize_site_url(creds.site_url)
+    base_url = f"{site}/wp-json/wp/v2/users/me"
+
+    async def _call(url: str) -> httpx.Response:
+        try:
+            async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
+                return await client.get(
+                    url,
+                    auth=(creds.username, creds.application_password),
+                    headers={"Accept": "application/json"},
+                )
+        except httpx.ConnectError as e:
+            raise HTTPException(status_code=400, detail=f"Could not reach WordPress site: {e}")
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=400, detail="WordPress site timed out (12s).")
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=400, detail=f"HTTP error contacting WordPress: {e}")
+
+    # ---- Step 1: base probe (proves the App Password is valid) ----
+    resp = await _call(base_url)
 
     if resp.status_code == 401:
         raise HTTPException(status_code=400, detail="Invalid WordPress credentials (401). Double-check the username and Application Password.")
@@ -134,15 +226,49 @@ async def _wp_verify(creds: WPCreds) -> dict:
 
     wp_id = data.get("id")
     name = data.get("name") or data.get("username") or ""
-    roles = data.get("roles") or []
     if not isinstance(wp_id, int):
         raise HTTPException(status_code=400, detail="WordPress response missing user id.")
-    if not any(r in _AUTHOR_ROLES for r in roles):
+
+    # ---- Step 2: escalated probe for roles (best-effort) ----
+    roles: list = data.get("roles") or []
+    roles_unknown = False
+    if not roles:
+        # Base context doesn't expose roles for non-me callers, so try edit.
+        try:
+            edit_resp = await _call(f"{base_url}?context=edit")
+        except HTTPException:
+            edit_resp = None
+        if edit_resp is not None and edit_resp.status_code == 200:
+            try:
+                edit_data = edit_resp.json()
+                roles = edit_data.get("roles") or []
+            except Exception:
+                roles = []
+                roles_unknown = True
+        else:
+            # Hardened site blocked context=edit even though the App Password
+            # itself is valid — DON'T reject the connection. Mark roles as
+            # unknown so the UI can surface a soft warning.
+            roles_unknown = True
+
+    # ---- Role gate ----
+    # Only enforce the author-role rule when we could actually read the roles.
+    # On hardened sites we accept and let the user proceed — publishing will
+    # fail loudly with a 403 later, which is a more honest surface than
+    # rejecting a valid App Password here.
+    if roles and not any(r in _AUTHOR_ROLES for r in roles):
         raise HTTPException(
             status_code=400,
             detail=f"WordPress user '{name}' has roles {roles!r} — needs administrator, editor, or author to publish posts.",
         )
-    return {"id": wp_id, "name": name, "roles": roles, "site_url": site}
+
+    return {
+        "id":             wp_id,
+        "name":           name,
+        "roles":          roles,
+        "roles_unknown":  roles_unknown,
+        "site_url":       site,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -153,14 +279,16 @@ async def _wp_verify(creds: WPCreds) -> dict:
 async def wordpress_test(payload: WPCreds, request: Request):
     """Verify credentials WITHOUT persisting anything. Used by the connect
     dialog to give the user a live 'Test connection' button before saving."""
-    await get_current_user(request)
+    user = await get_current_user(request)
+    _rate_limit_check(user.user_id, payload.site_url)
     info = await _wp_verify(payload)
     return {
         "ok": True,
-        "wp_user_id":   info["id"],
-        "wp_user_name": info["name"],
-        "wp_roles":     info["roles"],
-        "site_url":     info["site_url"],
+        "wp_user_id":    info["id"],
+        "wp_user_name":  info["name"],
+        "wp_roles":      info["roles"],
+        "roles_unknown": info.get("roles_unknown", False),
+        "site_url":      info["site_url"],
     }
 
 
@@ -196,6 +324,7 @@ async def wordpress_connect(payload: WPCreds, request: Request):
         "wp_user_id":  info["id"],
         "wp_user_name": info["name"],
         "wp_roles":    info["roles"],
+        "wp_roles_unknown": info.get("roles_unknown", False),
         "credentials": {
             "encrypted_app_password": _encrypt(payload.application_password),
         },
@@ -208,10 +337,11 @@ async def wordpress_connect(payload: WPCreds, request: Request):
     )
     return {
         "ok": True,
-        "site_url":     info["site_url"],
-        "wp_user_id":   info["id"],
-        "wp_user_name": info["name"],
-        "wp_roles":     info["roles"],
+        "site_url":      info["site_url"],
+        "wp_user_id":    info["id"],
+        "wp_user_name":  info["name"],
+        "wp_roles":      info["roles"],
+        "roles_unknown": info.get("roles_unknown", False),
     }
 
 
