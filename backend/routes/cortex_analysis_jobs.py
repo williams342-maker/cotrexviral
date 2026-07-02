@@ -34,12 +34,16 @@ logger = logging.getLogger(__name__)
 
 # Supported job types. Each has a runner registered in
 # `cortex.analysis_runner._RUNNERS`.
+# Job types accepted by POST /cortex/analysis-jobs. Keep this list
+# tight — every entry must have a real runner. Two legacy entries
+# (`competitor_audit`, `content_audit`) were removed 2026-07-02 because
+# they routed to `_run_mock` in analysis_runner and returned fake
+# "preview complete" summaries — trust-breaking with no product value.
+# Bring them back only when a real runner ships.
 JOB_TYPES = {
     "seo_scan":         "SEO Scan",
     "seller_discovery": "Seller Discovery",
     "site_scan":        "Site Scan",
-    "competitor_audit": "Competitor Audit",
-    "content_audit":    "Content Audit",
 }
 
 # Statuses ordered for the rail's section grouping.

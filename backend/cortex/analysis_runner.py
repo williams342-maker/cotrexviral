@@ -5,11 +5,15 @@ into the user's conversation.
 Per job type:
   - seo_scan: REAL work — calls the existing /api/ai/site-scan analysis
     over the user's target URL, posts findings into the Cortex chat.
-  - seller_discovery: SAFE MOCK — simulates discovery phases but does
-    NOT fire any outreach. Compliance rules pending; outreach lives in
-    a separate mission users explicitly launch.
-  - site_scan / competitor_audit / content_audit: scaffold-only fast
-    mock runs so the UI is fully functional end-to-end.
+  - seller_discovery: REAL work — driven by cortex/seller_discovery.py
+    against the user's marketplace. Does NOT fire outreach; that's a
+    separate mission users explicitly launch.
+  - site_scan: REAL work — dispatched via _run_site_scan.
+
+Removed 2026-07-02: `competitor_audit` and `content_audit` job types —
+they routed to `_run_mock` which returned fake "preview complete"
+summaries. Not reachable from any current frontend caller; add back
+only when a real runner ships.
 
 Each job runs entirely in an asyncio task. Cancellation is checked
 between phases. On hard exception, the job transitions to `failed`
@@ -51,18 +55,10 @@ _PHASES = {
         ("Generating post ideas",      "Wrapping up",             95, 1.0),
         ("Wrapping up",                "Done",                    100, 0.3),
     ],
-    "competitor_audit": [
-        ("Identifying competitors",   "Analyzing positioning",   25, 2.0),
-        ("Analyzing positioning",     "Spotting gaps",           55, 2.5),
-        ("Spotting gaps",             "Generating counter-moves", 85, 2.0),
-        ("Generating counter-moves",  "Wrapping up",             100, 0.5),
-    ],
-    "content_audit": [
-        ("Cataloguing content",      "Scoring engagement",       25, 1.5),
-        ("Scoring engagement",       "Identifying refresh targets", 55, 2.0),
-        ("Identifying refresh targets", "Generating recommendations", 85, 2.0),
-        ("Generating recommendations",  "Wrapping up",             100, 0.5),
-    ],
+    # Removed 2026-07-02: `competitor_audit` and `content_audit` phase
+    # tables — they routed to `_run_mock` (fake "preview complete"
+    # summary). No frontend caller POSTs those job types today. Add
+    # back only when a real runner ships.
 }
 
 
@@ -236,9 +232,15 @@ async def _run_seller_discovery(job_id: str, j: dict) -> dict:
 
 
 async def _run_mock(job_id: str, j: dict) -> dict:
-    """Scaffold-only runner — used for site_scan / competitor_audit /
-    content_audit until they're wired to real work. Drives phases so
-    the UI experience is complete."""
+    """Scaffold-only runner — DEPRECATED for direct user-facing use.
+
+    Left in place so a developer introducing a new job type can wire it
+    to _RUNNERS[<new_type>] = _run_mock while the real implementation
+    is being built. Do NOT route production job types here — the
+    "preview complete" summary is a mock, not a real result.
+
+    2026-07-02: no active _RUNNERS entries use this function. It stays
+    only as a temporary scaffold for future work."""
     job_type = j.get("job_type") or "analysis"
     for label, next_label, pct, sleep_s in _PHASES.get(job_type, [])[:5]:
         await _advance(job_id, label=label, next_label=next_label,
@@ -254,8 +256,10 @@ _RUNNERS = {
     "seo_scan":         _run_seo_scan,
     "seller_discovery": _run_seller_discovery,
     "site_scan":        None,                 # set below
-    "competitor_audit": _run_mock,
-    "content_audit":    _run_mock,
+    # Removed 2026-07-02: `competitor_audit` and `content_audit` — both
+    # routed to `_run_mock` (fake "preview complete" summary). Not
+    # reachable from the current frontend; re-add here only when a real
+    # runner is implemented.
 }
 
 
